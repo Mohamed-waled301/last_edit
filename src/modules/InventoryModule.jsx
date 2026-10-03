@@ -85,7 +85,14 @@ export default function InventoryModule({ onBack, onNotify }) {
     try {
       setSelectedMaterialForMovements(id);
       const res = await api.getMaterialMovements(id);
-      setMovementData(res.data);
+      const targetMat = materials.find(m => m.id === id) || { name: 'خامة', code: id, current_stock: 0, unit: '', average_cost: 0 };
+      if (Array.isArray(res.data)) {
+        setMovementData({ material: targetMat, movements: res.data });
+      } else if (res.data?.material) {
+        setMovementData(res.data);
+      } else {
+        setMovementData({ material: targetMat, movements: res.movements || [] });
+      }
     } catch (err) {
       alert(err.message);
     }
@@ -130,8 +137,8 @@ export default function InventoryModule({ onBack, onNotify }) {
 
   // Filter materials
   const filteredMaterials = materials.filter(m => 
-    m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.code.toLowerCase().includes(searchTerm.toLowerCase())
+    (m.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (m.code || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const lowStockCount = materials.filter(m => m.is_low_stock).length;
@@ -422,14 +429,17 @@ export default function InventoryModule({ onBack, onNotify }) {
             <div className="flex items-center justify-between pb-3 border-b border-gray-200">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">
-                  كارت الصنف: {movementData.material.name}
+                  كارت الصنف: {movementData.material?.name || 'خامة'}
                 </h3>
                 <p className="text-xs text-gray-500 font-medium mt-0.5">
-                  كود: {movementData.material.code} | الرصيد الحالي: {formatNumber(movementData.material.current_stock)} {movementData.material.unit} | متوسط التكلفة: {formatCurrency(movementData.material.average_cost)}
+                  كود: {movementData.material?.code || '-'} | الرصيد الحالي: {formatNumber(movementData.material?.current_stock || 0)} {movementData.material?.unit || ''} | متوسط التكلفة: {formatCurrency(movementData.material?.average_cost || 0)}
                 </p>
               </div>
               <button
-                onClick={() => setSelectedMaterialForMovements(null)}
+                onClick={() => {
+                  setSelectedMaterialForMovements(null);
+                  setMovementData(null);
+                }}
                 className="h-9 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-semibold text-xs cursor-pointer"
               >
                 إغلاق
@@ -450,7 +460,7 @@ export default function InventoryModule({ onBack, onNotify }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {movementData.movements.length === 0 ? (
+                  {(!movementData.movements || movementData.movements.length === 0) ? (
                     <tr>
                       <td colSpan={7} className="py-6 text-center text-gray-500 font-medium">لا توجد حركات مسجلة حتى الآن</td>
                     </tr>

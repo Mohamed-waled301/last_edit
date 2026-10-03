@@ -136,8 +136,8 @@ export const api = {
     return { success: true, data: m, material: m, message: 'تم تحديث بيانات الخامة' };
   },
   getMaterialMovements: async (id) => {
-    const list = await materialsRepo.getMovements(id);
-    return { success: true, data: list, movements: list };
+    const res = await materialsRepo.getMovements(id);
+    return { success: true, data: res, ...res };
   },
   saveStockCount: async (data) => {
     const res = await materialsRepo.saveStockCount(data, currentUserId);

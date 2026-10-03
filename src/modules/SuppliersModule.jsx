@@ -822,10 +822,10 @@ export default function SuppliersModule({ onBack, onNotify }) {
             <div className="flex items-center justify-between pb-3 border-b border-gray-200">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">
-                  كشف حساب: {statementData.supplier.name}
+                  كشف حساب: {statementData.supplier?.name || 'المورد'}
                 </h3>
                 <p className="text-xs text-gray-500 font-medium mt-0.5">
-                  تليفون: {statementData.supplier.phone} | شروط الدفع: {statementData.supplier.payment_terms}
+                  تليفون: {statementData.supplier?.phone || '-'} | شروط الدفع: {statementData.supplier?.payment_terms || '-'}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -850,19 +850,19 @@ export default function SuppliersModule({ onBack, onNotify }) {
               <div className="bg-gray-50 p-3 rounded-md border border-gray-200 text-center">
                 <span className="text-xs font-semibold text-gray-500">إجمالي المشتريات</span>
                 <div className="text-xl font-bold text-gray-900 mt-0.5">
-                  {formatCurrency(statementData.summary.total_purchases)}
+                  {formatCurrency(statementData.summary?.total_purchases || 0)}
                 </div>
               </div>
               <div className="bg-green-50 p-3 rounded-md border border-green-200 text-center">
                 <span className="text-xs font-semibold text-green-700">إجمالي ما تم سداده</span>
                 <div className="text-xl font-bold text-green-700 mt-0.5">
-                  {formatCurrency(statementData.summary.total_paid)}
+                  {formatCurrency(statementData.summary?.total_paid || 0)}
                 </div>
               </div>
               <div className="bg-red-50 p-3 rounded-md border border-red-200 text-center">
                 <span className="text-xs font-semibold text-red-700">المتبقي له حالياً</span>
                 <div className="text-xl font-bold text-red-600 mt-0.5">
-                  {formatCurrency(statementData.summary.remaining_balance)}
+                  {formatCurrency(statementData.summary?.remaining_balance || 0)}
                 </div>
               </div>
             </div>
@@ -882,16 +882,22 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {statementData.invoices.map(inv => (
-                    <tr key={inv.id}>
-                      <td className="py-2 px-3 font-mono font-bold">{inv.invoice_number}</td>
-                      <td className="py-2 px-3 text-gray-600">{formatDate(inv.invoice_date)}</td>
-                      <td className="py-2 px-3 text-gray-600">{formatDate(inv.due_date)}</td>
-                      <td className="py-2 px-3 text-left font-semibold text-gray-900">{formatCurrency(inv.total_amount)}</td>
-                      <td className="py-2 px-3 text-left font-semibold text-gray-700">{formatCurrency(inv.paid_amount)}</td>
-                      <td className="py-2 px-3 text-left font-bold text-red-600">{formatCurrency(inv.total_amount - inv.paid_amount)}</td>
+                  {(!statementData.invoices || statementData.invoices.length === 0) ? (
+                    <tr>
+                      <td colSpan={6} className="py-4 text-center text-gray-400">لا توجد فواتير مسجلة</td>
                     </tr>
-                  ))}
+                  ) : (
+                    statementData.invoices.map(inv => (
+                      <tr key={inv.id}>
+                        <td className="py-2 px-3 font-mono font-bold">{inv.invoice_number}</td>
+                        <td className="py-2 px-3 text-gray-600">{formatDate(inv.invoice_date)}</td>
+                        <td className="py-2 px-3 text-gray-600">{formatDate(inv.due_date)}</td>
+                        <td className="py-2 px-3 text-left font-semibold text-gray-900">{formatCurrency(inv.total_amount)}</td>
+                        <td className="py-2 px-3 text-left font-semibold text-gray-700">{formatCurrency(inv.paid_amount)}</td>
+                        <td className="py-2 px-3 text-left font-bold text-red-600">{formatCurrency(inv.total_amount - inv.paid_amount)}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -910,15 +916,21 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {statementData.payments.map(pay => (
-                    <tr key={pay.id}>
-                      <td className="py-2 px-3 font-mono font-bold">{pay.payment_number}</td>
-                      <td className="py-2 px-3 text-gray-600">{formatDate(pay.payment_date)}</td>
-                      <td className="py-2 px-3 text-gray-700">{pay.account_name}</td>
-                      <td className="py-2 px-3 text-left font-bold text-green-600">{formatCurrency(pay.amount)}</td>
-                      <td className="py-2 px-3 text-gray-500">{pay.notes || '-'}</td>
+                  {(!statementData.payments || statementData.payments.length === 0) ? (
+                    <tr>
+                      <td colSpan={5} className="py-4 text-center text-gray-400">لا توجد سندات سداد مسجلة</td>
                     </tr>
-                  ))}
+                  ) : (
+                    statementData.payments.map(pay => (
+                      <tr key={pay.id}>
+                        <td className="py-2 px-3 font-mono font-bold">{pay.payment_number}</td>
+                        <td className="py-2 px-3 text-gray-600">{formatDate(pay.payment_date)}</td>
+                        <td className="py-2 px-3 text-gray-700">{pay.account_name}</td>
+                        <td className="py-2 px-3 text-left font-bold text-green-600">{formatCurrency(pay.amount)}</td>
+                        <td className="py-2 px-3 text-gray-500">{pay.notes || '-'}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

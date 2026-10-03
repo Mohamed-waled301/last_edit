@@ -185,8 +185,8 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
                   ) : (
                     costBreakdown.map(p => (
                       <tr key={p.id} className="hover:bg-blue-50/20 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-gray-700">{p.code}</td>
-                        <td className="py-3 px-4 font-bold text-gray-900">{p.name}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-gray-700">{p.code || '-'}</td>
+                        <td className="py-3 px-4 font-bold text-gray-900">{p.name || 'منتج'}</td>
                         <td className="py-3 px-4 text-gray-600 text-xs">{p.category}</td>
                         <td className="py-3 px-4 text-left font-semibold text-gray-700">{formatCurrency(p.avg_stage1_unit_cost)}</td>
                         <td className="py-3 px-4 text-left font-semibold text-gray-700">{formatCurrency(p.avg_stage2_unit_cost)}</td>
@@ -251,8 +251,8 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
                       </tr>
                     ) : (
                       profitability.byProduct.map(p => (
-                        <tr key={p.id} className="hover:bg-blue-50/20 transition-colors">
-                          <td className="py-3 px-4 font-bold text-gray-900">{p.name}</td>
+                        <tr key={p.id || Math.random()} className="hover:bg-blue-50/20 transition-colors">
+                          <td className="py-3 px-4 font-bold text-gray-900">{p.name || 'منتج'}</td>
                           <td className="py-3 px-4 text-center font-bold text-gray-700">{p.total_qty_sold} قطعة</td>
                           <td className="py-3 px-4 text-left font-bold text-gray-900">{formatCurrency(p.total_revenue)}</td>
                           <td className="py-3 px-4 text-left font-semibold text-gray-600">{formatCurrency(p.total_cogs)}</td>
@@ -310,8 +310,8 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
                       </tr>
                     ) : (
                       profitability.byOutlet.map(o => (
-                        <tr key={o.id} className="hover:bg-blue-50/20 transition-colors">
-                          <td className="py-3 px-4 font-bold text-gray-900">{o.name}</td>
+                        <tr key={o.id || Math.random()} className="hover:bg-blue-50/20 transition-colors">
+                          <td className="py-3 px-4 font-bold text-gray-900">{o.name || 'المنفذ الرئيسي'}</td>
                           <td className="py-3 px-4 text-center text-gray-700 font-semibold">{o.invoices_count} فاتورة</td>
                           <td className="py-3 px-4 text-left font-bold text-gray-900">{formatCurrency(o.total_revenue)}</td>
                           <td className="py-3 px-4 text-left font-bold text-green-700">

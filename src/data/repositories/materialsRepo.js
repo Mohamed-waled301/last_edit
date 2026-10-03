@@ -79,6 +79,7 @@ export const materialsRepo = {
   },
 
   async getMovements(materialId) {
+    const material = await db.materials.get(materialId);
     const movements = await db.stock_movements
       .where('material_id')
       .equals(materialId)
@@ -88,10 +89,23 @@ export const materialsRepo = {
     const users = await db.users.toArray();
     const userMap = new Map(users.map(u => [u.id, u.full_name]));
 
-    return movements.map(m => ({
+    const formattedMovements = movements.map(m => ({
       ...m,
       created_by_name: userMap.get(m.created_by) || m.created_by,
+      user_name: userMap.get(m.created_by) || m.created_by,
     }));
+
+    return {
+      material: material || {
+        id: materialId,
+        name: 'خامة غير معروفة',
+        code: materialId,
+        unit: 'وحدة',
+        current_stock: 0,
+        average_cost: 0,
+      },
+      movements: formattedMovements,
+    };
   },
 
   async saveStockCount(data, userId = 'usr-storekeeper') {

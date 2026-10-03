@@ -232,18 +232,18 @@ export default function HomeScreen({ onNavigate, userRole }) {
                   </tr>
                 ) : (
                   lowStockItems.map((mat) => (
-                    <tr key={mat.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={mat.id || Math.random()} className="hover:bg-gray-50 transition-colors">
                       <td className="py-2.5 px-3 font-semibold text-gray-700">
-                        {mat.code || mat.item_code}
+                        {mat.code || mat.item_code || '-'}
                       </td>
                       <td className="py-2.5 px-3 font-semibold text-gray-900">
-                        {mat.name}
+                        {mat.name || mat.item_name || 'خامة'}
                       </td>
                       <td className="py-2.5 px-3 text-center font-bold text-red-600">
-                        {formatNumber(mat.current_stock)} {mat.unit}
+                        {formatNumber(mat.current_stock || 0)} {mat.unit || ''}
                       </td>
                       <td className="py-2.5 px-3 text-center text-gray-600 font-medium">
-                        {formatNumber(mat.min_stock_alert)} {mat.unit}
+                        {formatNumber(mat.min_stock_alert || 0)} {mat.unit || ''}
                       </td>
                       <td className="py-2.5 px-3 text-left font-semibold text-gray-800">
                         {formatCurrency(mat.average_cost || mat.unit_cost || 0)}

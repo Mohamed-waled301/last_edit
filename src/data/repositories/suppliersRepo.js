@@ -134,6 +134,13 @@ export const suppliersRepo = {
     return {
       supplier,
       statement: ledger,
+      invoices,
+      payments,
+      summary: {
+        total_purchases: supplier.total_purchases ?? supplier.total_invoiced ?? 0,
+        total_paid: supplier.total_paid ?? 0,
+        remaining_balance: supplier.outstanding_balance ?? supplier.balance_due ?? 0,
+      },
       total_invoiced: supplier.total_invoiced,
       total_paid: supplier.total_paid,
       balance_due: supplier.balance_due,

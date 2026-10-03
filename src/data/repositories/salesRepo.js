@@ -108,6 +108,13 @@ export const salesRepo = {
     return {
       customer: { ...customer, ...bal },
       statement: ledger,
+      invoices,
+      payments,
+      summary: {
+        total_sales: bal.totalInvoiced || 0,
+        total_collected: bal.totalPaid || 0,
+        remaining_balance: bal.balanceDue || 0,
+      },
       total_invoiced: bal.totalInvoiced,
       total_paid: bal.totalPaid,
       balance_due: bal.balanceDue,
