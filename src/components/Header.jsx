@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User, HardDrive, Settings, LogOut, Shield } from 'lucide-react';
-import { api, setActiveUser, getActiveUser } from '../services/api';
+import { User, HardDrive, Settings, LogOut, Menu } from 'lucide-react';
+import { setActiveUser, getActiveUser } from '../services/api';
 import { settingsRepo, usersRepo } from '../data';
 
-export default function Header({ currentScreen, onNavigate, onNotify, onLockSession }) {
+export default function Header({ currentScreen, onNavigate, onNotify, onLockSession, onToggleSidebar }) {
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(getActiveUser());
   const [factoryName, setFactoryName] = useState('مجموعة القمة للصناعات المتطورة');
@@ -39,66 +39,79 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
   const getRoleLabel = (role) => {
     switch (role) {
       case 'owner': return 'الرئيس التنفيذي (CEO)';
-      case 'purchasing': return 'مدير المشتريات وسلاسل الإمداد';
-      case 'storekeeper': return 'مدير المستودعات واللوجستيات';
-      case 'production': return 'مدير العمليات والتصنيع';
-      case 'accountant': return 'المدير المالي والمراقب (CFO)';
+      case 'purchasing': return 'سلاسل الإمداد';
+      case 'storekeeper': return 'المستودعات';
+      case 'production': return 'التصنيع والإنتاج';
+      case 'accountant': return 'المدير المالي (CFO)';
       default: return role;
     }
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 h-16 sticky top-0 z-20 flex items-center justify-between px-6 no-print">
-      {/* Right side: Company Name */}
-      <div className="flex items-center gap-3">
-        <h1 className="text-xl font-bold text-gray-900 leading-tight">
-          {factoryName}
-        </h1>
-        <span className="text-sm text-gray-400 font-medium hidden sm:inline">|</span>
-        <span className="text-sm text-gray-500 font-medium hidden sm:inline">
-          نظام تخطيط موارد المؤسسات المتكامل (Enterprise ERP)
-        </span>
+    <header className="bg-white border-b border-gray-200 h-16 sticky top-0 z-20 flex items-center justify-between px-3 sm:px-6 no-print shrink-0">
+      {/* Right side: Menu button for mobile + Company Name */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <button
+          onClick={onToggleSidebar}
+          className="p-2 -mr-1 text-gray-700 hover:bg-gray-100 rounded-md lg:hidden cursor-pointer shrink-0"
+          title="القائمة الرئيسية"
+          type="button"
+          aria-label="تبديل القائمة"
+        >
+          <Menu className="w-5 h-5 text-[#1F3A5F]" />
+        </button>
+
+        <div className="min-w-0">
+          <h1 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 leading-tight truncate">
+            {factoryName}
+          </h1>
+          <span className="text-xs text-gray-500 font-medium hidden md:inline truncate block">
+            نظام تخطيط موارد المؤسسات المتكامل (Enterprise ERP)
+          </span>
+        </div>
       </div>
 
       {/* Left side: User Name, Role, and Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Quick Backup Button */}
         <button
           onClick={() => onNavigate('backup')}
-          className={`h-10 px-3.5 rounded-md font-semibold text-sm border flex items-center gap-2 cursor-pointer transition-colors ${
+          className={`h-9 sm:h-10 px-2.5 sm:px-3.5 rounded-md font-semibold text-xs sm:text-sm border flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-colors ${
             currentScreen === 'backup'
               ? 'bg-[#1F3A5F] text-white border-[#1F3A5F]'
               : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
           }`}
           title="شاشة النسخ الاحتياطي وأمان البيانات"
+          type="button"
         >
           <HardDrive className="w-4 h-4 text-gray-600" />
-          <span className="hidden md:inline">نسخة احتياطية</span>
+          <span className="hidden sm:inline">نسخة احتياطية</span>
         </button>
 
         {/* Settings Button (if owner) */}
-        {currentUser.role === 'owner' && (
+        {currentUser?.role === 'owner' && (
           <button
             onClick={() => onNavigate('settings')}
-            className={`h-10 px-3.5 rounded-md font-semibold text-sm border flex items-center gap-2 cursor-pointer transition-colors ${
+            className={`h-9 sm:h-10 px-2.5 sm:px-3.5 rounded-md font-semibold text-xs sm:text-sm border flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-colors ${
               currentScreen === 'settings'
                 ? 'bg-[#1F3A5F] text-white border-[#1F3A5F]'
                 : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
             }`}
             title="إعدادات النظام والضرائب"
+            type="button"
           >
             <Settings className="w-4 h-4" />
-            <span className="hidden md:inline">الإعدادات</span>
+            <span className="hidden sm:inline">الإعدادات</span>
           </button>
         )}
 
         {/* User Account & Role Selector */}
-        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-3 h-10">
-          <User className="w-4 h-4 text-gray-500" />
+        <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-md px-2 sm:px-3 h-9 sm:h-10 max-w-[180px] sm:max-w-none">
+          <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500 shrink-0" />
           <select
-            value={currentUser.id}
+            value={currentUser?.id || ''}
             onChange={handleRoleChange}
-            className="bg-transparent font-bold text-gray-800 text-sm cursor-pointer focus:outline-none border-0 p-0"
+            className="bg-transparent font-bold text-gray-800 text-xs sm:text-sm cursor-pointer focus:outline-none border-0 p-0 truncate max-w-[90px] sm:max-w-[150px]"
           >
             {users.map(u => (
               <option key={u.id} value={u.id}>
@@ -106,8 +119,8 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
               </option>
             ))}
           </select>
-          <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-700 font-semibold border border-gray-300">
-            {getRoleLabel(currentUser.role)}
+          <span className="text-[11px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-gray-200 text-gray-700 font-semibold border border-gray-300 hidden md:inline shrink-0">
+            {getRoleLabel(currentUser?.role)}
           </span>
         </div>
 
@@ -115,10 +128,11 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
         {onLockSession && (
           <button
             onClick={onLockSession}
-            className="h-10 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-md font-medium text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+            className="h-9 sm:h-10 px-2 sm:px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-md font-medium text-xs flex items-center gap-1 cursor-pointer transition-colors shrink-0"
             title="قفل الشاشة أو تبديل الحساب برمز PIN"
+            type="button"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span className="hidden lg:inline">قفل</span>
           </button>
         )}

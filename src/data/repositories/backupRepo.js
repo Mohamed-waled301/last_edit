@@ -58,17 +58,21 @@ export const backupRepo = {
 
     const backupData = parsed.data;
     const tableNames = db.tables.map(t => t.name);
+    const availableTables = db.tables.filter(t => !db.backendDB() || db.backendDB().objectStoreNames.contains(t.name));
 
-    await db.transaction('rw', db.tables, async () => {
+    await db.transaction('rw', availableTables, async () => {
       // Clear existing records
-      for (const table of db.tables) {
+      for (const table of availableTables) {
         await table.clear();
       }
 
       // Restore each table
       for (const name of tableNames) {
         if (Array.isArray(backupData[name]) && backupData[name].length > 0) {
-          await db.table(name).bulkAdd(backupData[name]);
+          const tableExists = !db.backendDB() || db.backendDB().objectStoreNames.contains(name);
+          if (tableExists) {
+            await db.table(name).bulkAdd(backupData[name]);
+          }
         }
       }
     });
@@ -84,8 +88,14 @@ export const backupRepo = {
     const now = new Date().toISOString();
     const today = now.split('T')[0];
 
-    await db.transaction('rw', db.tables, async () => {
-      for (const table of db.tables) {
+    // Ensure database is fully open with all stores ready
+    if (!db.isOpen()) {
+      await db.open();
+    }
+    const availableTables = db.tables.filter(t => !db.backendDB() || db.backendDB().objectStoreNames.contains(t.name));
+
+    await db.transaction('rw', availableTables, async () => {
+      for (const table of availableTables) {
         await table.clear();
       }
 
@@ -844,8 +854,13 @@ export const backupRepo = {
    * 4. Clear all database data (with double confirmation in UI).
    */
   async clearAllData(userId = 'usr-owner') {
-    await db.transaction('rw', db.tables, async () => {
-      for (const table of db.tables) {
+    if (!db.isOpen()) {
+      await db.open();
+    }
+    const availableTables = db.tables.filter(t => !db.backendDB() || db.backendDB().objectStoreNames.contains(t.name));
+
+    await db.transaction('rw', availableTables, async () => {
+      for (const table of availableTables) {
         await table.clear();
       }
     });

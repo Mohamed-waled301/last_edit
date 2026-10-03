@@ -18,18 +18,24 @@ import SettingsModule from './modules/SettingsModule';
 import BackupModule from './modules/BackupModule';
 import { getActiveUser, setActiveUser } from './services/api';
 import { usersRepo, backupRepo } from './data';
+import { ensureDatabaseIntegrity } from './data/db';
+import Dexie from 'dexie';
 
 export default function App() {
   const [hasOwnerUser, setHasOwnerUser] = useState(null); // null = checking, true/false
   const [isLocked, setIsLocked] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('home');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeUserRole, setActiveUserRole] = useState(getActiveUser().role);
   const [toast, setToast] = useState({ message: '', type: 'success' });
 
-  // Initialize and check setup state
+  // Initialize and check setup state with automatic database integrity validation
   useEffect(() => {
     async function checkSystemState() {
       try {
+        // Automatically check and heal missing object stores
+        await ensureDatabaseIntegrity();
+
         const ownerExists = await usersRepo.hasOwner();
         if (!ownerExists) {
           // Check if there are any users at all
@@ -50,7 +56,15 @@ export default function App() {
         }
       } catch (e) {
         console.warn('System state check error:', e);
-        setHasOwnerUser(true);
+        if (e.name === 'NotFoundError' || String(e).includes('objectStore') || String(e).includes('NotFound')) {
+          try {
+            await Dexie.delete('WorkshopERP_DB');
+            await ensureDatabaseIntegrity();
+          } catch (resetErr) {
+            console.error('Failed to reset broken DB:', resetErr);
+          }
+        }
+        setHasOwnerUser(false);
       }
     }
     checkSystemState();
@@ -73,6 +87,7 @@ export default function App() {
 
   const navigateTo = (screen) => {
     setCurrentScreen(screen);
+    setSidebarOpen(false); // Close mobile drawer on navigation
     window.location.hash = `#${screen}`;
   };
 
@@ -132,26 +147,29 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F5F7] text-[#1F2937] font-sans antialiased flex flex-row">
-      {/* Fixed Right-Side Sidebar (RTL) */}
+    <div className="min-h-screen bg-[#F4F5F7] text-[#1F2937] font-sans antialiased flex flex-row relative overflow-x-hidden">
+      {/* Responsive Right-Side Sidebar (RTL) */}
       <Sidebar
         currentScreen={currentScreen}
         onNavigate={navigateTo}
         userRole={activeUserRole}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
-      {/* Main Content Area (Offset by mr-64 for right sidebar in RTL) */}
-      <div className="flex-1 flex flex-col min-h-screen mr-64 transition-all duration-150">
-        {/* Top Header Bar */}
+      {/* Main Content Area (Offset by mr-0 on mobile, mr-64 on desktop lg screens) */}
+      <div className="flex-1 flex flex-col min-h-screen mr-0 lg:mr-64 min-w-0 transition-all duration-200">
+        {/* Top Header Bar with Hamburger Toggle */}
         <Header
           currentScreen={currentScreen}
           onNavigate={navigateTo}
           onNotify={handleRoleChanged}
           onLockSession={handleLockSession}
+          onToggleSidebar={() => setSidebarOpen(prev => !prev)}
         />
 
         {/* Dynamic Screen View */}
-        <main className="flex-1 p-6 w-full max-w-[1700px] mx-auto overflow-y-auto">
+        <main className="flex-1 p-3 sm:p-5 lg:p-6 w-full max-w-[1700px] mx-auto min-w-0 overflow-y-auto">
           {/* Backup Reminder Banner (Prompt Requirement 4) */}
           <BackupReminderBanner onOpenBackup={() => navigateTo('backup')} />
 
