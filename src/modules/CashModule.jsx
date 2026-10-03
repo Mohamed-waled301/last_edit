@@ -157,7 +157,7 @@ export default function CashModule({ onBack, onNotify }) {
           <div className="text-2xl font-bold text-gray-900 mt-1">
             {formatCurrency(accountData.totalCash)}
           </div>
-          <span className="text-xs text-gray-400 font-medium">خزنة الورشة ومعارض البيع</span>
+          <span className="text-xs text-gray-400 font-medium">الخزينة النقدية ومنافذ التوزيع</span>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-md p-4">
@@ -415,7 +415,7 @@ export default function CashModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: شراء عدة ومستلزمات صيانة للورشة"
+                  placeholder="مثال: صيانة ومعايرة دورية لخطوط الإنتاج ومختبر الجودة"
                   value={txForm.description}
                   onChange={e => setTxForm({ ...txForm, description: e.target.value })}
                   className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"

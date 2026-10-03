@@ -305,11 +305,11 @@ export default function InventoryModule({ onBack, onNotify }) {
 
             <form onSubmit={handleSaveMaterial} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">اسم الخامة *</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">اسم الخامة / المكون *</label>
                 <input
                   type="text"
                   required
-                  placeholder="مثال: لوح خشب زان مجفف 2 بوصة"
+                  placeholder="مثال: وحدة معالجة وميكروكنترولر صناعي 32-bit"
                   value={newMaterial.name}
                   onChange={e => setNewMaterial({ ...newMaterial, name: e.target.value })}
                   className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
@@ -324,12 +324,13 @@ export default function InventoryModule({ onBack, onNotify }) {
                     onChange={e => setNewMaterial({ ...newMaterial, unit: e.target.value })}
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                   >
-                    <option value="لوح">لوح</option>
+                    <option value="قطعة">قطعة</option>
+                    <option value="وحدة">وحدة</option>
+                    <option value="طقم">طقم</option>
                     <option value="متر">متر</option>
                     <option value="كجم">كجم</option>
                     <option value="لتر">لتر</option>
-                    <option value="قطعة">قطعة</option>
-                    <option value="طقم">طقم</option>
+                    <option value="لوح">لوح</option>
                   </select>
                 </div>
                 <div>
@@ -384,10 +385,10 @@ export default function InventoryModule({ onBack, onNotify }) {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">مكان التخزين بالورشة</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">مكان التخزين بالمستودع</label>
                 <input
                   type="text"
-                  placeholder="مثال: عنبر الأخشاب - رف رقم 2"
+                  placeholder="مثال: مخزن الإلكترونيات - عنبر A - رف ESD-12"
                   value={newMaterial.location_in_warehouse}
                   onChange={e => setNewMaterial({ ...newMaterial, location_in_warehouse: e.target.value })}
                   className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
@@ -496,7 +497,7 @@ export default function InventoryModule({ onBack, onNotify }) {
               </button>
             </div>
             <p className="text-xs text-gray-500 font-medium mb-4">
-              أدخل الرصيد الفعلي الموجود على أرض الورشة؛ النظام سيسجل الفروق تلقائياً
+              أدخل الرصيد الفعلي الموجود على أرض المستودع؛ النظام سيسجل الفروق تلقائياً
             </p>
 
             <form onSubmit={handleSaveStockCount} className="space-y-4">

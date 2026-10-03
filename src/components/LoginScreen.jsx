@@ -4,11 +4,11 @@ import { usersRepo } from '../data';
 import { setActiveUser } from '../services/api';
 
 const roleLabels = {
-  owner: 'صاحب الورشة (المالك)',
-  purchasing: 'مسؤول المشتريات',
-  storekeeper: 'أمين المخزن',
-  production: 'مدير الإنتاج',
-  accountant: 'المحاسب المالي',
+  owner: 'الرئيس التنفيذي / المدير العام (CEO)',
+  purchasing: 'مدير المشتريات وسلاسل الإمداد',
+  storekeeper: 'مدير المستودعات واللوجستيات',
+  production: 'مدير العمليات والتصنيع الهندسي',
+  accountant: 'المدير المالي والمراقب المالي (CFO)',
 };
 
 export const LoginScreen = ({ onLoginSuccess }) => {

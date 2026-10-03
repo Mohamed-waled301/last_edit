@@ -58,7 +58,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
     e.preventDefault();
     try {
       await api.updateSettings(settings);
-      onNotify('تم حفظ وتحديث إعدادات الورشة بنجاح');
+      onNotify('تم حفظ وتحديث إعدادات المؤسسة بنجاح');
       loadData();
     } catch (err) {
       alert(err.message);
@@ -79,10 +79,10 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
   };
 
   const handleLoadDemo = async () => {
-    if (!window.confirm('هل تريد استبدال البيانات الحالية بالبيانات التجريبية الاسترشادية للورشة؟')) return;
+    if (!window.confirm('هل تريد استبدال البيانات الحالية بالبيانات التجريبية الاسترشادية للمؤسسة (Enterprise ERP Demo)؟')) return;
     try {
       await backupRepo.loadDemoData('usr-owner');
-      onNotify('تم تحميل البيانات التجريبية بنجاح!', 'success');
+      onNotify('تم تحميل البيانات التجريبية للمؤسسة بنجاح!', 'success');
       loadData();
     } catch (err) {
       alert(err.message);
@@ -125,7 +125,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
 
           <form onSubmit={handleSaveSettings} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">اسم المصنع أو الورشة</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">اسم الشركة أو المنشأة</label>
               <input
                 type="text"
                 required
@@ -157,7 +157,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">عنوان الورشة</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">عنوان المقر والمصنع الرئيسي</label>
               <input
                 type="text"
                 value={settings.address || ''}
@@ -210,7 +210,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
           <div className="space-y-4">
             <div className="border-b border-gray-200 pb-3">
               <h3 className="text-base font-bold text-gray-900">النسخ الاحتياطي وأمان البيانات</h3>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">تصدير واسترجاع بيانات الورشة محلياً بدون خادم</p>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">تصدير واسترجاع بيانات المؤسسة محلياً بدون خادم</p>
             </div>
 
             <div className="p-4 bg-gray-50 rounded-md border border-gray-200 space-y-3">

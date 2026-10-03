@@ -90,7 +90,7 @@ export default function HomeScreen({ onNavigate, userRole }) {
             <div className="text-[28px] font-bold text-green-600 mt-1 leading-tight tracking-tight">
               {formatCurrency(dashboard.customerReceivables)}
             </div>
-            <span className="text-xs text-gray-400 font-medium mt-1">مطلوب تحصيلها من المعارض</span>
+            <span className="text-xs text-gray-400 font-medium mt-1">مطلوب تحصيلها من الشركات والعملاء</span>
           </div>
 
           {/* Box 4: Monthly Profit (Owner) OR Production Batches (Other roles) */}
@@ -100,7 +100,7 @@ export default function HomeScreen({ onNavigate, userRole }) {
               <div className="text-[28px] font-bold text-green-600 mt-1 leading-tight tracking-tight">
                 {formatCurrency(dashboard.monthProfit)}
               </div>
-              <span className="text-xs text-gray-400 font-medium mt-1">بعد تكاليف الخامات والمصنع</span>
+              <span className="text-xs text-gray-400 font-medium mt-1">بعد تكاليف الإنتاج والمصروفات التشغيلية</span>
             </div>
           ) : (
             <div className="bg-white border border-gray-200 rounded-md p-4 flex flex-col justify-between">
@@ -108,13 +108,13 @@ export default function HomeScreen({ onNavigate, userRole }) {
               <div className="text-[28px] font-bold text-gray-900 mt-1 leading-tight tracking-tight">
                 {dashboard.inProductionCount} دفعة
               </div>
-              <span className="text-xs text-gray-400 font-medium mt-1">قيد التشغيل بالورشة</span>
+              <span className="text-xs text-gray-400 font-medium mt-1">قيد التشغيل على خطوط الإنتاج</span>
             </div>
           )}
 
           {/* Box 5: Low Stock Count (RED if > 0) */}
           <div className="bg-white border border-gray-200 rounded-md p-4 flex flex-col justify-between">
-            <span className="text-sm font-semibold text-gray-500">نواقص المخزن</span>
+            <span className="text-sm font-semibold text-gray-500">تنبيهات نواقص المستودع</span>
             <div className={`text-[28px] font-bold mt-1 leading-tight tracking-tight ${dashboard.lowStockCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>
               {dashboard.lowStockCount} أصناف
             </div>

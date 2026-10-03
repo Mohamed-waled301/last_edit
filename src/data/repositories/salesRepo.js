@@ -158,7 +158,7 @@ export const salesRepo = {
       return {
         ...i,
         customer_name: custMap.get(i.customer_id) || i.customer_id,
-        outlet_name: outMap.get(i.outlet_id) || 'الورشة الرئيسية',
+        outlet_name: outMap.get(i.outlet_id) || 'المستودع الرئيسي',
         items: invItems,
         remaining_amount: Math.max(0, Number(((Number(i.total_invoice_amount) || 0) - (Number(i.paid_amount) || 0)).toFixed(2))),
       };

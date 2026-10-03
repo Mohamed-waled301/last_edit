@@ -4,8 +4,8 @@ import { usersRepo, backupRepo } from '../data';
 import { setActiveUser } from '../services/api';
 
 export const SetupScreen = ({ onComplete }) => {
-  const [factoryName, setFactoryName] = useState('ورشة ومصنع الأصيل للمصنوعات الخشبية');
-  const [ownerName, setOwnerName] = useState('المعلم إبراهيم الأصيل');
+  const [factoryName, setFactoryName] = useState('مجموعة القمة للصناعات المتطورة والأنظمة الذكية');
+  const [ownerName, setOwnerName] = useState('م. خالد المنشاوي');
   const [pin, setPin] = useState('1234');
   const [confirmPin, setConfirmPin] = useState('1234');
   const [loadDemo, setLoadDemo] = useState(true);
@@ -17,11 +17,11 @@ export const SetupScreen = ({ onComplete }) => {
     setError('');
 
     if (!factoryName.trim()) {
-      setError('يرجى كتابة اسم المصنع أو الورشة');
+      setError('يرجى كتابة اسم الشركة أو المؤسسة');
       return;
     }
     if (!ownerName.trim()) {
-      setError('يرجى كتابة اسم صاحب الورشة');
+      setError('يرجى كتابة اسم المدير التنفيذي أو المالك');
       return;
     }
     if (!pin || pin.length < 4 || pin.length > 6) {
@@ -61,15 +61,15 @@ export const SetupScreen = ({ onComplete }) => {
           <div className="inline-flex items-center justify-center w-14 h-14 bg-[#1F3A5F]/10 border border-[#1F3A5F]/20 rounded-md mb-3 text-[#1F3A5F]">
             <Factory className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-[#1F2937]">مرحباً بك في نظام إدارة الورش والمصانع</h1>
-          <p className="text-gray-600 text-sm mt-1">إعداد وتشغيل النظام لأول مرة على هذا الجهاز (بدون خادم أو إنترنت)</p>
+          <h1 className="text-2xl font-bold text-[#1F2937]">مرحباً بك في نظام تخطيط موارد المؤسسات المتكامل</h1>
+          <p className="text-gray-600 text-sm mt-1">Enterprise Resource Planning (ERP) - جاهز للتشغيل الفوري أوفلاين</p>
         </div>
 
         {/* Notice Badge */}
         <div className="my-5 p-3.5 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-900 flex items-start gap-3">
           <ShieldCheck className="w-5 h-5 text-blue-800 shrink-0 mt-0.5" />
           <div>
-            <span className="font-bold">أمان وتخزين محلي:</span> جميع بياناتك تُحفظ محلياً داخل هذا المتصفح مشفرة بدون أي خوادم خارجية أو اشتراكات شهرية.
+            <span className="font-bold">أمان وتخزين محلي فائق السرعة:</span> جميع بيانات المؤسسة تُحفظ محلياً داخل المتصفح بأعلى معايير الأمان وبدون الحاجة لخوادم سحابية خارجية.
           </div>
         </div>
 
@@ -81,28 +81,28 @@ export const SetupScreen = ({ onComplete }) => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">اسم الورشة أو المصنع *</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">اسم الشركة أو المؤسسة الصناعية والتجارية *</label>
             <div className="relative">
               <input
                 type="text"
                 value={factoryName}
                 onChange={(e) => setFactoryName(e.target.value)}
                 className="w-full h-12 px-3 border border-gray-300 rounded-md text-base focus:border-[#1F3A5F] focus:outline-none"
-                placeholder="مثال: ورشة الأصيل للأثاث"
+                placeholder="مثال: مجموعة القمة للصناعات المتطورة"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">اسم المعلم / صاحب الورشة (المالك) *</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">اسم المدير التنفيذي / المالك (CEO) *</label>
             <div className="relative">
               <input
                 type="text"
                 value={ownerName}
                 onChange={(e) => setOwnerName(e.target.value)}
                 className="w-full h-12 px-3 border border-gray-300 rounded-md text-base focus:border-[#1F3A5F] focus:outline-none"
-                placeholder="مثال: المعلم إبراهيم الأصيل"
+                placeholder="مثال: م. خالد المنشاوي"
                 required
               />
             </div>
@@ -140,8 +140,8 @@ export const SetupScreen = ({ onComplete }) => {
             <div className="flex items-center gap-3">
               <Sparkles className="w-5 h-5 text-[#1F3A5F]" />
               <div>
-                <div className="text-sm font-bold text-gray-800">تحميل بيانات تجريبية استرشادية</div>
-                <div className="text-xs text-gray-500">خامات، موردين، شجرة منتجات، وفواتير نموذجية للتعرف على النظام فوراً</div>
+                <div className="text-sm font-bold text-gray-800">تحميل البيانات التجريبية للمؤسسة (Enterprise Demo)</div>
+                <div className="text-xs text-gray-500">سلاسل إمداد، خامات، شجرة منتجات BOM، أوامر تشغيل، وفواتير مبيعات نموذجية</div>
               </div>
             </div>
             <input

@@ -7,9 +7,9 @@ export const settingsRepo = {
     if (!settings) {
       settings = {
         id: 1,
-        factory_name: 'ورشة ومصنع الأصيل للمصنوعات الخشبية والمعدنية',
-        phone: '01001234567',
-        address: 'المنطقة الصناعية - المناصرة ودمياط',
+        factory_name: 'مجموعة القمة للصناعات المتطورة والأنظمة الذكية (Apex Enterprise)',
+        phone: '+20 2 2450 8899',
+        address: 'المنطقة الصناعية الثالثة - مجمع الأنظمة المتقدمة - مدينة العاشر من رمضان',
         vat_enabled: 1,
         vat_rate_percent: 14.0,
         currency_symbol: 'ج.م',

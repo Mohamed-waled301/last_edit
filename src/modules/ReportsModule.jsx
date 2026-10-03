@@ -62,8 +62,8 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
         <div className="flex items-center gap-3">
           <BackButton onClick={onBack} />
           <div>
-            <h2 className="text-xl font-bold text-gray-900 leading-none">تقارير وأرقام الورشة</h2>
-            <span className="text-xs text-gray-500 font-medium">تحليل تكلفة المنتجات، تقارير الأرباح، وأعمار الديون</span>
+            <h2 className="text-xl font-bold text-gray-900 leading-none">تقارير ومؤشرات أداء المؤسسة</h2>
+            <span className="text-xs text-gray-500 font-medium">تحليل تكلفة المنتجات، تقارير الأرباح، وأعمار الديون والسيولة</span>
           </div>
         </div>
 
@@ -387,7 +387,7 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
           {/* Customer Receivables Aging */}
           <div className="space-y-4">
             <div className="bg-white border border-gray-200 rounded-md p-3">
-              <h3 className="text-base font-bold text-green-700">مستحقات الورشة عند العملاء والمعارض</h3>
+              <h3 className="text-base font-bold text-green-700">مستحقات المؤسسة لدى العملاء ومنافذ التوزيع</h3>
               <p className="text-xs text-gray-500 font-medium">أعمار فواتير المبيعات غير المحصلة</p>
             </div>
 

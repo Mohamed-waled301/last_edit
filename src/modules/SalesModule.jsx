@@ -335,7 +335,7 @@ export default function SalesModule({ onBack, onNotify }) {
                               <span className="mr-1.5 erp-badge-gray text-[10px]">تصدير</span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-gray-500 text-xs">{inv.outlet_name || 'منفذ الورشة'}</td>
+                          <td className="py-3 px-4 text-gray-500 text-xs">{inv.outlet_name || 'المستودع الرئيسي'}</td>
                           <td className="py-3 px-4 text-gray-600">{formatDate(inv.invoice_date)}</td>
                           <td className="py-3 px-4 text-left font-bold text-gray-900">{formatCurrency(inv.total_invoice_amount)}</td>
                           <td className="py-3 px-4 text-left font-semibold text-green-700">{formatCurrency(inv.paid_amount)}</td>
@@ -574,7 +574,7 @@ export default function SalesModule({ onBack, onNotify }) {
                     onChange={e => setNewInvoice({ ...newInvoice, outlet_id: e.target.value })}
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                   >
-                    <option value="">منفذ الورشة المباشر</option>
+                    <option value="">المنفذ المركزي / المستودع الرئيسي</option>
                     {outlets.map(o => (
                       <option key={o.id} value={o.id}>{o.name}</option>
                     ))}

@@ -231,7 +231,7 @@ export default function FinishingModule({ onBack, onNotify }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">موقع ورشة التشطيب</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">موقع خط التشطيب والفحص النهائي</label>
                   <input
                     type="text"
                     value={newFinishing.finishing_location}

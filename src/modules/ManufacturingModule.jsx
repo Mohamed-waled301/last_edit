@@ -269,7 +269,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
                       onChange={() => setNewOrder({ ...newOrder, location_type: 'inside' })}
                       className="w-4 h-4"
                     />
-                    <span>داخل الورشة (عمالة + ماكينات ومصاريف)</span>
+                    <span>داخلي بخطوط إنتاج المصنع (عمالة + ماكينات ومصاريف)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-sm text-gray-800">
                     <input
@@ -280,7 +280,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
                       onChange={() => setNewOrder({ ...newOrder, location_type: 'outsourced' })}
                       className="w-4 h-4"
                     />
-                    <span>مصنع خارجي (مقاول تشغيل)</span>
+                    <span>تصنيع خارجي (مقاول تشغيل / Subcontractor)</span>
                   </label>
                 </div>
               </div>
@@ -358,7 +358,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
               ) : (
                 /* If Outsourced */
                 <div className="space-y-3 p-3 bg-gray-50 rounded-md border border-gray-200">
-                  <h4 className="font-bold text-sm text-gray-800">بيانات المصنع أو الورشة الخارجية</h4>
+                  <h4 className="font-bold text-sm text-gray-800">بيانات شريك التصنيع أو المقاول الخارجي</h4>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 mb-1">اختر المصنع الخارجي</label>
@@ -451,7 +451,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-md p-6 max-w-lg w-full border border-gray-300">
             <div className="flex items-center justify-between pb-3 mb-2 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900">تسجيل مصاريف الورشة الشهرية العامة</h3>
+              <h3 className="text-lg font-bold text-gray-900">تسجيل المصاريف الصناعية والتشغيلية الشهرية</h3>
               <button onClick={() => setShowOverheadsModal(false)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
@@ -499,7 +499,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">إيجار الورشة (جنيه)</label>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">إيجار المصنع والمنشأة (جنيه)</label>
                   <input
                     type="number"
                     min="0"

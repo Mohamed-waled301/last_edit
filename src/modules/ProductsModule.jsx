@@ -103,7 +103,7 @@ export default function ProductsModule({ onBack, onNotify }) {
           <BackButton onClick={onBack} />
           <div>
             <h2 className="text-xl font-bold text-gray-900 leading-none">المنتجات ومكوناتها (BOM)</h2>
-            <span className="text-xs text-gray-500 font-medium">أصناف الموبيليا، شجرة الخامات، ونسب الهالك والتسعير</span>
+            <span className="text-xs text-gray-500 font-medium">المنتجات والأنظمة، شجرة المكونات (BOM)، ونسب الهالك والتسعير</span>
           </div>
         </div>
 
@@ -126,7 +126,7 @@ export default function ProductsModule({ onBack, onNotify }) {
             className="h-10 px-4 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-md font-bold text-sm flex items-center gap-2 cursor-pointer transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>+ ضيف صنف جديد</span>
+            <span>+ إضافة منتج / صنف جديد</span>
           </button>
         </div>
       </div>
@@ -237,7 +237,7 @@ export default function ProductsModule({ onBack, onNotify }) {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">التصنيف</label>
                   <input
                     type="text"
-                    placeholder="صالونات / غرف نوم / مكاتب"
+                    placeholder="أنظمة تحكم / محطات عمل / لوحات قوى / وحدات استشعار"
                     value={newProduct.category}
                     onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
@@ -263,9 +263,11 @@ export default function ProductsModule({ onBack, onNotify }) {
                     onChange={e => setNewProduct({ ...newProduct, unit: e.target.value })}
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                   >
+                    <option value="وحدة">وحدة</option>
                     <option value="قطعة">قطعة</option>
                     <option value="طقم">طقم</option>
-                    <option value="متر مربع">متر مربع</option>
+                    <option value="لوحة">لوحة</option>
+                    <option value="نظام">نظام</option>
                   </select>
                 </div>
                 <div>

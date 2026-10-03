@@ -109,10 +109,10 @@ export const BackupModule = ({ onBack, onNotify }) => {
   };
 
   const handleLoadDemo = async () => {
-    if (!window.confirm('هل تريد استبدال البيانات الحالية بالبيانات التجريبية للورشة؟')) return;
+    if (!window.confirm('هل تريد استبدال البيانات الحالية بالبيانات التجريبية المتكاملة للمؤسسة (Enterprise ERP Demo)؟')) return;
     try {
       await backupRepo.loadDemoData(currentUser.id);
-      onNotify('تم تحميل البيانات التجريبية بنجاح!', 'success');
+      onNotify('تم تحميل البيانات التجريبية للمؤسسة بنجاح!', 'success');
       await loadBackupInfo();
     } catch (err) {
       onNotify(err.message || 'حدث خطأ أثناء تحميل البيانات التجريبية', 'error');
@@ -148,7 +148,7 @@ export const BackupModule = ({ onBack, onNotify }) => {
               <span>النسخ الاحتياطي وأمان البيانات</span>
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              إدارة النسخ الاحتياطية، التصدير والاسترجاع، وحماية بيانات الورشة المحلية
+              إدارة النسخ الاحتياطية، التصدير والاسترجاع، وحماية بيانات المؤسسة المحلية
             </p>
           </div>
         </div>
@@ -177,7 +177,7 @@ export const BackupModule = ({ onBack, onNotify }) => {
             </div>
             <h2 className="text-xl font-bold text-[#1F2937] mb-2">1. حفظ نسخة احتياطية</h2>
             <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              تصدير وحفظ كامل بيانات الورشة (الموردين، الخامات، شجرة المنتجات، أوامر التشغيل، الفواتير، وحركات الخزينة) في ملف واحد بصيغة JSON يحمل تاريخ اليوم.
+              تصدير وحفظ كامل بيانات المؤسسة (الموردين، سلاسل الإمداد، شجرة المنتجات BOM، أوامر التصنيع، فواتير المبيعات، والتدفقات النقدية) في ملف واحد بصيغة JSON يحمل تاريخ اليوم.
             </p>
           </div>
 

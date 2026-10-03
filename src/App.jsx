@@ -101,7 +101,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#F4F5F7] flex items-center justify-center p-4" dir="rtl">
         <div className="text-center font-bold text-gray-600 text-lg">
-          جاري تحميل نظام ورشة الأصيل...
+          جاري تحميل نظام إدارة موارد المؤسسات (Enterprise ERP)...
         </div>
       </div>
     );

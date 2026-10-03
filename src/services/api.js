@@ -22,7 +22,7 @@ import {
 
 let currentUserId = 'usr-owner';
 let currentUserRole = 'owner';
-let currentUserFullName = 'المعلم إبراهيم الأصيل';
+let currentUserFullName = 'م. خالد المنشاوي';
 
 // Initialize session from sessionStorage if available
 try {
@@ -177,7 +177,7 @@ export const api = {
   },
   completeStage1: async (id) => {
     const res = await manufacturingRepo.completeStage1(id, currentUserId);
-    return { success: true, data: res, order: res, message: 'تم إتمام مرحلة النجارة 1 بنجاح' };
+    return { success: true, data: res, order: res, message: 'تم إتمام مرحلة التصنيع والتجميع الأولى بنجاح' };
   },
   getOverheads: async () => {
     const list = await manufacturingRepo.getOverheads();

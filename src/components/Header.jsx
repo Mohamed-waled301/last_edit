@@ -6,7 +6,7 @@ import { settingsRepo, usersRepo } from '../data';
 export default function Header({ currentScreen, onNavigate, onNotify, onLockSession }) {
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(getActiveUser());
-  const [factoryName, setFactoryName] = useState('ورشة ومصنع الأصيل');
+  const [factoryName, setFactoryName] = useState('مجموعة القمة للصناعات المتطورة');
 
   useEffect(() => {
     loadHeaderData();
@@ -38,11 +38,11 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
 
   const getRoleLabel = (role) => {
     switch (role) {
-      case 'owner': return 'صاحب العمل (المدير العام)';
-      case 'purchasing': return 'مسؤول المشتريات';
-      case 'storekeeper': return 'أمين المخزن';
-      case 'production': return 'مدير الإنتاج والورشة';
-      case 'accountant': return 'المحاسب المالي';
+      case 'owner': return 'الرئيس التنفيذي (CEO)';
+      case 'purchasing': return 'مدير المشتريات وسلاسل الإمداد';
+      case 'storekeeper': return 'مدير المستودعات واللوجستيات';
+      case 'production': return 'مدير العمليات والتصنيع';
+      case 'accountant': return 'المدير المالي والمراقب (CFO)';
       default: return role;
     }
   };
@@ -56,7 +56,7 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
         </h1>
         <span className="text-sm text-gray-400 font-medium hidden sm:inline">|</span>
         <span className="text-sm text-gray-500 font-medium hidden sm:inline">
-          نظام الإدارة المالية والتصنيع (محلي 100%)
+          نظام تخطيط موارد المؤسسات المتكامل (Enterprise ERP)
         </span>
       </div>
 

@@ -95,11 +95,11 @@ export default function Sidebar({ currentScreen, onNavigate, userRole }) {
       <div className="h-16 border-b border-gray-200 px-5 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-md bg-[#1F3A5F] text-white flex items-center justify-center font-bold text-lg">
-            أ
+            A
           </div>
           <div>
-            <span className="font-bold text-[#1F3A5F] text-lg block leading-none">الأصيل ERP</span>
-            <span className="text-[11px] text-gray-500 font-semibold block mt-0.5">إدارة الورش والمصانع</span>
+            <span className="font-bold text-[#1F3A5F] text-lg block leading-none">Apex ERP</span>
+            <span className="text-[11px] text-gray-500 font-semibold block mt-0.5">نظام تخطيط موارد المؤسسات</span>
           </div>
         </div>
       </div>
@@ -128,7 +128,7 @@ export default function Sidebar({ currentScreen, onNavigate, userRole }) {
 
       {/* Sidebar Footer info */}
       <div className="p-3 border-t border-gray-200 text-xs text-gray-400 text-center font-medium">
-        نظام محاسبي وتكاليف v2.0
+        Enterprise ERP Suite v2.5
       </div>
     </aside>
   );

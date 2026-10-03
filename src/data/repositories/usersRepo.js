@@ -30,7 +30,7 @@ export const usersRepo = {
       await db.users.put({
         id: ownerId,
         username: 'owner',
-        full_name: ownerFullName || 'المعلم (صاحب الورشة)',
+        full_name: ownerFullName || 'م. خالد المنشاوي (الرئيس التنفيذي - CEO)',
         password_hash: hash,
         password_salt: salt,
         role: 'owner',
@@ -43,7 +43,7 @@ export const usersRepo = {
       if (!existingSettings) {
         await db.settings.put({
           id: 1,
-          factory_name: factoryName || 'ورشة ومصنع الأصيل',
+          factory_name: factoryName || 'مجموعة القمة للصناعات المتطورة والأنظمة الذكية',
           phone: '',
           address: '',
           vat_enabled: 0,
@@ -63,7 +63,7 @@ export const usersRepo = {
       if (accountsCount === 0) {
         await db.treasury_accounts.put({
           id: 'acc-1',
-          name: 'خزنة الورشة النقدية (الرئيسية)',
+          name: 'الخزينة النقدية المركزية - المقر الرئيسي',
           account_type: 'treasury',
           current_balance: 0,
           bank_account_number: '',
