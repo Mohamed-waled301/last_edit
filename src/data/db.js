@@ -4,7 +4,7 @@ import Dexie from 'dexie';
  * Apex Enterprise ERP - In-Browser IndexedDB Database via Dexie
  * Complete offline-first storage with automatic migration & recovery.
  */
-export const DB_NAME = 'ApexEnterpriseERP_DB_v2';
+export const DB_NAME = 'ApexEnterpriseERP_DB_v3';
 
 export const SCHEMA_V1 = {
   users: 'id, username, role, is_active, created_at',
@@ -43,9 +43,10 @@ export class WorkshopDatabase extends Dexie {
   constructor() {
     super(DB_NAME);
 
-    // Initial schema with all 26 tables
+    // Initial schema with all 30 tables
     this.version(1).stores(SCHEMA_V1);
     this.version(2).stores(SCHEMA_V1);
+    this.version(3).stores(SCHEMA_V1);
   }
 }
 
@@ -55,6 +56,8 @@ export const db = new WorkshopDatabase();
 try {
   if (typeof window !== 'undefined' && window.indexedDB) {
     Dexie.delete('WorkshopERP_DB').catch(() => {});
+    Dexie.delete('ApexEnterpriseERP_DB_v2').catch(() => {});
+    Dexie.delete('ApexEnterpriseERP_DB').catch(() => {});
   }
 } catch (e) {}
 

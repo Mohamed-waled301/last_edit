@@ -114,7 +114,7 @@ export default function SalesModule({ onBack, onNotify }) {
       setTreasuryAccounts(accRes.data?.accounts || accRes.data || accRes.accounts || []);
       setSettings(setRes.data || null);
     } catch (err) {
-      alert(err.message);
+      console.error('Failed to load sales data:', err);
     } finally {
       setLoading(false);
     }

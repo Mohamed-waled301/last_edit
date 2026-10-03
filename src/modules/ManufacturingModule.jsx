@@ -71,7 +71,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
       setSuppliers(supRes.data || []);
       setOverheads(ovhRes.data || []);
     } catch (err) {
-      alert(err.message);
+      console.error('Failed to load manufacturing data:', err);
     } finally {
       setLoading(false);
     }

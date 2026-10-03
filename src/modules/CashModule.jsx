@@ -59,7 +59,7 @@ export default function CashModule({ onBack, onNotify }) {
       setAccountData(accRes.data || { accounts: [], totalCash: 0, totalBank: 0, grandTotal: 0 });
       setTransactions(txRes.data || []);
     } catch (err) {
-      alert(err.message);
+      console.error('Failed to load cash data:', err);
     } finally {
       setLoading(false);
     }

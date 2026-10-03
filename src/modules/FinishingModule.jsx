@@ -47,7 +47,7 @@ export default function FinishingModule({ onBack, onNotify }) {
       setProductionOrders(prodRes.data || []);
       setRawMaterials(matRes.data || []);
     } catch (err) {
-      alert(err.message);
+      console.error('Failed to load finishing data:', err);
     } finally {
       setLoading(false);
     }

@@ -124,7 +124,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
         setInvoices(iRes.data || []);
       }
     } catch (err) {
-      alert(err.message);
+      console.error('Failed to load suppliers data:', err);
     } finally {
       setLoading(false);
     }

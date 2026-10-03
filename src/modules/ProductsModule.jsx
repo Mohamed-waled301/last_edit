@@ -48,7 +48,7 @@ export default function ProductsModule({ onBack, onNotify }) {
       setProducts(prodRes.data || prodRes.products || []);
       setRawMaterials(matRes.data || matRes.materials || []);
     } catch (err) {
-      alert(err.message);
+      console.error('Failed to load products data:', err);
     } finally {
       setLoading(false);
     }

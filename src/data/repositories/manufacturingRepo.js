@@ -49,11 +49,15 @@ export const manufacturingRepo = {
       throw new Error('لا توجد شجرة منتج (BOM) محددة لهذا المنتج، يرجى إضافة بنود التكلفة أولاً.');
     }
 
+    // Overhead Calculation
+    const latestOverhead = await db.overheads.reverse().sortBy('created_at');
+    const hourlyOverheadRate = latestOverhead.length > 0 ? Number(latestOverhead[0].hourly_overhead_rate) || 0 : 50;
+
     // Material usage calculation & stock deduction inside Dexie transaction
     let totalMaterialCost = 0;
     const materialUsageList = [];
 
-    await db.transaction('rw', [db.production_orders, db.production_material_usage, db.materials, db.stock_movements], async () => {
+    await db.transaction('rw', [db.production_orders, db.production_material_usage, db.materials, db.stock_movements, db.overheads], async () => {
       // Check stock and compute consumption
       for (const item of bom) {
         const mat = await db.materials.get(item.raw_material_id);
@@ -113,9 +117,6 @@ export const manufacturingRepo = {
         batchQty,
       });
 
-      // Overhead Calculation
-      const latestOverhead = await db.overheads.reverse().sortBy('created_at');
-      const hourlyOverheadRate = latestOverhead.length > 0 ? Number(latestOverhead[0].hourly_overhead_rate) || 0 : 50;
       const machineHours = Number(data.machine_hours) || 0;
       const allocatedOverheadCost = CostCalculator.calculateAllocatedOverhead(machineHours, hourlyOverheadRate);
 

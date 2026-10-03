@@ -1,4 +1,4 @@
-import db from '../db';
+import db, { ensureDatabaseIntegrity } from '../db';
 import * as XLSX from 'xlsx';
 import settingsRepo from './settingsRepo';
 import auditRepo from './auditRepo';
@@ -56,23 +56,20 @@ export const backupRepo = {
       throw new Error('صيغة ملف النسخة الاحتياطية غير معتمدة');
     }
 
+    await ensureDatabaseIntegrity();
     const backupData = parsed.data;
     const tableNames = db.tables.map(t => t.name);
-    const availableTables = db.tables.filter(t => !db.backendDB() || db.backendDB().objectStoreNames.contains(t.name));
 
-    await db.transaction('rw', availableTables, async () => {
+    await db.transaction('rw', db.tables, async () => {
       // Clear existing records
-      for (const table of availableTables) {
+      for (const table of db.tables) {
         await table.clear();
       }
 
       // Restore each table
       for (const name of tableNames) {
         if (Array.isArray(backupData[name]) && backupData[name].length > 0) {
-          const tableExists = !db.backendDB() || db.backendDB().objectStoreNames.contains(name);
-          if (tableExists) {
-            await db.table(name).bulkAdd(backupData[name]);
-          }
+          await db.table(name).bulkAdd(backupData[name]);
         }
       }
     });
@@ -88,14 +85,10 @@ export const backupRepo = {
     const now = new Date().toISOString();
     const today = now.split('T')[0];
 
-    // Ensure database is fully open with all stores ready
-    if (!db.isOpen()) {
-      await db.open();
-    }
-    const availableTables = db.tables.filter(t => !db.backendDB() || db.backendDB().objectStoreNames.contains(t.name));
+    await ensureDatabaseIntegrity();
 
-    await db.transaction('rw', availableTables, async () => {
-      for (const table of availableTables) {
+    await db.transaction('rw', db.tables, async () => {
+      for (const table of db.tables) {
         await table.clear();
       }
 
@@ -854,13 +847,10 @@ export const backupRepo = {
    * 4. Clear all database data (with double confirmation in UI).
    */
   async clearAllData(userId = 'usr-owner') {
-    if (!db.isOpen()) {
-      await db.open();
-    }
-    const availableTables = db.tables.filter(t => !db.backendDB() || db.backendDB().objectStoreNames.contains(t.name));
+    await ensureDatabaseIntegrity();
 
-    await db.transaction('rw', availableTables, async () => {
-      for (const table of availableTables) {
+    await db.transaction('rw', db.tables, async () => {
+      for (const table of db.tables) {
         await table.clear();
       }
     });

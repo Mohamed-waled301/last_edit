@@ -48,7 +48,7 @@ export default function InventoryModule({ onBack, onNotify }) {
       const res = await api.getRawMaterials();
       setMaterials(res.data || res.materials || []);
     } catch (err) {
-      alert(err.message);
+      console.error('Failed to load inventory materials:', err);
     } finally {
       setLoading(false);
     }

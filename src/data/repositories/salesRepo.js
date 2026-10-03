@@ -188,12 +188,13 @@ export const salesRepo = {
     const customs = Math.max(0, Number(data.customs_expense) || 0);
     const commission = Math.max(0, Number(data.commission_expense) || 0);
     const totalSellingExpenses = Number((shipping + customs + commission).toFixed(2));
+    const settings = await db.settings.get(1);
 
     let subtotal = 0;
     let totalCogs = 0;
     const invoiceItems = [];
 
-    await db.transaction('rw', [db.sales_invoices, db.sales_invoice_items, db.products], async () => {
+    await db.transaction('rw', [db.sales_invoices, db.sales_invoice_items, db.products, db.settings], async () => {
       for (let idx = 0; idx < (data.items || []).length; idx++) {
         const item = data.items[idx];
         const qty = Math.max(1, Number(item.quantity) || 1);
@@ -234,7 +235,6 @@ export const salesRepo = {
         await db.sales_invoice_items.add(ii);
       }
 
-      const settings = await db.settings.get(1);
       const vatRate = (settings && settings.vat_enabled && !isExport) ? (Number(settings.vat_rate_percent) || 14) : 0;
       const taxAmount = Number(((subtotal * vatRate) / 100).toFixed(2));
       const totalInvoiceAmount = Number((subtotal + taxAmount).toFixed(2));

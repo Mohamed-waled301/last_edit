@@ -45,7 +45,7 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
         }
       }
     } catch (err) {
-      alert(err.message);
+      console.error('Failed to load reports data:', err);
     } finally {
       setLoading(false);
     }
