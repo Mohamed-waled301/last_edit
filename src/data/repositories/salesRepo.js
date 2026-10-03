@@ -2,6 +2,7 @@ import db from '../db';
 import CostCalculator from '../../logic/costCalculator';
 import BalanceCalculator from '../../logic/balances';
 import auditRepo from './auditRepo';
+import { validateNotPastDate } from '../../utils/formatters';
 
 export const salesRepo = {
   async getCustomers() {
@@ -173,6 +174,8 @@ export const salesRepo = {
   },
 
   async createSalesInvoice(data, userId = 'usr-accountant') {
+    if (data.invoice_date) validateNotPastDate(data.invoice_date, 'تاريخ فاتورة المبيعات');
+    if (data.due_date) validateNotPastDate(data.due_date, 'تاريخ استحقاق الفاتورة');
     const id = `sinv-${Date.now()}`;
     const invoiceNumber = data.invoice_number || `INV-SLS-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();
@@ -282,6 +285,7 @@ export const salesRepo = {
 
   async collectPayment(data, userId = 'usr-accountant') {
     const { customer_id, invoice_id, account_id, amount, payment_date, payment_method, notes } = data;
+    if (payment_date) validateNotPastDate(payment_date, 'تاريخ سند التحصيل');
     const colAmount = Math.max(0, Number(amount) || 0);
     if (colAmount <= 0) throw new Error('مبلغ التحصيل يجب أن يكون أكبر من صفر');
 
@@ -354,6 +358,7 @@ export const salesRepo = {
 
   async createCustomerReturn(data, userId = 'usr-accountant') {
     const { customer_id, invoice_id, product_id, quantity, refund_amount, refund_method, return_date, reason } = data;
+    if (return_date) validateNotPastDate(return_date, 'تاريخ مرتجع المبيعات');
     const returnQty = Math.max(1, Number(quantity) || 1);
     const returnAmount = Math.max(0, Number(refund_amount) || 0);
     const returnId = `cret-${Date.now()}`;

@@ -2,6 +2,7 @@ import db from '../db';
 import CostCalculator from '../../logic/costCalculator';
 import BalanceCalculator from '../../logic/balances';
 import auditRepo from './auditRepo';
+import { validateNotPastDate } from '../../utils/formatters';
 
 export const suppliersRepo = {
   async getAll() {
@@ -175,6 +176,8 @@ export const suppliersRepo = {
   },
 
   async createPurchaseOrder(data, userId = 'usr-purchasing') {
+    if (data.order_date) validateNotPastDate(data.order_date, 'تاريخ أمر التوريد');
+    if (data.expected_date) validateNotPastDate(data.expected_date, 'تاريخ التسليم المتوقع');
     const id = `po-${Date.now()}`;
     const poNumber = data.po_number || `PO-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();
@@ -246,6 +249,7 @@ export const suppliersRepo = {
   },
 
   async createGoodsReceipt(data, userId = 'usr-storekeeper') {
+    if (data.receipt_date) validateNotPastDate(data.receipt_date, 'تاريخ إذن استلام البضاعة');
     const id = `grn-${Date.now()}`;
     const grnNumber = data.grn_number || `GRN-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();
@@ -334,6 +338,8 @@ export const suppliersRepo = {
   },
 
   async createSupplierInvoice(data, userId = 'usr-accountant') {
+    if (data.invoice_date) validateNotPastDate(data.invoice_date, 'تاريخ فاتورة المورد');
+    if (data.due_date) validateNotPastDate(data.due_date, 'تاريخ استحقاق الفاتورة');
     const id = `sinv-${Date.now()}`;
     const invoiceNumber = data.invoice_number || `INV-SUP-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();
@@ -375,6 +381,7 @@ export const suppliersRepo = {
 
   async paySupplier(data, userId = 'usr-accountant') {
     const { supplier_id, invoice_id, account_id, amount, payment_date, payment_method, notes } = data;
+    if (payment_date) validateNotPastDate(payment_date, 'تاريخ سند الصرف للمورد');
     const payAmount = Math.max(0, Number(amount) || 0);
     if (payAmount <= 0) throw new Error('مبلغ السداد يجب أن يكون أكبر من صفر');
 
@@ -451,6 +458,7 @@ export const suppliersRepo = {
 
   async createSupplierReturn(data, userId = 'usr-storekeeper') {
     const { supplier_id, material_id, quantity, unit_cost, total_amount, refund_status, return_date, reason } = data;
+    if (return_date) validateNotPastDate(return_date, 'تاريخ مرتجع المورد');
     const returnQty = Math.max(0, Number(quantity) || 0);
     const returnUnitCost = Math.max(0, Number(unit_cost) || 0);
     const returnTotal = Number((returnQty * returnUnitCost).toFixed(2));

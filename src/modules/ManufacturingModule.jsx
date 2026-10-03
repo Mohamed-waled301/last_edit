@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import { api } from '../services/api';
-import { formatCurrency, formatNumber, formatDate } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatDate, getTodayDateString, isPastDate } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
 
 export default function ManufacturingModule({ onBack, onNotify }) {
@@ -83,10 +83,30 @@ export default function ManufacturingModule({ onBack, onNotify }) {
 
   const handleSaveOrder = async (e) => {
     e.preventDefault();
+    if (newOrder.start_date && isPastDate(newOrder.start_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
     try {
       const res = await api.createProductionOrder(newOrder);
       onNotify(res.message);
       setShowAddOrderModal(false);
+      setNewOrder({
+        product_id: '',
+        batch_quantity: '10',
+        start_date: getTodayDateString(),
+        location_type: 'inside',
+        external_supplier_id: '',
+        external_pricing_type: 'per_piece',
+        external_service_rate: '',
+        external_transport_cost: '',
+        labor_type: 'hourly',
+        labor_hours: '30',
+        labor_hourly_rate: '50',
+        labor_piece_rate: '',
+        machine_hours: '15',
+        notes: ''
+      });
       loadData();
     } catch (err) {
       alert(err.message);
@@ -254,6 +274,23 @@ export default function ManufacturingModule({ onBack, onNotify }) {
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ بدء أمر التشغيل</label>
+                <input
+                  type="date"
+                  min={getTodayDateString()}
+                  value={newOrder.start_date}
+                  onChange={e => {
+                    if (isPastDate(e.target.value)) {
+                      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                      return;
+                    }
+                    setNewOrder({ ...newOrder, start_date: e.target.value });
+                  }}
+                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                />
               </div>
 
               {/* Location Type */}

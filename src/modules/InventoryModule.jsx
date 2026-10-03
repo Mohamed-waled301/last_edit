@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import { api } from '../services/api';
-import { formatCurrency, formatNumber, formatDate } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatDate, getTodayDateString, isPastDate } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
 
 export default function InventoryModule({ onBack, onNotify }) {
@@ -40,6 +40,7 @@ export default function InventoryModule({ onBack, onNotify }) {
 
   const [stockCountItems, setStockCountItems] = useState([]);
   const [stockCountNotes, setStockCountNotes] = useState('');
+  const [stockCountDate, setStockCountDate] = useState(getTodayDateString());
 
   const loadMaterials = async () => {
     try {
@@ -111,14 +112,20 @@ export default function InventoryModule({ onBack, onNotify }) {
       }))
     );
     setStockCountNotes('');
+    setStockCountDate(getTodayDateString());
     setShowStockCountModal(true);
   };
 
   // Save stock count
   const handleSaveStockCount = async (e) => {
     e.preventDefault();
+    if (stockCountDate && isPastDate(stockCountDate)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
     try {
       const payload = {
+        count_date: stockCountDate,
         notes: stockCountNotes,
         items: stockCountItems.map(item => ({
           material_id: item.material_id,
@@ -511,15 +518,33 @@ export default function InventoryModule({ onBack, onNotify }) {
             </p>
 
             <form onSubmit={handleSaveStockCount} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">ملاحظات لجنة الجرد</label>
-                <input
-                  type="text"
-                  placeholder="مثال: جرد نهاية الربع السنوي"
-                  value={stockCountNotes}
-                  onChange={e => setStockCountNotes(e.target.value)}
-                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ محضر الجرد</label>
+                  <input
+                    type="date"
+                    min={getTodayDateString()}
+                    value={stockCountDate}
+                    onChange={e => {
+                      if (isPastDate(e.target.value)) {
+                        alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                        return;
+                      }
+                      setStockCountDate(e.target.value);
+                    }}
+                    className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ملاحظات لجنة الجرد</label>
+                  <input
+                    type="text"
+                    placeholder="مثال: جرد نهاية الربع السنوي"
+                    value={stockCountNotes}
+                    onChange={e => setStockCountNotes(e.target.value)}
+                    className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="border border-gray-200 rounded-md overflow-hidden max-h-96 overflow-y-auto">

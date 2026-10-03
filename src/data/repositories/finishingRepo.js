@@ -1,6 +1,7 @@
 import db from '../db';
 import CostCalculator from '../../logic/costCalculator';
 import auditRepo from './auditRepo';
+import { validateNotPastDate } from '../../utils/formatters';
 
 export const finishingRepo = {
   async getAll() {
@@ -35,6 +36,9 @@ export const finishingRepo = {
   },
 
   async createFinishingOrder(data, userId = 'usr-production') {
+    if (data.transfer_date) {
+      validateNotPastDate(data.transfer_date, 'تاريخ التحويل للتشطيب');
+    }
     const id = `fo-${Date.now()}`;
     const finishingNumber = data.finishing_number || `ORD-FIN-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();

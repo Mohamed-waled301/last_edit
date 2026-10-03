@@ -1,9 +1,11 @@
 import Dexie from 'dexie';
 
 /**
- * Workshop ERP / Apex Enterprise - In-Browser IndexedDB Database via Dexie
+ * Apex Enterprise ERP - In-Browser IndexedDB Database via Dexie
  * Complete offline-first storage with automatic migration & recovery.
  */
+export const DB_NAME = 'ApexEnterpriseERP_DB_v2';
+
 export const SCHEMA_V1 = {
   users: 'id, username, role, is_active, created_at',
   audit_log: 'id, user_id, action, entity_type, entity_id, created_at',
@@ -39,16 +41,22 @@ export const SCHEMA_V1 = {
 
 export class WorkshopDatabase extends Dexie {
   constructor() {
-    super('WorkshopERP_DB');
+    super(DB_NAME);
 
-    // Version definitions ensure that existing browser databases upgrade properly
+    // Initial schema with all 26 tables
     this.version(1).stores(SCHEMA_V1);
     this.version(2).stores(SCHEMA_V1);
-    this.version(3).stores(SCHEMA_V1);
   }
 }
 
 export const db = new WorkshopDatabase();
+
+// Silently cleanup any legacy broken database from previous builds
+try {
+  if (typeof window !== 'undefined' && window.indexedDB) {
+    Dexie.delete('WorkshopERP_DB').catch(() => {});
+  }
+} catch (e) {}
 
 /**
  * Ensures that all declared object stores exist in the underlying IndexedDB database.
@@ -68,7 +76,7 @@ export async function ensureDatabaseIntegrity() {
       if (missing.length > 0) {
         console.warn('Missing object stores detected in IndexedDB, auto-recovering database:', missing);
         db.close();
-        await Dexie.delete('WorkshopERP_DB');
+        await Dexie.delete(DB_NAME);
         await db.open();
         console.log('Database successfully re-created with all required stores.');
       }
@@ -77,7 +85,7 @@ export async function ensureDatabaseIntegrity() {
     console.error('Database integrity check error, applying auto-recovery:', err);
     try {
       db.close();
-      await Dexie.delete('WorkshopERP_DB');
+      await Dexie.delete(DB_NAME);
       await db.open();
     } catch (recoverErr) {
       console.error('Failed to auto-recover IndexedDB:', recoverErr);

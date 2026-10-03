@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import { api } from '../services/api';
-import { formatCurrency, formatNumber, formatDate } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatDate, getTodayDateString, isPastDate } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
 
 export default function CashModule({ onBack, onNotify }) {
@@ -38,7 +38,8 @@ export default function CashModule({ onBack, onNotify }) {
     tx_type: 'inflow', // 'inflow' | 'outflow'
     category: 'other',
     amount: '',
-    description: ''
+    description: '',
+    tx_date: getTodayDateString()
   });
 
   const [transferForm, setTransferForm] = useState({
@@ -83,11 +84,15 @@ export default function CashModule({ onBack, onNotify }) {
 
   const handleSaveTx = async (e) => {
     e.preventDefault();
+    if (txForm.tx_date && isPastDate(txForm.tx_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
     try {
       const res = await api.recordCashTransaction(txForm);
       onNotify(res.message);
       setShowTxModal(false);
-      setTxForm({ account_id: '', tx_type: 'inflow', category: 'other', amount: '', description: '' });
+      setTxForm({ account_id: '', tx_type: 'inflow', category: 'other', amount: '', description: '', tx_date: getTodayDateString() });
       loadData();
     } catch (err) {
       alert(err.message);
@@ -408,6 +413,23 @@ export default function CashModule({ onBack, onNotify }) {
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-base font-bold focus:border-[#1F3A5F] focus:outline-none"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ الحركة</label>
+                <input
+                  type="date"
+                  min={getTodayDateString()}
+                  value={txForm.tx_date}
+                  onChange={e => {
+                    if (isPastDate(e.target.value)) {
+                      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                      return;
+                    }
+                    setTxForm({ ...txForm, tx_date: e.target.value });
+                  }}
+                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                />
               </div>
 
               <div>

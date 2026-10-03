@@ -1,6 +1,7 @@
 import db from '../db';
 import CostCalculator from '../../logic/costCalculator';
 import auditRepo from './auditRepo';
+import { validateNotPastDate } from '../../utils/formatters';
 
 export const manufacturingRepo = {
   async getAll() {
@@ -32,6 +33,7 @@ export const manufacturingRepo = {
   },
 
   async createProductionOrder(data, userId = 'usr-production') {
+    if (data.start_date) validateNotPastDate(data.start_date, 'تاريخ أمر الإنتاج');
     const id = `po-${Date.now()}`;
     const orderNumber = data.order_number || `ORD-MFG-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();

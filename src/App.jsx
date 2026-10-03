@@ -18,7 +18,7 @@ import SettingsModule from './modules/SettingsModule';
 import BackupModule from './modules/BackupModule';
 import { getActiveUser, setActiveUser } from './services/api';
 import { usersRepo, backupRepo } from './data';
-import { ensureDatabaseIntegrity } from './data/db';
+import { ensureDatabaseIntegrity, DB_NAME } from './data/db';
 import Dexie from 'dexie';
 
 export default function App() {
@@ -58,6 +58,7 @@ export default function App() {
         console.warn('System state check error:', e);
         if (e.name === 'NotFoundError' || String(e).includes('objectStore') || String(e).includes('NotFound')) {
           try {
+            await Dexie.delete(DB_NAME);
             await Dexie.delete('WorkshopERP_DB');
             await ensureDatabaseIntegrity();
           } catch (resetErr) {

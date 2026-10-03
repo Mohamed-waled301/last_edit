@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import { api } from '../services/api';
-import { formatCurrency, formatNumber, formatDate } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatDate, getTodayDateString, isPastDate } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
 
 export default function SalesModule({ onBack, onNotify }) {
@@ -130,6 +130,14 @@ export default function SalesModule({ onBack, onNotify }) {
       alert('يرجى اختيار العميل');
       return;
     }
+    if (newInvoice.invoice_date && isPastDate(newInvoice.invoice_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
+    if (newInvoice.due_date && newInvoice.due_date < (newInvoice.invoice_date || getTodayDateString())) {
+      alert('تاريخ استحقاق الفاتورة لا يمكن أن يكون قبل تاريخ الفاتورة');
+      return;
+    }
     const validItems = newInvoice.items.filter(it => it.product_id && Number(it.quantity) > 0);
     if (validItems.length === 0) {
       alert('يرجى إضافة صنف مباع واحد على الأقل مع الكمية وسعر البيع');
@@ -145,7 +153,7 @@ export default function SalesModule({ onBack, onNotify }) {
       setNewInvoice({
         customer_id: '',
         outlet_id: '',
-        invoice_date: new Date().toISOString().split('T')[0],
+        invoice_date: getTodayDateString(),
         due_date: '',
         is_export: false,
         currency: 'EGP',
@@ -190,6 +198,10 @@ export default function SalesModule({ onBack, onNotify }) {
 
   const handleSaveCollection = async (e) => {
     e.preventDefault();
+    if (collectForm.payment_date && isPastDate(collectForm.payment_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
     try {
       const res = await api.collectCustomerPayment(collectForm);
       onNotify(res.message);
@@ -202,6 +214,10 @@ export default function SalesModule({ onBack, onNotify }) {
 
   const handleSaveReturn = async (e) => {
     e.preventDefault();
+    if (returnForm.return_date && isPastDate(returnForm.return_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
     try {
       const res = await api.createCustomerReturn(returnForm);
       onNotify(res.message);
@@ -582,6 +598,41 @@ export default function SalesModule({ onBack, onNotify }) {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ الفاتورة</label>
+                  <input
+                    type="date"
+                    min={getTodayDateString()}
+                    value={newInvoice.invoice_date}
+                    onChange={e => {
+                      if (isPastDate(e.target.value)) {
+                        alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                        return;
+                      }
+                      setNewInvoice({ ...newInvoice, invoice_date: e.target.value });
+                    }}
+                    className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ميعاد الاستحقاق</label>
+                  <input
+                    type="date"
+                    min={newInvoice.invoice_date || getTodayDateString()}
+                    value={newInvoice.due_date}
+                    onChange={e => {
+                      if (newInvoice.invoice_date && e.target.value < newInvoice.invoice_date) {
+                        alert('تاريخ استحقاق الفاتورة لا يمكن أن يكون قبل تاريخ الفاتورة');
+                        return;
+                      }
+                      setNewInvoice({ ...newInvoice, due_date: e.target.value });
+                    }}
+                    className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                  />
+                </div>
+              </div>
+
               {/* Items Table */}
               <div className="border-t border-gray-200 pt-3">
                 <label className="block text-sm font-bold text-gray-800 mb-2">الأصناف المباعة *</label>
@@ -849,6 +900,23 @@ export default function SalesModule({ onBack, onNotify }) {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ التحصيل</label>
+                <input
+                  type="date"
+                  min={getTodayDateString()}
+                  value={collectForm.payment_date}
+                  onChange={e => {
+                    if (isPastDate(e.target.value)) {
+                      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                      return;
+                    }
+                    setCollectForm({ ...collectForm, payment_date: e.target.value });
+                  }}
+                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                />
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
@@ -946,6 +1014,23 @@ export default function SalesModule({ onBack, onNotify }) {
                   placeholder="مثال: تبديل مقاس أو عيب تشطيب"
                   value={returnForm.reason}
                   onChange={e => setReturnForm({ ...returnForm, reason: e.target.value })}
+                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ المرتجع</label>
+                <input
+                  type="date"
+                  min={getTodayDateString()}
+                  value={returnForm.return_date}
+                  onChange={e => {
+                    if (isPastDate(e.target.value)) {
+                      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                      return;
+                    }
+                    setReturnForm({ ...returnForm, return_date: e.target.value });
+                  }}
                   className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                 />
               </div>

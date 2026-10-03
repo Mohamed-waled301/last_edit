@@ -1,5 +1,6 @@
 import db from '../db';
 import auditRepo from './auditRepo';
+import { validateNotPastDate } from '../../utils/formatters';
 
 export const cashRepo = {
   async getAccounts() {
@@ -49,7 +50,10 @@ export const cashRepo = {
   },
 
   async recordTransaction(data, userId = 'usr-accountant') {
-    const { account_id, tx_type, category, amount, description } = data;
+    const { account_id, tx_type, category, amount, description, date, tx_date } = data;
+    if (date || tx_date) {
+      validateNotPastDate(date || tx_date, 'تاريخ المعاملة المالية');
+    }
     const numAmount = Math.max(0, Number(amount) || 0);
     if (numAmount <= 0) throw new Error('قيمة الحركة يجب أن تكون أكبر من صفر');
 

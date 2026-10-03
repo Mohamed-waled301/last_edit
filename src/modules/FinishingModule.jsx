@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import { api } from '../services/api';
-import { formatCurrency, formatNumber, formatDate } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatDate, getTodayDateString, isPastDate } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
 
 export default function FinishingModule({ onBack, onNotify }) {
@@ -59,6 +59,10 @@ export default function FinishingModule({ onBack, onNotify }) {
 
   const handleSaveFinishing = async (e) => {
     e.preventDefault();
+    if (newFinishing.transfer_date && isPastDate(newFinishing.transfer_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
     try {
       const validMaterials = newFinishing.finishing_materials.filter(m => m.raw_material_id && Number(m.quantity) > 0);
       const res = await api.createFinishingOrder({
@@ -67,6 +71,16 @@ export default function FinishingModule({ onBack, onNotify }) {
       });
       onNotify(res.message);
       setShowAddModal(false);
+      setNewFinishing({
+        production_order_id: '',
+        finishing_quantity: '10',
+        transfer_date: getTodayDateString(),
+        finishing_location: 'عنبر الدهانات والتنجيد',
+        finishing_labor_fee: '1200',
+        transport_cost: '200',
+        finishing_materials: [{ raw_material_id: '', quantity: '' }],
+        notes: ''
+      });
       loadData();
     } catch (err) {
       alert(err.message);
@@ -239,6 +253,23 @@ export default function FinishingModule({ onBack, onNotify }) {
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ التحويل للتشطيب</label>
+                <input
+                  type="date"
+                  min={getTodayDateString()}
+                  value={newFinishing.transfer_date}
+                  onChange={e => {
+                    if (isPastDate(e.target.value)) {
+                      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                      return;
+                    }
+                    setNewFinishing({ ...newFinishing, transfer_date: e.target.value });
+                  }}
+                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">

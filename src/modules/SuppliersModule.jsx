@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import { api } from '../services/api';
-import { formatCurrency, formatNumber, formatDate } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatDate, getTodayDateString, isPastDate } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
 
 export default function SuppliersModule({ onBack, onNotify }) {
@@ -162,20 +162,20 @@ export default function SuppliersModule({ onBack, onNotify }) {
   // Handle PO
   const handleSavePO = async (e) => {
     e.preventDefault();
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (newPO.order_date && newPO.order_date < todayStr) {
-      alert('تاريخ الطلب لا يمكن أن يكون في يوم مضى (تاريخ فات)؛ اختر تاريخ اليوم أو تاريخاً قادماً');
+    const todayStr = getTodayDateString();
+    if (newPO.order_date && isPastDate(newPO.order_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
       return;
     }
-    if (newPO.expected_date && newPO.expected_date < newPO.order_date) {
-      alert('تاريخ التسليم المتوقع لا يمكن أن يكون قبل تاريخ الطلب');
+    if (newPO.expected_date && newPO.expected_date < (newPO.order_date || todayStr)) {
+      alert('تاريخ التسليم المتوقع لا يمكن أن يكون قبل تاريخ أمر الشراء');
       return;
     }
     try {
       const res = await api.createPurchaseOrder(newPO);
       onNotify(res.message);
       setShowAddPOModal(false);
-      setNewPO({ supplier_id: '', order_date: new Date().toISOString().split('T')[0], expected_date: '', notes: '', items: [{ material_id: '', quantity_ordered: '', unit_price: '' }] });
+      setNewPO({ supplier_id: '', order_date: getTodayDateString(), expected_date: '', notes: '', items: [{ material_id: '', quantity_ordered: '', unit_price: '' }] });
       setTab('orders');
     } catch (err) {
       alert(err.message);
@@ -185,11 +185,15 @@ export default function SuppliersModule({ onBack, onNotify }) {
   // Handle GRN
   const handleSaveGRN = async (e) => {
     e.preventDefault();
+    if (newGRN.receipt_date && isPastDate(newGRN.receipt_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
     try {
       const res = await api.createGoodsReceipt(newGRN);
       onNotify(res.message);
       setShowAddGRNModal(false);
-      setNewGRN({ supplier_id: '', po_id: '', receipt_date: new Date().toISOString().split('T')[0], receiver_name: 'أمين المخزن', notes: '', items: [{ material_id: '', quantity_received: '', unit_cost: '' }] });
+      setNewGRN({ supplier_id: '', po_id: '', receipt_date: getTodayDateString(), receiver_name: 'أمين المخزن', notes: '', items: [{ material_id: '', quantity_received: '', unit_cost: '' }] });
       setTab('grn');
     } catch (err) {
       alert(err.message);
@@ -199,11 +203,19 @@ export default function SuppliersModule({ onBack, onNotify }) {
   // Handle Invoice
   const handleSaveInvoice = async (e) => {
     e.preventDefault();
+    if (newInvoice.invoice_date && isPastDate(newInvoice.invoice_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
+    if (newInvoice.due_date && newInvoice.due_date < (newInvoice.invoice_date || getTodayDateString())) {
+      alert('تاريخ استحقاق الفاتورة لا يمكن أن يكون قبل تاريخ الفاتورة');
+      return;
+    }
     try {
       const res = await api.createSupplierInvoice(newInvoice);
       onNotify(res.message);
       setShowAddInvoiceModal(false);
-      setNewInvoice({ supplier_id: '', invoice_number: '', invoice_date: new Date().toISOString().split('T')[0], due_date: '', subtotal: '', tax_amount: '0', notes: '' });
+      setNewInvoice({ supplier_id: '', invoice_number: '', invoice_date: getTodayDateString(), due_date: '', subtotal: '', tax_amount: '0', notes: '' });
       setTab('invoices');
     } catch (err) {
       alert(err.message);
@@ -213,11 +225,15 @@ export default function SuppliersModule({ onBack, onNotify }) {
   // Handle Payment
   const handleSavePayment = async (e) => {
     e.preventDefault();
+    if (paymentForm.payment_date && isPastDate(paymentForm.payment_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
     try {
       const res = await api.paySupplier(paymentForm);
       onNotify(res.message);
       setShowPayModal(null);
-      setPaymentForm({ supplier_id: '', invoice_id: '', account_id: '', amount: '', payment_date: new Date().toISOString().split('T')[0], payment_method: 'cash', notes: '' });
+      setPaymentForm({ supplier_id: '', invoice_id: '', account_id: '', amount: '', payment_date: getTodayDateString(), payment_method: 'cash', notes: '' });
       loadData();
     } catch (err) {
       alert(err.message);
@@ -227,11 +243,15 @@ export default function SuppliersModule({ onBack, onNotify }) {
   // Handle Return
   const handleSaveReturn = async (e) => {
     e.preventDefault();
+    if (returnForm.return_date && isPastDate(returnForm.return_date)) {
+      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+      return;
+    }
     try {
       const res = await api.createSupplierReturn(returnForm);
       onNotify(res.message);
       setShowReturnModal(false);
-      setReturnForm({ supplier_id: '', material_id: '', quantity: '', unit_cost: '', return_date: new Date().toISOString().split('T')[0], reason: '' });
+      setReturnForm({ supplier_id: '', material_id: '', quantity: '', unit_cost: '', return_date: getTodayDateString(), reason: '' });
       loadData();
     } catch (err) {
       alert(err.message);
@@ -1135,8 +1155,15 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ الاستلام الفعلي</label>
                   <input
                     type="date"
+                    min={getTodayDateString()}
                     value={newGRN.receipt_date}
-                    onChange={e => setNewGRN({ ...newGRN, receipt_date: e.target.value })}
+                    onChange={e => {
+                      if (isPastDate(e.target.value)) {
+                        alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                        return;
+                      }
+                      setNewGRN({ ...newGRN, receipt_date: e.target.value });
+                    }}
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                   />
                 </div>
@@ -1291,8 +1318,15 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ الفاتورة</label>
                   <input
                     type="date"
+                    min={getTodayDateString()}
                     value={newInvoice.invoice_date}
-                    onChange={e => setNewInvoice({ ...newInvoice, invoice_date: e.target.value })}
+                    onChange={e => {
+                      if (isPastDate(e.target.value)) {
+                        alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                        return;
+                      }
+                      setNewInvoice({ ...newInvoice, invoice_date: e.target.value });
+                    }}
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                   />
                 </div>
@@ -1300,8 +1334,15 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">ميعاد استحقاق السداد</label>
                   <input
                     type="date"
+                    min={newInvoice.invoice_date || getTodayDateString()}
                     value={newInvoice.due_date}
-                    onChange={e => setNewInvoice({ ...newInvoice, due_date: e.target.value })}
+                    onChange={e => {
+                      if (newInvoice.invoice_date && e.target.value < newInvoice.invoice_date) {
+                        alert('تاريخ استحقاق الفاتورة لا يمكن أن يكون قبل تاريخ الفاتورة');
+                        return;
+                      }
+                      setNewInvoice({ ...newInvoice, due_date: e.target.value });
+                    }}
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                   />
                 </div>
@@ -1417,8 +1458,15 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ الصرف</label>
                   <input
                     type="date"
+                    min={getTodayDateString()}
                     value={paymentForm.payment_date}
-                    onChange={e => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
+                    onChange={e => {
+                      if (isPastDate(e.target.value)) {
+                        alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                        return;
+                      }
+                      setPaymentForm({ ...paymentForm, payment_date: e.target.value });
+                    }}
                     className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                   />
                 </div>

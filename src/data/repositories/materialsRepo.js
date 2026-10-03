@@ -1,5 +1,6 @@
 import db from '../db';
 import auditRepo from './auditRepo';
+import { validateNotPastDate } from '../../utils/formatters';
 
 export const materialsRepo = {
   async getAll() {
@@ -110,6 +111,9 @@ export const materialsRepo = {
 
   async saveStockCount(data, userId = 'usr-storekeeper') {
     const { count_date, items, notes } = data;
+    if (count_date) {
+      validateNotPastDate(count_date, 'تاريخ محضر الجرد');
+    }
     const countId = `sc-${Date.now()}`;
     const now = new Date().toISOString();
 
