@@ -30,29 +30,69 @@ describe('CostCalculator - Unit Tests', () => {
     expect(usage2).toBe(2.5);
   });
 
+  it('calculates clothing BOM cost including fabric waste percentage', () => {
+    // Fabric: 1.5m @ 120 EGP with 8% waste = 1.5 * 1.08 * 120 = 194.4
+    // Buttons: 6 pcs @ 2 EGP with 0% waste = 12.0
+    // Thread: 0.1 spool @ 30 EGP with 0% waste = 3.0
+    // Total = 194.4 + 12 + 3 = 209.4 EGP
+    const bomCost = CostCalculator.calculateClothingBOMCost([
+      { quantity_per_unit: 1.5, unit_cost: 120, waste_percent: 8 },
+      { quantity_per_unit: 6, unit_cost: 2, waste_percent: 0 },
+      { quantity_per_unit: 0.1, unit_cost: 30, waste_percent: 0 },
+    ]);
+    expect(bomCost).toBe(209.4);
+  });
+
+  it('calculates clothing internal stages: cutting, sewing, and ironing/packing', () => {
+    // Batch of 100 pieces
+    // Materials: 10,000
+    // Cutting: 1,500, Sewing: 4,000, Ironing/Packing: 1,000, Overhead: 1,500
+    // Total = 18,000 EGP, Unit = 180 EGP
+    const internal = CostCalculator.calculateClothingInternalStagesCost(
+      10000,
+      { cuttingLabor: 1500, sewingLabor: 4000, ironingPackingLabor: 1000, internalOverhead: 1500 },
+      100
+    );
+    expect(internal.totalInternalCost).toBe(18000);
+    expect(internal.unitInternalCost).toBe(180);
+  });
+
+  it('calculates outsourced manufacturing cumulative cost', () => {
+    // Internal stage: 100 pieces @ 180 EGP = 18,000 EGP
+    // External embroidery/wash factory: 25 EGP/piece * 100 = 2,500 EGP
+    // Transport: 300 EGP, Extra materials: 200 EGP
+    // Outsourced stage cost = 3,000 EGP
+    // Final total = 21,000 EGP, Unit = 210 EGP
+    const result = CostCalculator.calculateOutsourcedAccumulation({
+      internalStageCost: 18000,
+      serviceRate: 25,
+      batchQuantity: 100,
+      transportCost: 300,
+      additionalMaterialsCost: 200,
+    });
+
+    expect(result.outsourcedStageCost).toBe(3000);
+    expect(result.finalTotalCost).toBe(21000);
+    expect(result.finalUnitCost).toBe(210);
+  });
+
   it('calculates labor cost for hourly and piece-rate', () => {
-    // Hourly: 40 hours @ 50 EGP/hour = 2000 EGP
     const laborHourly = CostCalculator.calculateLaborCost('hourly', { hours: 40, hourlyRate: 50 });
     expect(laborHourly).toBe(2000);
 
-    // Piece rate: 20 pieces @ 75 EGP/piece = 1500 EGP
     const laborPiece = CostCalculator.calculateLaborCost('piece_rate', { pieceRate: 75, batchQty: 20 });
     expect(laborPiece).toBe(1500);
   });
 
   it('calculates overhead rates and batch allocation', () => {
-    // Total overhead 10,000 EGP / 500 estimated machine hours = 20 EGP/hour
     const rate = CostCalculator.calculateHourlyOverheadRate(10000, 500);
     expect(rate).toBe(20);
 
-    // Batch uses 15 machine hours => 15 * 20 = 300 EGP
     const batchOverhead = CostCalculator.calculateAllocatedOverhead(15, rate);
     expect(batchOverhead).toBe(300);
   });
 
   it('calculates Stage 1 manufacturing cost', () => {
-    // Batch of 10 items: Materials: 4000, Labor: 1500, Overhead: 500, External: 0
-    // Total = 6000 EGP, Unit = 600 EGP
     const stage1 = CostCalculator.calculateStage1Cost({
       materialsCost: 4000,
       laborCost: 1500,
@@ -66,11 +106,6 @@ describe('CostCalculator - Unit Tests', () => {
   });
 
   it('calculates Stage 2 finishing and cumulative unit cost', () => {
-    // 10 items transferred from Stage 1 @ 600 EGP/unit = 6000 EGP
-    // Finishing labor: 1200, Transport: 200, Finishing materials: 600
-    // Finishing Stage Cost = 2000 EGP
-    // Final Total Batch Cost = 8000 EGP
-    // Final Unit Cost = 800 EGP/unit
     const stage2 = CostCalculator.calculateStage2Cost({
       stage1TransferredCost: 6000,
       finishingLabor: 1200,
@@ -85,15 +120,9 @@ describe('CostCalculator - Unit Tests', () => {
   });
 
   it('calculates suggested price with profit margin and net profit', () => {
-    // Final unit cost = 800 EGP, Target profit margin = 35%
-    // Suggested price = 800 * 1.35 = 1080 EGP
     const suggestedPrice = CostCalculator.calculateSuggestedPrice(800, 35);
     expect(suggestedPrice).toBe(1080);
 
-    // Sold 10 units @ 1100 EGP = 11,000 EGP subtotal
-    // Total COGS = 10 * 800 = 8,000 EGP
-    // Selling expenses (shipping 300, commission 200) = 500 EGP
-    // Net Profit = 11000 - 8000 - 500 = 2500 EGP
     const netProfit = CostCalculator.calculateNetProfit(11000, 8000, 500);
     expect(netProfit).toBe(2500);
   });

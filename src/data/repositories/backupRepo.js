@@ -16,8 +16,8 @@ export const backupRepo = {
     }
 
     const payload = {
-      app: 'WorkshopERP',
-      version: 1,
+      app: 'ClothingFactoryERP',
+      version: 4,
       exportedAt: new Date().toISOString(),
       tablesCount: tableNames.length,
       data: backupData,
@@ -30,7 +30,7 @@ export const backupRepo = {
     const dateStr = new Date().toISOString().slice(0, 10);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `نسخة_احتياطية_ERP_${dateStr}.json`;
+    a.download = `نسخة_احتياطية_مصنع_الملابس_${dateStr}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -79,7 +79,7 @@ export const backupRepo = {
   },
 
   /**
-   * 3. Load realistic professional Enterprise ERP demo data.
+   * 3. Load realistic Clothing Factory Demo Data
    */
   async loadDemoData(userId = 'usr-owner') {
     const now = new Date().toISOString();
@@ -95,9 +95,9 @@ export const backupRepo = {
       // 1. Enterprise Profile & Settings
       await db.settings.put({
         id: 1,
-        factory_name: 'مجموعة القمة للصناعات المتطورة والأنظمة الذكية (Apex Enterprise)',
+        factory_name: 'مصنع النيل الحديث للملابس الجاهزة والمنسوجات (Nile Garments Factory)',
         phone: '+20 2 2450 8899',
-        address: 'المنطقة الصناعية الثالثة - مجمع الأنظمة المتقدمة - مدينة العاشر من رمضان',
+        address: 'المنطقة الصناعية B3 - مجمع مصانع الغزل والنسيج - مدينة العاشر من رمضان',
         vat_enabled: 1,
         vat_rate_percent: 14.0,
         currency_symbol: 'ج.م',
@@ -105,746 +105,593 @@ export const backupRepo = {
         notice_dismissed: false,
       });
 
-      // 2. Corporate Users & Organizational Hierarchy (Default PIN: 1234)
+      // 2. Outlets & Showrooms
+      await db.sales_outlets.bulkAdd([
+        { id: 'out-1', name: 'منفذ بيع المصنع (العاشر من رمضان)', location: 'مجمع المصانع - العاشر من رمضان', contact_phone: '01009876541', price_markup_percent: 0, notes: 'منفذ البيع المباشر بسعر المصنع وتوريد طلبيات الجملة', is_active: 1, created_at: now },
+        { id: 'out-2', name: 'معرض وسط البلد للملابس (القاهرة)', location: 'شارع طلعت حرب - وسط البلد - القاهرة', contact_phone: '01229876542', price_markup_percent: 10, notes: 'صالة العرض الرئيسية للأزياء والملابس الجاهزة وتجارة التجزئة', is_active: 1, created_at: now },
+        { id: 'out-3', name: 'معرض سيتي ستارز (مدينة نصر)', location: 'المول التجاري - الدور الثاني - مدينة نصر', contact_phone: '01119876543', price_markup_percent: 15, notes: 'فرع المبيعات الحصري لأحدث كولكشن كاجوال وجينز', is_active: 1, created_at: now },
+      ]);
+
+      // 3. Corporate Users & Roles (including outlet cashier)
       await db.users.bulkAdd([
-        { id: 'usr-owner', username: 'owner', full_name: 'م. خالد المنشاوي (الرئيس التنفيذي - CEO)', password_hash: '1234', role: 'owner', is_active: 1, created_at: now },
-        { id: 'usr-purchasing', username: 'purchasing', full_name: 'أ. مروان الشريف (مدير المشتريات وسلاسل الإمداد)', password_hash: '1234', role: 'purchasing', is_active: 1, created_at: now },
-        { id: 'usr-storekeeper', username: 'storekeeper', full_name: 'أ. أيمن القاضي (مدير المستودعات واللوجستيات)', password_hash: '1234', role: 'storekeeper', is_active: 1, created_at: now },
-        { id: 'usr-production', username: 'production', full_name: 'م. يوسف النجار (مدير العمليات والتصنيع الهندسي)', password_hash: '1234', role: 'production', is_active: 1, created_at: now },
-        { id: 'usr-accountant', username: 'accountant', full_name: 'أ. طارق عبد الرحمن (المدير المالي والمراقب المالي - CFO)', password_hash: '1234', role: 'accountant', is_active: 1, created_at: now },
+        { id: 'usr-owner', username: 'owner', full_name: 'م. خالد المنشاوي (الرئيس التنفيذي - CEO)', password_hash: '1234', role: 'owner', outlet_id: null, is_active: 1, created_at: now },
+        { id: 'usr-purchasing', username: 'purchasing', full_name: 'أ. مروان الشريف (مدير المشتريات ومستلزمات الإنتاج)', password_hash: '1234', role: 'purchasing', outlet_id: null, is_active: 1, created_at: now },
+        { id: 'usr-storekeeper', username: 'storekeeper', full_name: 'أ. أيمن القاضي (مدير مستودع الأقمشة والملابس)', password_hash: '1234', role: 'storekeeper', outlet_id: null, is_active: 1, created_at: now },
+        { id: 'usr-production', username: 'production', full_name: 'م. يوسف النجار (مدير صالة القص والتشغيل)', password_hash: '1234', role: 'production', outlet_id: null, is_active: 1, created_at: now },
+        { id: 'usr-accountant', username: 'accountant', full_name: 'أ. طارق عبد الرحمن (المدير المالي - CFO)', password_hash: '1234', role: 'accountant', outlet_id: null, is_active: 1, created_at: now },
+        { id: 'usr-cashier', username: 'cashier', full_name: 'أ. سارة عادل (كاشير معرض وسط البلد)', password_hash: '1234', role: 'cashier', outlet_id: 'out-2', is_active: 1, created_at: now },
       ]);
 
-      // 3. Treasury & Corporate Bank Accounts
+      // 4. Treasuries (Main aggregating treasury + one per outlet)
       await db.treasury_accounts.bulkAdd([
-        { id: 'acc-1', name: 'الخزينة النقدية المركزية - المقر الرئيسي', account_type: 'treasury', current_balance: 101500, bank_account_number: '', bank_name: '', is_active: 1, created_at: now },
-        { id: 'acc-2', name: 'حساب العمليات التشغيلية - البنك التجاري الدولي (CIB)', account_type: 'bank', current_balance: 865000, bank_account_number: 'EG65CIB000000010992384756', bank_name: 'Commercial International Bank - فرع التجمع', is_active: 1, created_at: now },
-        { id: 'acc-3', name: 'حساب النقد الأجنبي والاستيراد (USD) - بنك QNB', account_type: 'bank', current_balance: 420000, bank_account_number: 'EG12QNB000000030881923411', bank_name: 'QNB Alahli - الفرع الرئيسي', is_active: 1, created_at: now },
-        { id: 'acc-4', name: 'خزينة المركز اللوجستي ومنافذ التوزيع B2B', account_type: 'treasury', current_balance: 62500, bank_account_number: '', bank_name: '', is_active: 1, created_at: now },
+        { id: 'acc-main', name: 'الخزينة المركزية الرئيسية - إدارة المصنع', account_type: 'treasury', outlet_id: null, is_main: 1, current_balance: 185000, bank_account_number: '', bank_name: '', is_active: 1, created_at: now },
+        { id: 'acc-cib', name: 'حساب العمليات التشغيلية - البنك التجاري الدولي (CIB)', account_type: 'bank', outlet_id: null, is_main: 0, current_balance: 620000, bank_account_number: 'EG65CIB000000010992384756', bank_name: 'Commercial International Bank', is_active: 1, created_at: now },
+        { id: 'acc-out-1', name: 'خزينة منفذ بيع المصنع (العاشر من رمضان)', account_type: 'treasury', outlet_id: 'out-1', is_main: 0, current_balance: 42000, bank_account_number: '', bank_name: '', is_active: 1, created_at: now },
+        { id: 'acc-out-2', name: 'خزينة معرض وسط البلد (القاهرة)', account_type: 'treasury', outlet_id: 'out-2', is_main: 0, current_balance: 38500, bank_account_number: '', bank_name: '', is_active: 1, created_at: now },
+        { id: 'acc-out-3', name: 'خزينة معرض سيتي ستارز (مدينة نصر)', account_type: 'treasury', outlet_id: 'out-3', is_main: 0, current_balance: 55000, bank_account_number: '', bank_name: '', is_active: 1, created_at: now },
       ]);
 
-      // 4. Strategic Enterprise Suppliers
+      // 5. Storage Locations
+      await db.storage_locations.bulkAdd([
+        { id: 'loc-1', code: 'LOC-FAB-01', name: 'مستودع الأقمشة والغزول الرئيسي', location_type: 'fabric', notes: 'تخزين أثواب الأقمشة القطنية والجينز والملتون', is_active: 1, created_at: now },
+        { id: 'loc-2', code: 'LOC-ACC-02', name: 'مخزن مستلزمات الخياطة والإكسسوارات', location_type: 'accessories', notes: 'الأزرار، السوست، خيوط الحياكة، والبادجات', is_active: 1, created_at: now },
+        { id: 'loc-3', code: 'LOC-FIN-03', name: 'مستودع الملابس التامة الجاهزة للبيع', location_type: 'warehouse', notes: 'المنتجات الجاهزة المعبأة والمكوية', is_active: 1, created_at: now },
+        { id: 'loc-4', code: 'LOC-SHW-04', name: 'مخزن صالة عرض وسط البلد', location_type: 'outlet', notes: 'بضاعة المعرض للبيع الفوري', is_active: 1, created_at: now },
+      ]);
+
+      // 6. Master Data: Sizes & Colors
+      await db.item_sizes.bulkAdd([
+        { id: 'sz-1', name: 'S (صغير)', code: 'S', is_active: 1 },
+        { id: 'sz-2', name: 'M (وسط)', code: 'M', is_active: 1 },
+        { id: 'sz-3', name: 'L (كبير)', code: 'L', is_active: 1 },
+        { id: 'sz-4', name: 'XL (كبير جداً)', code: 'XL', is_active: 1 },
+        { id: 'sz-5', name: 'XXL (2 إكس)', code: 'XXL', is_active: 1 },
+        { id: 'sz-6', name: '30 (بنطلون)', code: '30', is_active: 1 },
+        { id: 'sz-7', name: '32 (بنطلون)', code: '32', is_active: 1 },
+        { id: 'sz-8', name: '34 (بنطلون)', code: '34', is_active: 1 },
+        { id: 'sz-9', name: '36 (بنطلون)', code: '36', is_active: 1 },
+      ]);
+
+      await db.item_colors.bulkAdd([
+        { id: 'clr-1', name: 'أبيض ناصع', hex_code: '#FFFFFF', is_active: 1 },
+        { id: 'clr-2', name: 'أسود ملكي', hex_code: '#000000', is_active: 1 },
+        { id: 'clr-3', name: 'كحلي داكن', hex_code: '#001F3F', is_active: 1 },
+        { id: 'clr-4', name: 'رمادي ميلانج', hex_code: '#7F8C8D', is_active: 1 },
+        { id: 'clr-5', name: 'أزرق جينز كلاسيك', hex_code: '#2C3E50', is_active: 1 },
+        { id: 'clr-6', name: 'زيتي عسكري', hex_code: '#4B5320', is_active: 1 },
+        { id: 'clr-7', name: 'نبيتي شتوي', hex_code: '#780000', is_active: 1 },
+      ]);
+
+      // 7. Expense Codes
+      await db.expense_codes.bulkAdd([
+        { id: 'expc-1', code: 'EXP-RENT-01', name: 'إيجار صالة التشغيل والمصنع', default_amount: 35000, category: 'operating', notes: 'إيجار شهري لصالة القص والخياطة', is_active: 1, created_at: now },
+        { id: 'expc-2', code: 'EXP-ELEC-02', name: 'فاتورة الكهرباء الصناعية وقوى المحركات', default_amount: 12000, category: 'utilities', notes: 'كهرباء ماكينات الخياطة والمكابس', is_active: 1, created_at: now },
+        { id: 'expc-3', code: 'EXP-MAINT-03', name: 'صيانة ماكينات الخياطة والأوفر والمكابس', default_amount: 3500, category: 'maintenance', notes: 'قطع غيار إبر وكروشيهات وزيوت ماكينات', is_active: 1, created_at: now },
+        { id: 'expc-4', code: 'EXP-TRANS-04', name: 'نقل وشحن بضاعة ومعارض وطلبيات', default_amount: 2000, category: 'logistics', notes: 'سيارات نقل وتوزيع بين المصنع والمعارض', is_active: 1, created_at: now },
+        { id: 'expc-5', code: 'EXP-HOSP-05', name: 'بوفيه وضيافة ومستلزمات نظافة العمال', default_amount: 1500, category: 'general', notes: 'مشروبات وضيافة ونظافة المصنع', is_active: 1, created_at: now },
+        { id: 'expc-6', code: 'EXP-TIPS-06', name: 'إكراميات وتعتيق وتحميل أثواب الأقمشة', default_amount: 800, category: 'general', notes: 'نثريات تحميل وتنزيل الأقمشة', is_active: 1, created_at: now },
+      ]);
+
+      // 8. Payment Methods
+      await db.payment_methods.bulkAdd([
+        { id: 'pm-1', name: 'نقداً (كاش)', code: 'CASH', notes: 'دفع نقدي فوري بالخزينة', is_active: 1 },
+        { id: 'pm-2', name: 'تحويل بنكي فوري', code: 'BANK', notes: 'تحويل بنكي على حساب المؤسسة CIB', is_active: 1 },
+        { id: 'pm-3', name: 'شيك بنكي تجاري', code: 'CHEQUE', notes: 'شيك مصرفي آجل أو مسطر', is_active: 1 },
+        { id: 'pm-4', name: 'محفظة إلكترونية (إنستاباي / فودافون كاش)', code: 'WALLET', notes: 'دفع إلكتروني لحظي بالهاتف', is_active: 1 },
+      ]);
+
+      // 9. Unified Parties (Suppliers, Customers, Both)
+      await db.parties.bulkAdd([
+        { id: 'pty-1', code: 'PRT-SUP-01', name: 'مصنع النيل للغزل والنسيج والأقمشة القطنية', phone: '0226901122', address: 'المحلة الكبرى - المنطقة الصناعية', tax_number: '210-458-991', is_supplier: 1, is_customer: 0, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 0, notes: 'توريد أثواب أقمشة سنجل جيرسي وميلتون وجبردين قطن 100%', is_active: 1, created_at: now },
+        { id: 'pty-2', code: 'PRT-SUP-02', name: 'الأهرام لتصنيع وتجارة إكسسوارات وسوست الملابس', phone: '01098877665', address: 'شبرا الخيمة - القليوبية', tax_number: '315-890-442', is_supplier: 1, is_customer: 0, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 0, notes: 'أزرار، سوست نحاس وعظم، خيوط بوليستر، بادجات وتيكتات', is_active: 1, created_at: now },
+        { id: 'pty-3', code: 'PRT-SUP-03', name: 'الدلتا لخدمات التطريز الآلي والطباعة السلك سكرين', phone: '01122334488', address: 'العاشر من رمضان - مجمع الصناعات B2', tax_number: '402-119-763', is_supplier: 1, is_customer: 0, supplier_type: 'service', payment_terms: 'cash', credit_limit: 0, notes: 'مورد خدمة - تشغيل لدى الغير: تطريز كمبيوتر وطباعة سلك سكرين وربر', is_active: 1, created_at: now },
+        { id: 'pty-4', code: 'PRT-SUP-04', name: 'المصرية الألمانية لمغاسل وتجهيز وصباغة الجينز', phone: '01200445566', address: 'أبو رواش - المنطقة الصناعية - الجيزة', tax_number: '501-772-831', is_supplier: 1, is_customer: 0, supplier_type: 'service', payment_terms: 'credit', credit_limit: 0, notes: 'مورد خدمة - تشغيل لدى الغير: غسيل إنزيم، تبييض ثلجي، وكرمشة حرارية للجينز', is_active: 1, created_at: now },
+        { id: 'pty-5', code: 'PRT-BOTH-05', name: 'شركة طيبة للملابس الجاهزة وتوزيع الجملة', phone: '01019988771', address: 'العتبة - وسط البلد - القاهرة', tax_number: '612-334-550', is_supplier: 1, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 250000, notes: 'شريك استراتيجي: نشتري منهم أقمشة مستوردة ونبيع لهم ملابس تامة جاهزة (مورد وعميل - يسمح بالمقاصة)', is_active: 1, created_at: now },
+        { id: 'pty-6', code: 'PRT-CUST-06', name: 'مجموعة فاشون لاند للمتاجر وسلاسل التوزيع', phone: '0223891000', address: 'مدينة نصر - المنطقة الأولى - القاهرة', tax_number: '710-440-120', is_supplier: 0, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 180000, notes: 'عميل رئيسي - طلبيات جملة دورية لكولكشن الصيف والشتاء', is_active: 1, created_at: now },
+        { id: 'pty-7', code: 'PRT-CUST-07', name: 'سلسلة متاجر كاجوال كلوب (Casual Club Egypt)', phone: '01009876543', address: 'المهندسين - شارع لبنان - الجيزة', tax_number: '820-550-230', is_supplier: 0, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 200000, notes: 'عميل معتمد لتوزيع البناطيل الجينز والتيشيرتات البولو', is_active: 1, created_at: now },
+      ]);
+
+      // Sync into legacy suppliers and customers tables
       await db.suppliers.bulkAdd([
-        { id: 'sup-1', name: 'الشركة الدولية للمكونات الإلكترونية والتحكم الآلي (Siemens & Schneider Dist.)', phone: '0226901122', address: 'المنطقة الحرة - مدينة نصر - القاهرة', tax_number: '210-458-991', payment_terms: 'credit_30', credit_limit: 450000, notes: 'مورد معتمد للوحات التحكم، الميكروكنترولر، والحساسات الرقمية الصناعية', is_active: 1, created_at: now },
-        { id: 'sup-2', name: 'المصرية الألمانية للمعادن والسبائك الهندسية (EG-Ger Metals Corp)', phone: '01098877665', address: 'المنطقة الصناعية الرابعة - مدينة 6 أكتوبر', tax_number: '315-890-442', payment_terms: 'credit_60', credit_limit: 600000, notes: 'توريد قطاعات الألمنيوم المقوى AL-6063، الواح الستانلس ستيل 316L الهندسية', is_active: 1, created_at: now },
-        { id: 'sup-3', name: 'مجمع الصناعات البوليمرية والمواد المركبة (Polymax Advanced Enclosures)', phone: '01122334488', address: 'العاشر من رمضان - مجمع الصناعات البلاستيكية B2', tax_number: '402-119-763', payment_terms: 'credit_30', credit_limit: 300000, notes: 'هياكل وحاويات بوليمرية معيارية مقاومة للهب وعوامل الطقس IP66/IP67', is_active: 1, created_at: now },
-        { id: 'sup-4', name: 'المتحدة للتصنيع الدقيق وقطع الليزر CNC (Precision Laser & Machining Lab)', phone: '01200445566', address: 'أبو رواش - المنطقة الصناعية - الجيزة', tax_number: '501-772-831', payment_terms: 'cash', credit_limit: 150000, notes: 'شريك خدمات تصنيع خارجي: تشغيل خراطة وتفريز CNC فائق الدقة، ومعالجات كهرواستاتيكية', is_active: 1, created_at: now },
-        { id: 'sup-5', name: 'جلوبال تيك للكابلات والأنظمة الكهروضوئية (GlobalTech Wiring Systems)', phone: '0227918844', address: 'المعادي الجديدة - القاهرة', tax_number: '612-334-550', payment_terms: 'credit_45', credit_limit: 250000, notes: 'حزم كابلات مدرعة، كابلات بيانات عالية السرعة، وموصلات صناعية ذهبية معتمدة', is_active: 1, created_at: now },
+        { id: 'pty-1', name: 'مصنع النيل للغزل والنسيج والأقمشة القطنية', phone: '0226901122', address: 'المحلة الكبرى', tax_number: '210-458-991', supplier_type: 'goods', payment_terms: 'credit', credit_limit: 0, notes: 'توريد أقمشة قطنية', is_active: 1, created_at: now },
+        { id: 'pty-2', name: 'الأهرام لتصنيع وتجارة إكسسوارات وسوست الملابس', phone: '01098877665', address: 'شبرا الخيمة', tax_number: '315-890-442', supplier_type: 'goods', payment_terms: 'credit', credit_limit: 0, notes: 'مستلزمات خياطة', is_active: 1, created_at: now },
+        { id: 'pty-3', name: 'الدلتا لخدمات التطريز الآلي والطباعة السلك سكرين', phone: '01122334488', address: 'العاشر من رمضان', tax_number: '402-119-763', supplier_type: 'service', payment_terms: 'cash', credit_limit: 0, notes: 'تطريز وطباعة ملابس', is_active: 1, created_at: now },
+        { id: 'pty-4', name: 'المصرية الألمانية لمغاسل وتجهيز وصباغة الجينز', phone: '01200445566', address: 'أبو رواش', tax_number: '501-772-831', supplier_type: 'service', payment_terms: 'credit', credit_limit: 0, notes: 'مغسلة جينز وتشغيل خارجي', is_active: 1, created_at: now },
+        { id: 'pty-5', name: 'شركة طيبة للملابس الجاهزة وتوزيع الجملة', phone: '01019988771', address: 'العتبة', tax_number: '612-334-550', supplier_type: 'goods', payment_terms: 'credit', credit_limit: 0, notes: 'مورد أقمشة مستوردة وعميل', is_active: 1, created_at: now },
       ]);
 
-      // 5. Raw Materials & Engineering Components
+      await db.customers.bulkAdd([
+        { id: 'pty-5', name: 'شركة طيبة للملابس الجاهزة وتوزيع الجملة', phone: '01019988771', address: 'العتبة', tax_number: '612-334-550', customer_type: 'local', payment_terms: 'credit', credit_limit: 250000, notes: 'عميل جملة ومورد أقمشة', is_active: 1, created_at: now },
+        { id: 'pty-6', name: 'مجموعة فاشون لاند للمتاجر وسلاسل التوزيع', phone: '0223891000', address: 'مدينة نصر', tax_number: '710-440-120', customer_type: 'local', payment_terms: 'credit', credit_limit: 180000, notes: 'عميل جملة ملابس', is_active: 1, created_at: now },
+        { id: 'pty-7', name: 'سلسلة متاجر كاجوال كلوب (Casual Club Egypt)', phone: '01009876543', address: 'المهندسين', tax_number: '820-550-230', customer_type: 'local', payment_terms: 'credit', credit_limit: 200000, notes: 'عميل توزيع بناطيل جينز وتيشيرتات', is_active: 1, created_at: now },
+      ]);
+
+      // 10. Raw Materials (خامات الملابس ومستلزمات الإنتاج)
       await db.materials.bulkAdd([
-        { id: 'mat-1', code: 'RAW-MCU-01', name: 'وحدة معالجة مركزية صناعية وميكروكنترولر 32-bit Cortex Dual Core', unit: 'قطعة', current_stock: 180, min_stock_alert: 30, average_cost: 650, location_in_warehouse: 'مخزن الإلكترونيات - عنبر A - خزانة ESD-12', notes: 'مكون إلكتروني رئيسي معتمد للأنظمة الذكية والمتحكمات', is_active: 1, created_at: now },
-        { id: 'mat-2', code: 'RAW-ALM-02', name: 'قواطع وهيكل ألمنيوم مؤكسد صناعي مقوى AL-6063 T6 (متر طولي)', unit: 'متر', current_stock: 420, min_stock_alert: 75, average_cost: 210, location_in_warehouse: 'مستودع المعادن الثقيلة - قطاع B - حامل B-04', notes: 'قطاعات إنشائية خفيفة الوزن فائقة المتانة والتحمل الحراري', is_active: 1, created_at: now },
-        { id: 'mat-3', code: 'RAW-ENC-03', name: 'حاوية خارجية بوليمرية مدرعة عازلة ومقاومة للعوامل الجوية IP66', unit: 'وحدة', current_stock: 95, min_stock_alert: 20, average_cost: 420, location_in_warehouse: 'مخزن الهياكل - عنبر C - رف C-02', notes: 'بولي كربونايت مدعم بالألياف مقاوم للأشعة فوق البنفسجية والصدمات', is_active: 1, created_at: now },
-        { id: 'mat-4', code: 'RAW-DISP-04', name: 'شاشة لمس صناعية تفاعلية 10.1 بوصة عالية الدقة IPS Rugged Panel', unit: 'قطعة', current_stock: 12, min_stock_alert: 25, average_cost: 1450, location_in_warehouse: 'مخزن البصريات والمكونات الحساسة - خزنة OPT-03', notes: 'تنبيه: الرصيد الحالي تحت حد الأمان الأدنى! يتطلب إصدار أمر شراء عاجل', is_active: 1, created_at: now },
-        { id: 'mat-5', code: 'RAW-PWR-05', name: 'مزود طاقة صناعي ذكي عالي الكفاءة 24V DC / 10A Smart Power Hub', unit: 'وحدة', current_stock: 65, min_stock_alert: 15, average_cost: 580, location_in_warehouse: 'مخزن القوى الكهربائية - عنبر D - رف D-01', notes: 'كفاءة طاقة 94% مزود بحماية ذكية ضد التموجات وقصر الدائرة', is_active: 1, created_at: now },
-        { id: 'mat-6', code: 'RAW-CAB-06', name: 'حزمة كابلات وموصلات شيلد صناعية عالية التردد ومقاومة للحرارة', unit: 'طقم', current_stock: 240, min_stock_alert: 50, average_cost: 95, location_in_warehouse: 'مخزن الأسلاك والمستلزمات - درج W-15', notes: 'حماية كهرومغناطيسية كاملة EMI Shielding ضد التشويش', is_active: 1, created_at: now },
-        { id: 'mat-7', code: 'RAW-SNS-07', name: 'طقم مجسات قياس ذكية رقمية لدرجة الحرارة والضغط والاهتزاز IoT', unit: 'طقم', current_stock: 8, min_stock_alert: 15, average_cost: 340, location_in_warehouse: 'مخزن الحساسات الدقيقة - رف S-05', notes: 'تنبيه: وشك النفاد، مطلوب لتشغيل مشاريع المراقبة الميدانية الجارية', is_active: 1, created_at: now },
-        { id: 'mat-8', code: 'RAW-COAT-08', name: 'بودرة طلاء كهرواستاتيكي حراري ومعالجة نانوية مضادة للتآكل', unit: 'كجم', current_stock: 160, min_stock_alert: 30, average_cost: 180, location_in_warehouse: 'مستودع الكيماويات والطلاء - غرفة عازلة F-01', notes: 'طبقة حماية نهائية فائقة المقاومة للملوحة والمواد الكيميائية', is_active: 1, created_at: now },
+        { id: 'mat-1', code: 'RAW-FAB-01', name: 'قماش سنجل جيرسي قطن 100% ممشط 180 جم', unit: 'كجم', current_stock: 450, min_stock_alert: 80, average_cost: 180, last_purchase_price: 180, location_in_warehouse: 'مستودع الأقمشة - رصيف A1', notes: 'قماش تيشيرتات قطني عالي الجودة معالج ضد الانكماش', is_active: 1, created_at: now },
+        { id: 'mat-2', code: 'RAW-DEN-02', name: 'قماش جينز قطن مدعم ليكرا 12 أونصة إنديغو', unit: 'متر', current_stock: 620, min_stock_alert: 120, average_cost: 130, last_purchase_price: 130, location_in_warehouse: 'مستودع الأقمشة - حامل B2', notes: 'قماش بنطلونات جينز مطاطي مريح وثقيل', is_active: 1, created_at: now },
+        { id: 'mat-3', code: 'RAW-MLT-03', name: 'قماش ميلتون مبطن شتوي ثقيل 320 جم ميلانج', unit: 'كجم', current_stock: 320, min_stock_alert: 60, average_cost: 210, last_purchase_price: 210, location_in_warehouse: 'مستودع الأقمشة - رصيف A3', notes: 'خامة تصنيع السويت شيرت والهودي الشتوي', is_active: 1, created_at: now },
+        { id: 'mat-4', code: 'RAW-BTN-04', name: 'أزرار بولو وقميص بوليستر 4 خرم مقاوم للحرارة', unit: 'كيس', current_stock: 120, min_stock_alert: 25, average_cost: 45, last_purchase_price: 45, location_in_warehouse: 'مخزن المستلزمات - درج C1', notes: 'كيس يحتوي على 144 زرار معالج للكي', is_active: 1, created_at: now },
+        { id: 'mat-5', code: 'RAW-ZIP-05', name: 'سحابات جينز معدنية نحاس صلب 15 سم لوك أوتوماتيك', unit: 'قطعة', current_stock: 480, min_stock_alert: 100, average_cost: 12, last_purchase_price: 12, location_in_warehouse: 'مخزن المستلزمات - رف C2', notes: 'سوست جينز يابانية معتمدة عالية المتانة', is_active: 1, created_at: now },
+        { id: 'mat-6', code: 'RAW-THD-06', name: 'بكر خيوط حياكة بوليستر 40/2 تركي عالي الشد', unit: 'بكرة', current_stock: 180, min_stock_alert: 30, average_cost: 35, last_purchase_price: 35, location_in_warehouse: 'مخزن المستلزمات - رف C3', notes: 'خيوط ماكينات الأوفر والدرزة السنجر', is_active: 1, created_at: now },
+        { id: 'mat-7', code: 'RAW-BAG-07', name: 'أكياس تغليف سلوفان مطبوعة باللوجو بشريط لاصق', unit: 'كيس', current_stock: 2500, min_stock_alert: 400, average_cost: 1.5, last_purchase_price: 1.5, location_in_warehouse: 'مخزن التعبئة والكي - رف D1', notes: 'أكياس تغليف قطيفة وحماية المنتج التام', is_active: 1, created_at: now },
+        { id: 'mat-8', code: 'RAW-LBL-08', name: 'تيكت غسيل وماركة قطن منسوج مع مقاسات', unit: 'قطعة', current_stock: 1800, min_stock_alert: 300, average_cost: 2.2, last_purchase_price: 2.2, location_in_warehouse: 'مخزن المستلزمات - درج D2', notes: 'بطاقات منسوجة تتضمن تعليمات الغسيل واللوجو', is_active: 1, created_at: now },
       ]);
 
-      // 6. Finished Products & Enterprise Systems
+      // Sync raw materials into items table
+      await db.items.bulkAdd([
+        { id: 'mat-1', code: 'RAW-FAB-01', name: 'قماش سنجل جيرسي قطن 100% ممشط 180 جم', item_group: 'أقمشة قطنية', item_department: 'قسم الأقمشة', item_type: 'raw_material', image: '', unit: 'كجم', cost_price: 180, selling_price: 0, min_issue_qty: 20, opening_balance: 450, current_stock: 450, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-2', code: 'RAW-DEN-02', name: 'قماش جينز قطن مدعم ليكرا 12 أونصة إنديغو', item_group: 'أقمشة جينز', item_department: 'قسم الأقمشة', item_type: 'raw_material', image: '', unit: 'متر', cost_price: 130, selling_price: 0, min_issue_qty: 30, opening_balance: 620, current_stock: 620, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-3', code: 'RAW-MLT-03', name: 'قماش ميلتون مبطن شتوي ثقيل 320 جم ميلانج', item_group: 'أقمشة شتوية', item_department: 'قسم الأقمشة', item_type: 'raw_material', image: '', unit: 'كجم', cost_price: 210, selling_price: 0, min_issue_qty: 25, opening_balance: 320, current_stock: 320, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-4', code: 'RAW-BTN-04', name: 'أزرار بولو وقميص بوليستر 4 خرم مقاوم للحرارة', item_group: 'إكسسوارات ومستلزمات', item_department: 'قسم المستلزمات', item_type: 'raw_material', image: '', unit: 'كيس', cost_price: 45, selling_price: 0, min_issue_qty: 5, opening_balance: 120, current_stock: 120, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-5', code: 'RAW-ZIP-05', name: 'سحابات جينز معدنية نحاس صلب 15 سم لوك أوتوماتيك', item_group: 'إكسسوارات ومستلزمات', item_department: 'قسم المستلزمات', item_type: 'raw_material', image: '', unit: 'قطعة', cost_price: 12, selling_price: 0, min_issue_qty: 20, opening_balance: 480, current_stock: 480, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-6', code: 'RAW-THD-06', name: 'بكر خيوط حياكة بوليستر 40/2 تركي عالي الشد', item_group: 'خيوط حياكة', item_department: 'قسم المستلزمات', item_type: 'raw_material', image: '', unit: 'بكرة', cost_price: 35, selling_price: 0, min_issue_qty: 10, opening_balance: 180, current_stock: 180, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-7', code: 'RAW-BAG-07', name: 'أكياس تغليف سلوفان مطبوعة باللوجو بشريط لاصق', item_group: 'مستلزمات تعبئة', item_department: 'قسم التعبئة والكي', item_type: 'raw_material', image: '', unit: 'كيس', cost_price: 1.5, selling_price: 0, min_issue_qty: 100, opening_balance: 2500, current_stock: 2500, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-8', code: 'RAW-LBL-08', name: 'تيكت غسيل وماركة قطن منسوج مع مقاسات', item_group: 'إكسسوارات ومستلزمات', item_department: 'قسم المستلزمات', item_type: 'raw_material', image: '', unit: 'قطعة', cost_price: 2.2, selling_price: 0, min_issue_qty: 50, opening_balance: 1800, current_stock: 1800, variants: [], is_active: 1, created_at: now },
+      ]);
+
+      // 11. Finished Clothing Products with Clothing Variants (Sizes & Colors)
+      const poloVariants = [
+        { id: 'var-polo-1', size: 'M (وسط)', color: 'أبيض ناصع', sku: '1001-M-WHT', opening_balance: 25, current_stock: 25 },
+        { id: 'var-polo-2', size: 'L (كبير)', color: 'أبيض ناصع', sku: '1001-L-WHT', opening_balance: 35, current_stock: 35 },
+        { id: 'var-polo-3', size: 'XL (كبير جداً)', color: 'أبيض ناصع', sku: '1001-XL-WHT', opening_balance: 30, current_stock: 30 },
+        { id: 'var-polo-4', size: 'M (وسط)', color: 'كحلي داكن', sku: '1001-M-NVY', opening_balance: 25, current_stock: 25 },
+        { id: 'var-polo-5', size: 'L (كبير)', color: 'كحلي داكن', sku: '1001-L-NVY', opening_balance: 40, current_stock: 40 },
+        { id: 'var-polo-6', size: 'XL (كبير جداً)', color: 'كحلي داكن', sku: '1001-XL-NVY', opening_balance: 30, current_stock: 30 },
+      ];
+      const totalPoloStock = poloVariants.reduce((s, v) => s + v.current_stock, 0);
+
+      const jeansVariants = [
+        { id: 'var-jns-1', size: '30 (بنطلون)', color: 'أزرق جينز كلاسيك', sku: '1002-30-BLU', opening_balance: 15, current_stock: 15 },
+        { id: 'var-jns-2', size: '32 (بنطلون)', color: 'أزرق جينز كلاسيك', sku: '1002-32-BLU', opening_balance: 35, current_stock: 35 },
+        { id: 'var-jns-3', size: '34 (بنطلون)', color: 'أزرق جينز كلاسيك', sku: '1002-34-BLU', opening_balance: 40, current_stock: 40 },
+        { id: 'var-jns-4', size: '36 (بنطلون)', color: 'أزرق جينز كلاسيك', sku: '1002-36-BLU', opening_balance: 30, current_stock: 30 },
+      ];
+      const totalJeansStock = jeansVariants.reduce((s, v) => s + v.current_stock, 0);
+
+      const hoodieVariants = [
+        { id: 'var-hod-1', size: 'L (كبير)', color: 'رمادي ميلانج', sku: '1003-L-GRY', opening_balance: 25, current_stock: 25 },
+        { id: 'var-hod-2', size: 'XL (كبير جداً)', color: 'رمادي ميلانج', sku: '1003-XL-GRY', opening_balance: 30, current_stock: 30 },
+        { id: 'var-hod-3', size: 'XXL (2 إكس)', color: 'رمادي ميلانج', sku: '1003-XXL-GRY', opening_balance: 20, current_stock: 20 },
+        { id: 'var-hod-4', size: 'L (كبير)', color: 'زيتي عسكري', sku: '1003-L-OLV', opening_balance: 20, current_stock: 20 },
+      ];
+      const totalHoodieStock = hoodieVariants.reduce((s, v) => s + v.current_stock, 0);
+
+      await db.items.bulkAdd([
+        {
+          id: 'prd-1',
+          code: '1001',
+          name: 'تيشيرت بولو رجالي قطن 100% مطرز',
+          item_group: 'ملابس صيفية كاجوال',
+          item_department: 'قسم التيشيرتات والبولو',
+          item_type: 'finished',
+          image: '',
+          unit: 'قطعة',
+          cost_price: 135,
+          selling_price: 250,
+          min_issue_qty: 50,
+          opening_balance: totalPoloStock,
+          current_stock: totalPoloStock,
+          variants: poloVariants,
+          notes: 'تيشيرت قطن ممشط بياقة مضلعة ومطرز بشعار الماركة بدقة',
+          is_active: 1,
+          created_at: now
+        },
+        {
+          id: 'prd-2',
+          code: '1002',
+          name: 'بنطلون جينز كاجوال سليم فيت مطاطي',
+          item_group: 'بناطيل جينز ودنيم',
+          item_department: 'قسم البنطلون والجينز',
+          item_type: 'finished',
+          image: '',
+          unit: 'قطعة',
+          cost_price: 220,
+          selling_price: 420,
+          min_issue_qty: 30,
+          opening_balance: totalJeansStock,
+          current_stock: totalJeansStock,
+          variants: jeansVariants,
+          notes: 'جينز 12 أونصة معالج بغسيل إنزيم وكرمشة خفيفة مريحة',
+          is_active: 1,
+          created_at: now
+        },
+        {
+          id: 'prd-3',
+          code: '1003',
+          name: 'سويت شيرت هودي شتوي ميلتون مبطن',
+          item_group: 'ملابس شتوية ثقيلة',
+          item_department: 'قسم السويت شيرت والهودي',
+          item_type: 'finished',
+          image: '',
+          unit: 'قطعة',
+          cost_price: 280,
+          selling_price: 520,
+          min_issue_qty: 40,
+          opening_balance: totalHoodieStock,
+          current_stock: totalHoodieStock,
+          variants: hoodieVariants,
+          notes: 'هودي شتوي بجيب كانغارو وكابيشو مبطن بطانة داخلية دافئة',
+          is_active: 1,
+          created_at: now
+        },
+      ]);
+
+      // Sync into products table for compatibility
       await db.products.bulkAdd([
-        { id: 'prd-1', code: 'PRD-CTRL-500', name: 'نظام التحكم الصناعي والأتمتة الذكية Apex Industrial Controller IC-500', category: 'أنظمة التحكم والأتمتة', unit: 'وحدة', target_profit_margin_percent: 38, current_finished_stock: 14, notes: 'متحكم أتمتة صناعي متكامل لخطوط الإنتاج ومحطات التشغيل الحيوية', is_active: 1, created_at: now },
-        { id: 'prd-2', code: 'PRD-WKST-200', name: 'محطة العمل والتحكم الميدانية المتنقلة Apex Rugged Workstation WS-200', category: 'محطات التحكم والشاشات الصناعية', unit: 'وحدة', target_profit_margin_percent: 32, current_finished_stock: 9, notes: 'محطة متطورة مدمجة بشاشة تفاعلية وهيكل ألمنيوم مؤكسد ومصدر طاقة داخلي', is_active: 1, created_at: now },
-        { id: 'prd-3', code: 'PRD-PWR-80', name: 'لوحة توزيع الطاقة الذكية ومراقبة الأحمال Smart Power Panel SP-80', category: 'لوحات توزيع القوى', unit: 'لوحة', target_profit_margin_percent: 35, current_finished_stock: 6, notes: 'لوحة توزيع أحمال رقمية تدعم بروتوكولات الاتصال الصناعي Modbus/TCP', is_active: 1, created_at: now },
+        { id: 'prd-1', code: '1001', name: 'تيشيرت بولو رجالي قطن 100% مطرز', category: 'ملابس صيفية كاجوال', unit: 'قطعة', target_profit_margin_percent: 45, current_finished_stock: totalPoloStock, cost_price: 135, selling_price: 250, notes: '', is_active: 1, created_at: now },
+        { id: 'prd-2', code: '1002', name: 'بنطلون جينز كاجوال سليم فيت مطاطي', category: 'بناطيل جينز ودنيم', unit: 'قطعة', target_profit_margin_percent: 48, current_finished_stock: totalJeansStock, cost_price: 220, selling_price: 420, notes: '', is_active: 1, created_at: now },
+        { id: 'prd-3', code: '1003', name: 'سويت شيرت هودي شتوي ميلتون مبطن', category: 'ملابس شتوية ثقيلة', unit: 'قطعة', target_profit_margin_percent: 46, current_finished_stock: totalHoodieStock, cost_price: 280, selling_price: 520, notes: '', is_active: 1, created_at: now },
       ]);
 
-      // 7. Bills of Materials (BOM)
+      // 12. Clothing Bills of Materials (BOM) with fabric waste percentage
       await db.bom_items.bulkAdd([
-        // BOM for prd-1: Apex Controller IC-500
-        { id: 'bom-1', product_id: 'prd-1', raw_material_id: 'mat-1', quantity_per_unit: 1.0, waste_percent: 1, notes: 'المعالج المركزي ولوحة التحكم الأساسية' },
-        { id: 'bom-2', product_id: 'prd-1', raw_material_id: 'mat-3', quantity_per_unit: 1.0, waste_percent: 0, notes: 'الحاوية البوليمرية العازلة IP66' },
-        { id: 'bom-3', product_id: 'prd-1', raw_material_id: 'mat-5', quantity_per_unit: 1.0, waste_percent: 2, notes: 'وحدة تزويد الطاقة المستقرة 24V' },
-        { id: 'bom-4', product_id: 'prd-1', raw_material_id: 'mat-6', quantity_per_unit: 1.0, waste_percent: 3, notes: 'حزمة كابلات التوصيل الداخلي والشيلد' },
-        { id: 'bom-5', product_id: 'prd-1', raw_material_id: 'mat-7', quantity_per_unit: 1.0, waste_percent: 1, notes: 'طقم مجسات القياس الذكية الميدانية' },
-        { id: 'bom-6', product_id: 'prd-1', raw_material_id: 'mat-8', quantity_per_unit: 0.5, waste_percent: 5, notes: 'معالجة سطحية وعزل حراري بالنانو' },
+        // BOM for prd-1: Polo T-Shirt (0.35 kg single jersey + 8% cutting waste)
+        { id: 'bom-1', product_id: 'prd-1', raw_material_id: 'mat-1', quantity_per_unit: 0.35, waste_percent: 8, notes: 'قماش سنجل جيرسي ممشط (هالك قص وتعشيق باترون 8%)' },
+        { id: 'bom-2', product_id: 'prd-1', raw_material_id: 'mat-4', quantity_per_unit: 0.02, waste_percent: 2, notes: 'أزرار بولو (3 أزرار للقطعة من الكيس)' },
+        { id: 'bom-3', product_id: 'prd-1', raw_material_id: 'mat-6', quantity_per_unit: 0.05, waste_percent: 1, notes: 'خيوط حياكة بوليستر' },
+        { id: 'bom-4', product_id: 'prd-1', raw_material_id: 'mat-7', quantity_per_unit: 1.0, waste_percent: 0, notes: 'كيس تغليف سلوفان مطبوع' },
+        { id: 'bom-5', product_id: 'prd-1', raw_material_id: 'mat-8', quantity_per_unit: 1.0, waste_percent: 0, notes: 'تيكت غسيل وماركة قطن' },
 
-        // BOM for prd-2: Rugged Workstation WS-200
-        { id: 'bom-7', product_id: 'prd-2', raw_material_id: 'mat-2', quantity_per_unit: 4.5, waste_percent: 4, notes: 'هيكل وشاسيه الألمنيوم المؤكسد المقوى' },
-        { id: 'bom-8', product_id: 'prd-2', raw_material_id: 'mat-4', quantity_per_unit: 1.0, waste_percent: 1, notes: 'شاشة اللمس الصناعية التفاعلية 10.1 بوصة' },
-        { id: 'bom-9', product_id: 'prd-2', raw_material_id: 'mat-1', quantity_per_unit: 1.0, waste_percent: 0, notes: 'المعالج المركزي المدمج' },
-        { id: 'bom-10', product_id: 'prd-2', raw_material_id: 'mat-5', quantity_per_unit: 1.0, waste_percent: 0, notes: 'مزود الطاقة الصناعي' },
-        { id: 'bom-11', product_id: 'prd-2', raw_material_id: 'mat-6', quantity_per_unit: 2.0, waste_percent: 5, notes: 'الضفائر والكابلات الداخلية للبيانات' },
-        { id: 'bom-12', product_id: 'prd-2', raw_material_id: 'mat-8', quantity_per_unit: 1.2, waste_percent: 5, notes: 'طلاء الهيكل الخارجي كهرواستاتيكياً' },
+        // BOM for prd-2: Jeans (1.35 meters denim + 10% cutting waste)
+        { id: 'bom-6', product_id: 'prd-2', raw_material_id: 'mat-2', quantity_per_unit: 1.35, waste_percent: 10, notes: 'قماش جينز 12 أونصة إنديغو (هالك تعشيق 10%)' },
+        { id: 'bom-7', product_id: 'prd-2', raw_material_id: 'mat-5', quantity_per_unit: 1.0, waste_percent: 1, notes: 'سوستة جينز نحاس 15 سم' },
+        { id: 'bom-8', product_id: 'prd-2', raw_material_id: 'mat-6', quantity_per_unit: 0.12, waste_percent: 2, notes: 'خيوط حياكة بوليستر ثقيلة' },
+        { id: 'bom-9', product_id: 'prd-2', raw_material_id: 'mat-7', quantity_per_unit: 1.0, waste_percent: 0, notes: 'كيس تغليف شفاف' },
+        { id: 'bom-10', product_id: 'prd-2', raw_material_id: 'mat-8', quantity_per_unit: 1.0, waste_percent: 0, notes: 'تيكت جلد وماركة الجينز' },
 
-        // BOM for prd-3: Smart Power Panel SP-80
-        { id: 'bom-13', product_id: 'prd-3', raw_material_id: 'mat-2', quantity_per_unit: 3.0, waste_percent: 3, notes: 'قواطع وتثبيتات شاسيه اللوحة' },
-        { id: 'bom-14', product_id: 'prd-3', raw_material_id: 'mat-3', quantity_per_unit: 2.0, waste_percent: 1, notes: 'أبواب وكبائن الحماية العازلة' },
-        { id: 'bom-15', product_id: 'prd-3', raw_material_id: 'mat-5', quantity_per_unit: 2.0, waste_percent: 0, notes: 'محولات ومزودات الطاقة المزدوجة' },
-        { id: 'bom-16', product_id: 'prd-3', raw_material_id: 'mat-6', quantity_per_unit: 3.0, waste_percent: 4, notes: 'حزم توزيع التيار وقواطع الإشارة' },
+        // BOM for prd-3: Hoodie (0.75 kg milton + 7% cutting waste)
+        { id: 'bom-11', product_id: 'prd-3', raw_material_id: 'mat-3', quantity_per_unit: 0.75, waste_percent: 7, notes: 'قماش ميلتون مبطن شتوي 320 جم (هالك قص 7%)' },
+        { id: 'bom-12', product_id: 'prd-3', raw_material_id: 'mat-6', quantity_per_unit: 0.10, waste_percent: 2, notes: 'خيوط خياطة أوفر وسنجر' },
+        { id: 'bom-13', product_id: 'prd-3', raw_material_id: 'mat-7', quantity_per_unit: 1.0, waste_percent: 0, notes: 'كيس تغليف كبير' },
+        { id: 'bom-14', product_id: 'prd-3', raw_material_id: 'mat-8', quantity_per_unit: 1.0, waste_percent: 0, notes: 'تيكت ماركة هودي' },
       ]);
 
-      // 8. Monthly Operating Overheads
+      // 13. Monthly Operating Overheads
       await db.overheads.put({
         id: 'ovh-2026-10',
         month_year: '2026-10',
-        electricity_cost: 38500,
-        water_cost: 3200,
-        rent_cost: 65000,
-        depreciation_cost: 28000,
-        other_expenses: 14500,
-        total_overhead: 149200,
-        estimated_machine_hours: 1200,
-        hourly_overhead_rate: 124.33,
-        notes: 'مصاريف التشغيل الصناعي والطاقة والصيانة لشهر أكتوبر 2026',
+        electricity_cost: 12000,
+        water_cost: 1500,
+        rent_cost: 35000,
+        depreciation_cost: 8000,
+        other_expenses: 6500,
+        total_overhead: 63000,
+        estimated_machine_hours: 600,
+        hourly_overhead_rate: 105.00,
+        notes: 'تكاليف الطاقة والإيجار واستهلاك ماكينات صالة القص والتشغيل لشهر أكتوبر 2026',
         created_at: now,
       });
 
-      // 9. Enterprise Distribution Hubs & Outlets
-      await db.sales_outlets.bulkAdd([
-        { id: 'out-1', name: 'المركز اللوجستي ومستودع التوزيع المركزي (العاشر من رمضان)', location: 'المجمع اللوجستي للصناعات المتقدمة - العاشر من رمضان', contact_phone: '01009876543', price_markup_percent: 0, notes: 'المستودع الرئيسي والشحن المباشر للمشاريع المؤسسية والحكومية', is_active: 1, created_at: now },
-        { id: 'out-2', name: 'مركز مبيعات الحلول الهندسية والمشاريع (القاهرة الجديدة)', location: 'مجمع مكاتب بارك ستريت - التجمع الخامس - القاهرة', contact_phone: '01229876543', price_markup_percent: 10, notes: 'صالة العرض واستقبال كبار عملاء قطاع المشروعات والشركات (Corporate & B2B)', is_active: 1, created_at: now },
-        { id: 'out-3', name: 'فرع التوزيع والخدمات اللوجستية (المنطقة الاقتصادية - السويس)', location: 'العين السخنة - المنطقة الاقتصادية الخاصة', contact_phone: '01119876543', price_markup_percent: 5, notes: 'منفذ التوزيع المخصص لخدمة مشاريع الموانئ والمصانع البتروكيماوية وطلبات التصدير', is_active: 1, created_at: now },
+      // 14. Purchasing: Purchase Orders, Receipts, Invoices, Payments
+      await db.purchase_orders.bulkAdd([
+        {
+          id: 'po-1',
+          po_number: 'PO-2026-001',
+          supplier_id: 'pty-1',
+          payment_terms: 'credit',
+          credit_days: 30,
+          due_date: '2026-10-30',
+          order_date: '2026-09-25',
+          expected_date: '2026-09-29',
+          subtotal: 54000,
+          discount_percent: 5,
+          discount_value: 2700,
+          additional_expenses: 1200,
+          total_amount: 52500,
+          grand_total: 52500,
+          status: 'received',
+          notes: 'توريد أثواب قماش سنجل جيرسي قطن مصري 100% عالي التمشيط',
+          created_by: 'usr-purchasing',
+          created_at: now
+        },
+        {
+          id: 'po-2',
+          po_number: 'PO-2026-002',
+          supplier_id: 'pty-2',
+          payment_terms: 'cash',
+          credit_days: 0,
+          due_date: null,
+          order_date: '2026-09-28',
+          expected_date: '2026-10-02',
+          subtotal: 18000,
+          discount_percent: 0,
+          discount_value: 0,
+          additional_expenses: 500,
+          total_amount: 18500,
+          grand_total: 18500,
+          status: 'received',
+          notes: 'مستلزمات خياطة وسوست وأزرار وبكر خيوط تركي',
+          created_by: 'usr-purchasing',
+          created_at: now
+        }
       ]);
 
-      // 10. Corporate B2B Clients & Institutional Customers
-      await db.customers.bulkAdd([
-        { id: 'cust-1', name: 'الشركة المصرية لتطوير البنية التحتية والشبكات الذكية', phone: '0223891000', address: 'القرية الذكية - طريق الإسكندرية الصحراوي', tax_number: '710-440-120', customer_type: 'local', payment_terms: 'credit', credit_limit: 850000, notes: 'عميل استراتيجي - عقود توريد سنوية لمشروعات الأتمتة الوطنية ومحطات المراقبة', is_active: 1, created_at: now },
-        { id: 'cust-2', name: 'مجموعة أوراسكوم للصناعات والحلول الهندسية المتكاملة', phone: '0224619000', address: 'أبراج نايل سيتي - بولاق - القاهرة', tax_number: '820-550-230', customer_type: 'local', payment_terms: 'credit', credit_limit: 1200000, notes: 'توريدات أنظمة تحكم ومحطات مراقبة ميدانية لمشاريع المدن الذكية ومحطات المعالجة', is_active: 1, created_at: now },
-        { id: 'cust-3', name: 'شركة النيل للاتصالات وتقنية المعلومات (Nile Telecom Systems)', phone: '01019988771', address: 'مدينة نصر - المنطقة الأولى - القاهرة', tax_number: '930-660-340', customer_type: 'local', payment_terms: 'credit', credit_limit: 500000, notes: 'مشروعات تحديث مراكز البيانات وأبراج التغطية ومحطات الطاقة الاحتياطية', is_active: 1, created_at: now },
-        { id: 'cust-4', name: 'شركة الخليج للأنظمة الصناعية (Gulf Industrial Technologies LLC)', phone: '+97143990011', address: 'المنطقة الحرة - جبل علي - دبي - الإمارات', tax_number: 'AE-99230188', customer_type: 'export', payment_terms: 'credit', credit_limit: 1500000, notes: 'عميل تصدير إقليمي معتمد - خطابات اعتماد مستندية واعتمادات بنكية L/C', is_active: 1, created_at: now },
+      await db.purchase_order_items.bulkAdd([
+        { id: 'poi-1', po_id: 'po-1', material_id: 'mat-1', quantity_ordered: 300, unit_price: 180, total_price: 54000 },
+        { id: 'poi-2', po_id: 'po-2', material_id: 'mat-5', quantity_ordered: 500, unit_price: 12, total_price: 6000 },
+        { id: 'poi-3', po_id: 'po-2', material_id: 'mat-6', quantity_ordered: 200, unit_price: 35, total_price: 7000 },
+        { id: 'poi-4', po_id: 'po-2', material_id: 'mat-4', quantity_ordered: 110, unit_price: 45, total_price: 4950 },
       ]);
 
-      // 11. Multi-Supplier Purchasing Procurement Cycles
-      // PO-1: Microcontrollers
-      await db.purchase_orders.put({
-        id: 'po-1',
-        po_number: 'PO-2026-001',
-        supplier_id: 'sup-1',
-        order_date: '2026-09-15',
-        expected_date: '2026-09-20',
-        total_amount: 130000,
-        status: 'received',
-        notes: 'توريد دفعة وحدات معالجة مركزية صناعية وميكروكنترولر 32-bit Cortex Dual Core',
-        created_by: 'usr-purchasing',
-        created_at: now,
-      });
-
-      await db.purchase_order_items.put({
-        id: 'poi-1',
-        po_id: 'po-1',
-        material_id: 'mat-1',
-        quantity_ordered: 200,
-        unit_price: 650,
-        total_price: 130000,
-      });
-
-      await db.goods_receipts.put({
-        id: 'grn-1',
-        grn_number: 'GRN-2026-001',
-        po_id: 'po-1',
-        supplier_id: 'sup-1',
-        receipt_date: '2026-09-18',
-        receiver_name: 'أ. أيمن القاضي (مدير المستودعات)',
-        notes: 'تم فحص الشحنة واختبار العينات العشوائية في مختبر الجودة الإلكتروني ومطابقتها للمواصفات',
-        created_by: 'usr-storekeeper',
-        created_at: now,
-      });
-
-      await db.goods_receipt_items.put({
-        id: 'gri-1',
-        grn_id: 'grn-1',
-        material_id: 'mat-1',
-        quantity_received: 200,
-        unit_cost: 650,
-        total_cost: 130000,
-      });
-
-      await db.supplier_invoices.put({
-        id: 'sinv-1',
-        invoice_number: 'INV-SUP-8801',
-        supplier_id: 'sup-1',
-        grn_id: 'grn-1',
-        po_id: 'po-1',
-        invoice_date: '2026-09-19',
-        due_date: '2026-10-19',
-        subtotal: 130000,
-        tax_amount: 18200,
-        total_amount: 148200,
-        paid_amount: 100000,
-        status: 'partially_paid',
-        notes: 'فاتورة توريد ميكروكنترولر - تم سداد 100 ألف ج.م عبر تحويل CIB والباقي يستحق 19 أكتوبر',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
-
-      await db.payments.put({
-        id: 'spay-1',
-        payment_number: 'PAY-SUP-001',
-        supplier_id: 'sup-1',
-        invoice_id: 'sinv-1',
-        account_id: 'acc-2',
-        amount: 100000,
-        payment_date: '2026-09-20',
-        payment_method: 'bank_transfer',
-        notes: 'تحويل بنكي صادر من حساب CIB لصالح المورد شركة سيمنز وشنايدر',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
-
-      // PO-2: Aluminum Extrusions
-      await db.purchase_orders.put({
-        id: 'po-2',
-        po_number: 'PO-2026-002',
-        supplier_id: 'sup-2',
-        order_date: '2026-09-22',
-        expected_date: '2026-09-26',
-        total_amount: 84000,
-        status: 'received',
-        notes: 'توريد قطاعات وهياكل ألمنيوم مؤكسد صناعي مقوى AL-6063 T6',
-        created_by: 'usr-purchasing',
-        created_at: now,
-      });
-
-      await db.purchase_order_items.put({
-        id: 'poi-2',
-        po_id: 'po-2',
-        material_id: 'mat-2',
-        quantity_ordered: 400,
-        unit_price: 210,
-        total_price: 84000,
-      });
-
-      await db.goods_receipts.put({
-        id: 'grn-2',
-        grn_number: 'GRN-2026-002',
-        po_id: 'po-2',
-        supplier_id: 'sup-2',
-        receipt_date: '2026-09-24',
-        receiver_name: 'أ. أيمن القاضي (مدير المستودعات)',
-        notes: 'فحص الأبعاد الهندسية وسماكة الأكسدة السطحية ومطابقتها للمعايير الألمانية',
-        created_by: 'usr-storekeeper',
-        created_at: now,
-      });
-
-      await db.goods_receipt_items.put({
-        id: 'gri-2',
-        grn_id: 'grn-2',
-        material_id: 'mat-2',
-        quantity_received: 400,
-        unit_cost: 210,
-        total_cost: 84000,
-      });
-
-      await db.supplier_invoices.put({
-        id: 'sinv-2',
-        invoice_number: 'INV-SUP-8802',
-        supplier_id: 'sup-2',
-        grn_id: 'grn-2',
-        po_id: 'po-2',
-        invoice_date: '2026-09-25',
-        due_date: '2026-10-25',
-        subtotal: 84000,
-        tax_amount: 11760,
-        total_amount: 95760,
-        paid_amount: 0,
-        status: 'unpaid',
-        notes: 'فاتورة سداد آجل 30 يوم تستحق السداد بتاريخ 25 أكتوبر 2026',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
-
-      // PO-3: Polymer Enclosures
-      await db.purchase_orders.put({
-        id: 'po-3',
-        po_number: 'PO-2026-003',
-        supplier_id: 'sup-3',
-        order_date: '2026-09-27',
-        expected_date: '2026-09-30',
-        total_amount: 42000,
-        status: 'received',
-        notes: 'توريد حاويات بوليمرية مدرعة عازلة ومقاومة للعوامل الجوية IP66',
-        created_by: 'usr-purchasing',
-        created_at: now,
-      });
-
-      await db.purchase_order_items.put({
-        id: 'poi-3',
-        po_id: 'po-3',
-        material_id: 'mat-3',
-        quantity_ordered: 100,
-        unit_price: 420,
-        total_price: 42000,
-      });
-
-      await db.goods_receipts.put({
-        id: 'grn-3',
-        grn_number: 'GRN-2026-003',
-        po_id: 'po-3',
-        supplier_id: 'sup-3',
-        receipt_date: '2026-09-29',
-        receiver_name: 'أ. أيمن القاضي (مدير المستودعات)',
-        notes: 'تم الاستلام وإيداعها بالمستودع بمطابقة اختبارات العزل',
-        created_by: 'usr-storekeeper',
-        created_at: now,
-      });
-
-      await db.goods_receipt_items.put({
-        id: 'gri-3',
-        grn_id: 'grn-3',
-        material_id: 'mat-3',
-        quantity_received: 100,
-        unit_cost: 420,
-        total_cost: 42000,
-      });
-
-      await db.supplier_invoices.put({
-        id: 'sinv-3',
-        invoice_number: 'INV-SUP-8803',
-        supplier_id: 'sup-3',
-        grn_id: 'grn-3',
-        po_id: 'po-3',
-        invoice_date: '2026-09-29',
-        due_date: '2026-10-15',
-        subtotal: 42000,
-        tax_amount: 5880,
-        total_amount: 47880,
-        paid_amount: 25000,
-        status: 'partially_paid',
-        notes: 'فاتورة حاويات بوليمرية - مسدد جزء نقداً من الخزينة المركزية',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
-
-      await db.payments.put({
-        id: 'spay-2',
-        payment_number: 'PAY-SUP-002',
-        supplier_id: 'sup-3',
-        invoice_id: 'sinv-3',
-        account_id: 'acc-1',
-        amount: 25000,
-        payment_date: '2026-09-30',
-        payment_method: 'cash',
-        notes: 'صرف نقدي من الخزينة المركزية دفعة تحت الحساب لمجمع البوليمرات',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
-
-      // 12. Multi-Stage Production Orders (Manufacturing Work Orders)
-      // Order 1: Stage 1 Completed (Apex Controller IC-500)
-      await db.production_orders.put({
-        id: 'mfg-1',
-        order_number: 'ORD-MFG-2026-001',
-        product_id: 'prd-1',
-        batch_quantity: 20,
-        start_date: '2026-09-10',
-        completion_date: '2026-09-22',
-        status: 'stage1_completed',
-        location_type: 'inside',
-        labor_type: 'hourly',
-        labor_hours: 48,
-        labor_hourly_rate: 150,
-        total_labor_cost: 7200,
-        machine_hours: 36,
-        allocated_overhead_cost: 4475.88,
-        total_material_cost: 41800,
-        total_stage1_cost: 53475.88,
-        unit_stage1_cost: 2673.79,
-        notes: 'أمر تشغيل وإنتاج الدفعة الأولى من متحكمات Apex Controller IC-500',
-        created_by: 'usr-production',
-        created_at: now,
-      });
-
-      // Material usage for mfg-1
-      await db.production_material_usage.bulkAdd([
-        { id: 'pmu-1-1', production_order_id: 'mfg-1', raw_material_id: 'mat-1', standard_quantity: 20.2, actual_quantity: 20.2, unit_cost: 650, total_cost: 13130 },
-        { id: 'pmu-1-2', production_order_id: 'mfg-1', raw_material_id: 'mat-3', standard_quantity: 20.0, actual_quantity: 20.0, unit_cost: 420, total_cost: 8400 },
-        { id: 'pmu-1-3', production_order_id: 'mfg-1', raw_material_id: 'mat-5', standard_quantity: 20.4, actual_quantity: 20.4, unit_cost: 580, total_cost: 11832 },
-        { id: 'pmu-1-4', production_order_id: 'mfg-1', raw_material_id: 'mat-6', standard_quantity: 20.6, actual_quantity: 20.6, unit_cost: 95, total_cost: 1957 },
-        { id: 'pmu-1-5', production_order_id: 'mfg-1', raw_material_id: 'mat-7', standard_quantity: 20.2, actual_quantity: 20.2, unit_cost: 340, total_cost: 6868 },
+      await db.goods_receipts.bulkAdd([
+        { id: 'grn-1', grn_number: 'GRN-2026-001', po_id: 'po-1', supplier_id: 'pty-1', receipt_date: '2026-09-28', receiver_name: 'أمين مستودع الأقمشة', notes: 'تم فحص وزن أثواب الأقمشة والتأكد من مطابقة اللون والنعومة', created_by: 'usr-storekeeper', created_at: now },
+        { id: 'grn-2', grn_number: 'GRN-2026-002', po_id: 'po-2', supplier_id: 'pty-2', receipt_date: '2026-10-01', receiver_name: 'أمين مخزن المستلزمات', notes: 'استلام وفحص السوست والأزرار والخيوط', created_by: 'usr-storekeeper', created_at: now },
       ]);
 
-      // Order 2: Active in Production (Rugged Workstation WS-200)
-      await db.production_orders.put({
-        id: 'mfg-2',
-        order_number: 'ORD-MFG-2026-002',
-        product_id: 'prd-2',
-        batch_quantity: 10,
-        start_date: '2026-09-28',
-        completion_date: null,
-        status: 'in_production',
-        location_type: 'inside',
-        labor_type: 'hourly',
-        labor_hours: 30,
-        labor_hourly_rate: 160,
-        total_labor_cost: 4800,
-        machine_hours: 24,
-        allocated_overhead_cost: 2983.92,
-        total_material_cost: 32500,
-        total_stage1_cost: 40283.92,
-        unit_stage1_cost: 4028.39,
-        notes: 'دفعة محطات العمل الميدانية قيد التجميع والاختبار الميكانيكي على خط الإنتاج',
-        created_by: 'usr-production',
-        created_at: now,
-      });
+      await db.goods_receipt_items.bulkAdd([
+        { id: 'gri-1', grn_id: 'grn-1', material_id: 'mat-1', quantity_received: 300, unit_cost: 180, total_cost: 54000 },
+        { id: 'gri-2', grn_id: 'grn-2', material_id: 'mat-5', quantity_received: 500, unit_cost: 12, total_cost: 6000 },
+        { id: 'gri-3', grn_id: 'grn-2', material_id: 'mat-6', quantity_received: 200, unit_cost: 35, total_cost: 7000 },
+      ]);
+
+      await db.supplier_invoices.bulkAdd([
+        { id: 'sinv-1', invoice_number: 'INV-SUP-501', supplier_id: 'pty-1', grn_id: 'grn-1', po_id: 'po-1', invoice_date: '2026-09-29', due_date: '2026-10-29', subtotal: 54000, tax_amount: 0, total_amount: 54000, paid_amount: 30000, status: 'partially_paid', notes: 'فاتورة توريد قماش سنجل جيرسي - مسدد 30 ألف ج.م والباقي آجل', created_by: 'usr-accountant', created_at: now },
+        { id: 'sinv-2', invoice_number: 'INV-SUP-502', supplier_id: 'pty-2', grn_id: 'grn-2', po_id: 'po-2', invoice_date: '2026-10-01', due_date: null, subtotal: 18500, tax_amount: 0, total_amount: 18500, paid_amount: 18500, status: 'paid', notes: 'فاتورة مستلزمات خياطة مسددة نقداً', created_by: 'usr-accountant', created_at: now },
+      ]);
+
+      await db.payments.bulkAdd([
+        { id: 'spay-1', payment_number: 'PAY-SUP-101', supplier_id: 'pty-1', invoice_id: 'sinv-1', account_id: 'acc-cib', amount: 30000, payment_date: '2026-09-30', payment_method: 'bank_transfer', notes: 'تحويل بنكي CIB دفعة تحت الحساب لمصنع النيل للأقمشة', created_by: 'usr-accountant', created_at: now },
+        { id: 'spay-2', payment_number: 'PAY-SUP-102', supplier_id: 'pty-2', invoice_id: 'sinv-2', account_id: 'acc-main', amount: 18500, payment_date: '2026-10-01', payment_method: 'cash', notes: 'سداد نقدي من الخزينة المركزية لشركة الأهرام للإكسسوارات', created_by: 'usr-accountant', created_at: now },
+      ]);
+
+      // 15. Manufacturing: Production Orders with Clothing Stages (Cutting -> Sewing -> Ironing)
+      await db.production_orders.bulkAdd([
+        {
+          id: 'po-mfg-1',
+          order_number: 'ORD-MFG-2026-101',
+          product_id: 'prd-1',
+          batch_quantity: 100,
+          start_date: '2026-09-26',
+          completion_date: '2026-10-01',
+          status: 'stage1_completed',
+          location_type: 'inside',
+          labor_type: 'piece_rate',
+          cutting_labor: 1500,
+          sewing_labor: 4000,
+          ironing_packing_labor: 1000,
+          total_labor_cost: 6500,
+          machine_hours: 40,
+          allocated_overhead_cost: 4200,
+          total_material_cost: 6768, // (100 * 0.35 * 1.08 * 180) + accessories
+          total_stage1_cost: 17468,
+          unit_stage1_cost: 174.68,
+          notes: 'تشغيل دفعة 100 تيشيرت بولو - مراحل القص والتجميع الخياطة الداخلية مكتملة بنجاح',
+          created_by: 'usr-production',
+          created_at: now
+        },
+        {
+          id: 'po-mfg-2',
+          order_number: 'ORD-MFG-2026-102',
+          product_id: 'prd-2',
+          batch_quantity: 80,
+          start_date: '2026-10-02',
+          completion_date: null,
+          status: 'in_production',
+          location_type: 'inside',
+          labor_type: 'piece_rate',
+          cutting_labor: 2000,
+          sewing_labor: 6400,
+          ironing_packing_labor: 1200,
+          total_labor_cost: 9600,
+          machine_hours: 50,
+          allocated_overhead_cost: 5250,
+          total_material_cost: 16800,
+          total_stage1_cost: 31650,
+          unit_stage1_cost: 395.63,
+          notes: 'تشغيل 80 بنطلون جينز كاجوال - قيد التجميع على ماكينات الخياطة',
+          created_by: 'usr-production',
+          created_at: now
+        }
+      ]);
 
       await db.production_material_usage.bulkAdd([
-        { id: 'pmu-2-1', production_order_id: 'mfg-2', raw_material_id: 'mat-2', standard_quantity: 46.8, actual_quantity: 46.8, unit_cost: 210, total_cost: 9828 },
-        { id: 'pmu-2-2', production_order_id: 'mfg-2', raw_material_id: 'mat-4', standard_quantity: 10.1, actual_quantity: 10.1, unit_cost: 1450, total_cost: 14645 },
-        { id: 'pmu-2-3', production_order_id: 'mfg-2', raw_material_id: 'mat-1', standard_quantity: 10.0, actual_quantity: 10.0, unit_cost: 650, total_cost: 6500 },
-        { id: 'pmu-2-4', production_order_id: 'mfg-2', raw_material_id: 'mat-6', standard_quantity: 21.0, actual_quantity: 21.0, unit_cost: 95, total_cost: 1995 },
+        { id: 'pmu-1', production_order_id: 'po-mfg-1', raw_material_id: 'mat-1', standard_quantity: 37.8, actual_quantity: 37.8, unit_cost: 180, total_cost: 6804 },
+        { id: 'pmu-2', production_order_id: 'po-mfg-1', raw_material_id: 'mat-4', standard_quantity: 2.04, actual_quantity: 2.04, unit_cost: 45, total_cost: 91.8 },
       ]);
 
-      // 13. Finishing & Quality Inspection Orders
-      // FO-1: Completed into finished goods inventory
-      await db.finishing_orders.put({
-        id: 'fo-1',
-        finishing_number: 'ORD-FIN-2026-001',
-        production_order_id: 'mfg-1',
-        product_id: 'prd-1',
-        finishing_quantity: 20,
-        status: 'completed_to_inventory',
-        stage1_transferred_cost: 53475.88,
-        finishing_materials_cost: 1800,
-        finishing_labor_fee: 3500,
-        transport_cost: 800,
-        total_finishing_stage_cost: 6100,
-        final_total_cost: 59575.88,
-        final_unit_cost: 2978.79,
-        transfer_date: '2026-09-23',
-        notes: 'المعايرة الرقمية النهائية، اختبارات العزل والجهد العالي، والتغليف الصناعي المعياري',
-        created_by: 'usr-production',
-        created_at: now,
-      });
+      // 16. Outsourced Manufacturing Orders (التصنيع لدى الغير)
+      await db.finishing_orders.bulkAdd([
+        {
+          id: 'out-ord-1',
+          finishing_number: 'ORD-OUT-2026-101',
+          production_order_id: 'po-mfg-1',
+          product_id: 'prd-1',
+          finishing_quantity: 100,
+          status: 'ready_for_sale', // Completed and sent to inventory
+          supplier_id: 'pty-3', // الدلتا لخدمات التطريز (مورد خدمة)
+          external_factory_name: 'الدلتا لخدمات التطريز الآلي والطباعة السلك سكرين',
+          service_type: 'تطريز كمبيوتر آلي للصدر والياقة',
+          stage1_transferred_cost: 17468,
+          finishing_labor_fee: 2500, // 25 EGP per piece
+          service_fee: 2500,
+          transport_cost: 300,
+          materials_cost: 200,
+          total_finishing_stage_cost: 3000,
+          total_outsourced_stage_cost: 3000,
+          final_total_batch_cost: 20468, // 17468 internal + 3000 outsourced
+          final_unit_cost: 204.68,
+          transfer_date: '2026-10-02',
+          completion_date: '2026-10-05',
+          notes: 'تم استلام الدفعة من مصنع التطريز بجودة ممتازة وتم إدخالها لمستودع الملابس الجاهزة',
+          created_by: 'usr-production',
+          created_at: now
+        }
+      ]);
 
-      await db.finishing_materials.put({
-        id: 'fm-1',
-        finishing_order_id: 'fo-1',
-        raw_material_id: 'mat-8',
-        quantity: 10,
-        unit_cost: 180,
-        total_cost: 1800,
-      });
+      // 17. Sales Invoices & Customer Receipts
+      await db.sales_invoices.bulkAdd([
+        {
+          id: 'sls-1',
+          invoice_number: 'INV-SLS-2026-001',
+          customer_id: 'pty-6',
+          outlet_id: 'out-2',
+          payment_terms: 'credit',
+          invoice_date: '2026-10-03',
+          due_date: '2026-11-03',
+          is_export: 0,
+          currency: 'EGP',
+          exchange_rate: 1.0,
+          subtotal: 37500,
+          tax_amount: 5250,
+          shipping_expense: 500,
+          customs_expense: 0,
+          commission_expense: 0,
+          total_selling_expenses: 500,
+          total_invoice_amount: 42750,
+          total_cogs: 20468,
+          net_profit: 16532,
+          paid_amount: 20000,
+          status: 'partially_paid',
+          notes: 'توريد دفعة تيشيرتات بولو رجالي لمعرض فاشون لاند بموجب أمر توريد رقم 44',
+          created_by: 'usr-accountant',
+          created_at: now
+        },
+        {
+          id: 'sls-2',
+          invoice_number: 'INV-SLS-2026-002',
+          customer_id: 'pty-7',
+          outlet_id: 'out-2',
+          payment_terms: 'cash',
+          invoice_date: '2026-10-05',
+          due_date: null, // Cash invoice: NO DUE DATE
+          is_export: 0,
+          currency: 'EGP',
+          exchange_rate: 1.0,
+          subtotal: 21000,
+          tax_amount: 2940,
+          shipping_expense: 0,
+          customs_expense: 0,
+          commission_expense: 0,
+          total_selling_expenses: 0,
+          total_invoice_amount: 23940,
+          total_cogs: 11000,
+          net_profit: 10000,
+          paid_amount: 23940,
+          status: 'paid',
+          notes: 'مبيعات كاش فورية من معرض وسط البلد',
+          created_by: 'usr-cashier',
+          created_at: now
+        }
+      ]);
 
-      // FO-2: Currently in finishing line
-      await db.finishing_orders.put({
-        id: 'fo-2',
-        finishing_number: 'ORD-FIN-2026-002',
-        production_order_id: 'mfg-2',
-        product_id: 'prd-2',
-        finishing_quantity: 5,
-        status: 'in_finishing',
-        stage1_transferred_cost: 20141.95,
-        finishing_materials_cost: 900,
-        finishing_labor_fee: 1800,
-        transport_cost: 400,
-        total_finishing_stage_cost: 3100,
-        final_total_cost: 23241.95,
-        final_unit_cost: 4648.39,
-        transfer_date: today,
-        notes: 'مرحلة الطلاء الكهرواستاتيكي، تثبيت الشاشات التفاعلية، واختبارات الصدمات',
-        created_by: 'usr-production',
-        created_at: now,
-      });
+      await db.sales_invoice_items.bulkAdd([
+        {
+          id: 'sii-1',
+          invoice_id: 'sls-1',
+          product_id: 'prd-1',
+          variant_id: 'var-polo-2',
+          quantity: 150,
+          price_before_discount: 260,
+          discount_value: 10,
+          unit_selling_price: 250,
+          unit_cost: 136.45,
+          total_price: 37500,
+          total_cost: 20468,
+          item_net_profit: 16532
+        },
+        {
+          id: 'sii-2',
+          invoice_id: 'sls-2',
+          product_id: 'prd-2',
+          variant_id: 'var-jns-2',
+          quantity: 50,
+          price_before_discount: 430,
+          discount_value: 10,
+          unit_selling_price: 420,
+          unit_cost: 220,
+          total_price: 21000,
+          total_cost: 11000,
+          item_net_profit: 10000
+        }
+      ]);
 
-      await db.finishing_materials.put({
-        id: 'fm-2',
-        finishing_order_id: 'fo-2',
-        raw_material_id: 'mat-8',
-        quantity: 5,
-        unit_cost: 180,
-        total_cost: 900,
-      });
+      await db.customer_payments.bulkAdd([
+        {
+          id: 'cpay-1',
+          receipt_number: 'REC-SLS-201',
+          customer_id: 'pty-6',
+          invoice_id: 'sls-1',
+          account_id: 'acc-out-2',
+          amount: 20000,
+          payment_date: '2026-10-04',
+          payment_method: 'cash',
+          notes: 'تحصيل دفعة نقدية مسددة في خزينة معرض وسط البلد',
+          created_by: 'usr-accountant',
+          created_at: now
+        },
+        {
+          id: 'cpay-2',
+          receipt_number: 'REC-SLS-202',
+          customer_id: 'pty-7',
+          invoice_id: 'sls-2',
+          account_id: 'acc-out-2',
+          amount: 23940,
+          payment_date: '2026-10-05',
+          payment_method: 'cash',
+          notes: 'تحصيل فوري لفاتورة كاش معرض وسط البلد',
+          created_by: 'usr-cashier',
+          created_at: now
+        }
+      ]);
 
-      // 14. Enterprise Sales Invoices & Customer Receipts
-      // Invoice 1: Local Infrastructure Project
-      await db.sales_invoices.put({
-        id: 'sls-1',
-        invoice_number: 'INV-SLS-2026-001',
-        customer_id: 'cust-1',
-        outlet_id: 'out-1',
-        invoice_date: '2026-09-28',
-        due_date: '2026-10-28',
-        is_export: 0,
-        currency: 'EGP',
-        exchange_rate: 1.0,
-        subtotal: 105000,
-        tax_amount: 14700,
-        shipping_expense: 2500,
-        customs_expense: 0,
-        commission_expense: 0,
-        total_selling_expenses: 2500,
-        total_invoice_amount: 122200,
-        total_cogs: 62000,
-        net_profit: 40500,
-        paid_amount: 80000,
-        status: 'partially_paid',
-        notes: 'توريد وتسليم أجهزة التحكم الصناعي الذكي لمشروع محطات المراقبة القومية',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
+      // 18. Stock Adjustments (Shortage: waste & samples, Addition)
+      await db.stock_adjustments.bulkAdd([
+        {
+          id: 'adj-1',
+          adjustment_number: 'ADJ-1001',
+          item_id: 'mat-1',
+          variant_id: null,
+          location_id: 'loc-1',
+          adjustment_type: 'shortage',
+          sub_type: 'waste',
+          quantity: 5,
+          quantity_delta: -5,
+          previous_balance: 455,
+          new_balance: 450,
+          reason: 'هالك قص وقماش تالف في بداية ثوب الغزل',
+          notes: 'تم استبعاد 5 كجم قماش هالك بدون أي أثر مالي',
+          financial_impact: 0,
+          adjustment_date: today,
+          created_by: 'usr-storekeeper',
+          created_at: now
+        },
+        {
+          id: 'adj-2',
+          adjustment_number: 'ADJ-1002',
+          item_id: 'prd-1',
+          variant_id: 'var-polo-1',
+          location_id: 'loc-3',
+          adjustment_type: 'shortage',
+          sub_type: 'samples',
+          quantity: 2,
+          quantity_delta: -2,
+          previous_balance: 27,
+          new_balance: 25,
+          reason: 'عينات تسويق وتطوير للموسم الجديد',
+          notes: 'عينات مرسلة للمصممين بدون أثر مالي',
+          financial_impact: 0,
+          adjustment_date: today,
+          created_by: 'usr-storekeeper',
+          created_at: now
+        }
+      ]);
 
-      await db.sales_invoice_items.put({
-        id: 'sii-1',
-        invoice_id: 'sls-1',
-        product_id: 'prd-1',
-        quantity: 6,
-        unit_cost: 10333.33,
-        unit_selling_price: 17500,
-        total_price: 105000,
-        total_cost: 62000,
-        item_net_profit: 40500,
-      });
-
-      await db.customer_payments.put({
-        id: 'cpay-1',
-        receipt_number: 'REC-SLS-001',
-        customer_id: 'cust-1',
-        invoice_id: 'sls-1',
-        account_id: 'acc-2',
-        amount: 80000,
-        payment_date: '2026-09-29',
-        payment_method: 'bank_transfer',
-        notes: 'تحويل بنكي وارد على حساب CIB دفعة أولى بموجب محضر التسليم الابتدائي',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
-
-      // Invoice 2: Orascom Engineering Solutions (Paid in full)
-      await db.sales_invoices.put({
-        id: 'sls-2',
-        invoice_number: 'INV-SLS-2026-002',
-        customer_id: 'cust-2',
-        outlet_id: 'out-2',
-        invoice_date: '2026-10-01',
-        due_date: '2026-11-01',
-        is_export: 0,
-        currency: 'EGP',
-        exchange_rate: 1.0,
-        subtotal: 168000,
-        tax_amount: 23520,
-        shipping_expense: 3000,
-        customs_expense: 0,
-        commission_expense: 0,
-        total_selling_expenses: 3000,
-        total_invoice_amount: 194520,
-        total_cogs: 104000,
-        net_profit: 61000,
-        paid_amount: 194520,
-        status: 'paid',
-        notes: 'تسليم محطات العمل الميدانية المتنقلة بكامل ملحقاتها وشاشات اللمس',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
-
-      await db.sales_invoice_items.put({
-        id: 'sii-2',
-        invoice_id: 'sls-2',
-        product_id: 'prd-2',
-        quantity: 4,
-        unit_cost: 26000,
-        unit_selling_price: 42000,
-        total_price: 168000,
-        total_cost: 104000,
-        item_net_profit: 61000,
-      });
-
-      await db.customer_payments.put({
-        id: 'cpay-2',
-        receipt_number: 'REC-SLS-002',
-        customer_id: 'cust-2',
-        invoice_id: 'sls-2',
-        account_id: 'acc-2',
-        amount: 194520,
-        payment_date: '2026-10-02',
-        payment_method: 'bank_transfer',
-        notes: 'سداد كامل قيمة الفاتورة عبر تحويل مصرفي معتمد CIB',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
-
-      // Invoice 3: Export Contract (Gulf Industrial Technologies - Dubai)
-      await db.sales_invoices.put({
-        id: 'sls-3',
-        invoice_number: 'INV-EXP-2026-001',
-        customer_id: 'cust-4',
-        outlet_id: 'out-3',
-        invoice_date: '2026-10-02',
-        due_date: '2026-11-15',
-        is_export: 1,
-        currency: 'USD',
-        exchange_rate: 48.50,
-        subtotal: 242500,
-        tax_amount: 0,
-        shipping_expense: 8500,
-        customs_expense: 4000,
-        commission_expense: 0,
-        total_selling_expenses: 12500,
-        total_invoice_amount: 255000,
-        total_cogs: 135000,
-        net_profit: 95000,
-        paid_amount: 100000,
-        status: 'partially_paid',
-        notes: 'تصدير شحنة وحدات تحكم ولوحات توزيع طاقة ذكية لمشروع دبي الجنوب - اعتماد بنكي LC',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
-
-      await db.sales_invoice_items.put({
-        id: 'sii-3',
-        invoice_id: 'sls-3',
-        product_id: 'prd-1',
-        quantity: 10,
-        unit_cost: 13500,
-        unit_selling_price: 24250,
-        total_price: 242500,
-        total_cost: 135000,
-        item_net_profit: 95000,
-      });
-
-      await db.customer_payments.put({
-        id: 'cpay-3',
-        receipt_number: 'REC-EXP-001',
-        customer_id: 'cust-4',
-        invoice_id: 'sls-3',
-        account_id: 'acc-3',
-        amount: 100000,
-        payment_date: '2026-10-03',
-        payment_method: 'bank_transfer',
-        notes: 'دفعة مقدمة محولة لحساب النقد الأجنبي QNB بالدولار',
-        created_by: 'usr-accountant',
-        created_at: now,
-      });
-
-      // 15. Comprehensive Multi-Account Cash & Banking Ledger
+      // 19. Cash Transactions Ledger
       await db.cash_transactions.bulkAdd([
-        {
-          id: 'tx-1',
-          tx_number: 'TXN-2026-001',
-          account_id: 'acc-2',
-          tx_type: 'outflow',
-          category: 'supplier_payment',
-          amount: 100000,
-          balance_after: 690480,
-          reference_type: 'supplier_invoices',
-          reference_id: 'sinv-1',
-          description: 'سداد تحويل بنكي CIB لصالح المورد شركة سيمنز وشنايدر إلكتريك',
-          created_by: 'usr-accountant',
-          created_at: now,
-        },
-        {
-          id: 'tx-2',
-          tx_number: 'TXN-2026-002',
-          account_id: 'acc-1',
-          tx_type: 'outflow',
-          category: 'supplier_payment',
-          amount: 25000,
-          balance_after: 120000,
-          reference_type: 'supplier_invoices',
-          reference_id: 'sinv-3',
-          description: 'دفعة نقدية مسددة من الخزينة الرئيسية لمجمع الصناعات البوليمرية',
-          created_by: 'usr-accountant',
-          created_at: now,
-        },
-        {
-          id: 'tx-3',
-          tx_number: 'TXN-2026-003',
-          account_id: 'acc-2',
-          tx_type: 'inflow',
-          category: 'customer_payment',
-          amount: 80000,
-          balance_after: 770480,
-          reference_type: 'sales_invoices',
-          reference_id: 'sls-1',
-          description: 'تحويل بنكي وارد من الشركة المصرية لتطوير البنية التحتية',
-          created_by: 'usr-accountant',
-          created_at: now,
-        },
-        {
-          id: 'tx-4',
-          tx_number: 'TXN-2026-004',
-          account_id: 'acc-2',
-          tx_type: 'inflow',
-          category: 'customer_payment',
-          amount: 194520,
-          balance_after: 865000,
-          reference_type: 'sales_invoices',
-          reference_id: 'sls-2',
-          description: 'سداد كامل فاتورة محطات العمل الميدانية من مجموعة أوراسكوم',
-          created_by: 'usr-accountant',
-          created_at: now,
-        },
-        {
-          id: 'tx-5',
-          tx_number: 'TXN-2026-005',
-          account_id: 'acc-3',
-          tx_type: 'inflow',
-          category: 'customer_payment',
-          amount: 100000,
-          balance_after: 420000,
-          reference_type: 'sales_invoices',
-          reference_id: 'sls-3',
-          description: 'دفعة اعتماد مستندي تصدير بالعملة الأجنبية من شركة الخليج للأنظمة الصناعية',
-          created_by: 'usr-accountant',
-          created_at: now,
-        },
-        {
-          id: 'tx-6',
-          tx_number: 'TXN-2026-006',
-          account_id: 'acc-1',
-          tx_type: 'outflow',
-          category: 'expense',
-          amount: 18500,
-          balance_after: 101500,
-          reference_type: 'general_expense',
-          reference_id: 'exp-2026-01',
-          description: 'صيانة دورية لخطوط الإنتاج والتجميع ومعايرة أجهزة الفحص بمختبر الجودة',
-          created_by: 'usr-accountant',
-          created_at: now,
-        },
-      ]);
-
-      // 16. Detailed Material Stock Movements & Traceability
-      await db.stock_movements.bulkAdd([
-        {
-          id: 'sm-1',
-          material_id: 'mat-1',
-          movement_type: 'purchase_in',
-          reference_type: 'GRN',
-          reference_id: 'grn-1',
-          quantity_change: 200,
-          unit_cost: 650,
-          new_balance: 180,
-          notes: 'وارد مشتريات إذن فحص واستلام GRN-2026-001',
-          created_by: 'usr-storekeeper',
-          created_at: now,
-        },
-        {
-          id: 'sm-2',
-          material_id: 'mat-2',
-          movement_type: 'purchase_in',
-          reference_type: 'GRN',
-          reference_id: 'grn-2',
-          quantity_change: 400,
-          unit_cost: 210,
-          new_balance: 420,
-          notes: 'وارد مشتريات إذن استلام قطاعات الألمنيوم GRN-2026-002',
-          created_by: 'usr-storekeeper',
-          created_at: now,
-        },
-        {
-          id: 'sm-3',
-          material_id: 'mat-3',
-          movement_type: 'purchase_in',
-          reference_type: 'GRN',
-          reference_id: 'grn-3',
-          quantity_change: 100,
-          unit_cost: 420,
-          new_balance: 95,
-          notes: 'وارد مشتريات إذن استلام الحاويات البوليمرية GRN-2026-003',
-          created_by: 'usr-storekeeper',
-          created_at: now,
-        },
+        { id: 'tx-1', tx_number: 'TXN-001', account_id: 'acc-cib', tx_type: 'outflow', category: 'supplier_payment', amount: 30000, balance_after: 620000, reference_type: 'supplier_invoices', reference_id: 'sinv-1', description: 'سداد تحويل بنكي CIB لمصنع النيل للأقمشة', created_by: 'usr-accountant', created_at: now },
+        { id: 'tx-2', tx_number: 'TXN-002', account_id: 'acc-main', tx_type: 'outflow', category: 'supplier_payment', amount: 18500, balance_after: 185000, reference_type: 'supplier_invoices', reference_id: 'sinv-2', description: 'سداد نقدي من الخزينة المركزية لشركة الأهرام للإكسسوارات', created_by: 'usr-accountant', created_at: now },
+        { id: 'tx-3', tx_number: 'TXN-003', account_id: 'acc-out-2', tx_type: 'inflow', category: 'sales', amount: 20000, balance_after: 20000, reference_type: 'sales_invoices', reference_id: 'sls-1', description: 'تحصيل دفعة نقدية من معرض وسط البلد', created_by: 'usr-accountant', created_at: now },
+        { id: 'tx-4', tx_number: 'TXN-004', account_id: 'acc-out-2', tx_type: 'inflow', category: 'sales', amount: 23940, balance_after: 38500, reference_type: 'sales_invoices', reference_id: 'sls-2', description: 'تحصيل كاش مبيعات معرض وسط البلد', created_by: 'usr-cashier', created_at: now },
       ]);
     });
 
-    await auditRepo.log(userId, 'LOAD_DEMO_DATA', 'system', 'all', null, { seededAt: now, dataset: 'Enterprise_Apex_ERP_v2' });
+    await auditRepo.log(userId, 'LOAD_DEMO_DATA', 'system', 'all', null, { seededAt: now, dataset: 'Clothing_Factory_ERP_v4' });
     return { success: true };
   },
 
   /**
-   * 4. Clear all database data (with double confirmation in UI).
+   * 4. Clear all database data.
    */
   async clearAllData(userId = 'usr-owner') {
     await ensureDatabaseIntegrity();
@@ -860,7 +707,7 @@ export const backupRepo = {
   /**
    * 5. Export table/report data to Excel (.xlsx) using SheetJS.
    */
-  exportToExcel(dataArray, fileName = 'تقرير_المؤسسة', sheetName = 'البيانات') {
+  exportToExcel(dataArray, fileName = 'تقرير_مصنع_الملابس', sheetName = 'البيانات') {
     if (!Array.isArray(dataArray) || dataArray.length === 0) {
       alert('لا توجد بيانات متاحة للتصدير');
       return;

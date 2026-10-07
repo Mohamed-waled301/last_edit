@@ -143,8 +143,11 @@ export const salesRepo = {
     return outlet;
   },
 
-  async getSalesInvoices() {
-    const invoices = await db.sales_invoices.reverse().sortBy('created_at');
+  async getSalesInvoices(outletId = null) {
+    let invoices = await db.sales_invoices.reverse().sortBy('created_at');
+    if (outletId) {
+      invoices = invoices.filter(i => i.outlet_id === outletId);
+    }
     const customers = await db.customers.toArray();
     const custMap = new Map(customers.map(c => [c.id, c.name]));
     const outlets = await db.sales_outlets.toArray();
@@ -166,7 +169,7 @@ export const salesRepo = {
       return {
         ...i,
         customer_name: custMap.get(i.customer_id) || i.customer_id,
-        outlet_name: outMap.get(i.outlet_id) || 'المستودع الرئيسي',
+        outlet_name: outMap.get(i.outlet_id) || 'المعرض الرئيسي',
         items: invItems,
         remaining_amount: Math.max(0, Number(((Number(i.total_invoice_amount) || 0) - (Number(i.paid_amount) || 0)).toFixed(2))),
       };
@@ -175,11 +178,12 @@ export const salesRepo = {
 
   async createSalesInvoice(data, userId = 'usr-accountant') {
     if (data.invoice_date) validateNotPastDate(data.invoice_date, 'تاريخ فاتورة المبيعات');
-    if (data.due_date) validateNotPastDate(data.due_date, 'تاريخ استحقاق الفاتورة');
+    if (data.due_date && data.payment_terms === 'credit') validateNotPastDate(data.due_date, 'تاريخ استحقاق الفاتورة');
     const id = `sinv-${Date.now()}`;
     const invoiceNumber = data.invoice_number || `INV-SLS-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();
 
+    const paymentTerms = data.payment_terms || 'cash';
     const isExport = data.is_export ? 1 : 0;
     const currency = data.currency || 'EGP';
     const exchangeRate = Math.max(0.0001, Number(data.exchange_rate) || 1.0);
@@ -194,93 +198,154 @@ export const salesRepo = {
     let totalCogs = 0;
     const invoiceItems = [];
 
-    await db.transaction('rw', [db.sales_invoices, db.sales_invoice_items, db.products, db.settings], async () => {
-      for (let idx = 0; idx < (data.items || []).length; idx++) {
-        const item = data.items[idx];
-        const qty = Math.max(1, Number(item.quantity) || 1);
-        const unitSellingPrice = Math.max(0, Number(item.unit_selling_price) || 0);
-        const totalPrice = Number((qty * unitSellingPrice).toFixed(2));
-        subtotal += totalPrice;
+    // Calculate subtotal and line items
+    for (let idx = 0; idx < (data.items || []).length; idx++) {
+      const item = data.items[idx];
+      const qty = Math.max(1, Number(item.quantity) || 1);
+      const priceBeforeDiscount = Math.max(0, Number(item.price_before_discount ?? item.unit_selling_price) || 0);
+      const discountValue = Math.max(0, Number(item.discount_value) || 0);
+      const unitSellingPrice = Math.max(0, Number(item.unit_selling_price ?? (priceBeforeDiscount - discountValue)) || 0);
+      const totalPrice = Number((qty * unitSellingPrice).toFixed(2));
+      subtotal += totalPrice;
 
-        const prod = await db.products.get(item.product_id);
-        const currentStock = prod ? (Number(prod.current_finished_stock) || 0) : 0;
+      const unitCost = Number(item.unit_cost) || 0;
+      const totalItemCost = Number((qty * unitCost).toFixed(2));
+      totalCogs += totalItemCost;
+      const itemProfit = Number((totalPrice - totalItemCost).toFixed(2));
 
-        // Use supplied unit cost or calculate
-        const unitCost = Number(item.unit_cost) || 0;
-        const totalItemCost = Number((qty * unitCost).toFixed(2));
-        totalCogs += totalItemCost;
-        const itemProfit = Number((totalPrice - totalItemCost).toFixed(2));
+      invoiceItems.push({
+        id: `sii-${Date.now()}-${idx}`,
+        invoice_id: id,
+        product_id: item.product_id,
+        variant_id: item.variant_id || null,
+        finishing_order_id: item.finishing_order_id || null,
+        quantity: qty,
+        price_before_discount: priceBeforeDiscount,
+        discount_value: discountValue,
+        unit_cost: unitCost,
+        unit_selling_price: unitSellingPrice,
+        total_price: totalPrice,
+        total_cost: totalItemCost,
+        item_net_profit: itemProfit,
+      });
+    }
 
-        invoiceItems.push({
-          id: `sii-${Date.now()}-${idx}`,
-          invoice_id: id,
-          product_id: item.product_id,
-          finishing_order_id: item.finishing_order_id || null,
-          quantity: qty,
-          unit_cost: unitCost,
-          unit_selling_price: unitSellingPrice,
-          total_price: totalPrice,
-          total_cost: totalItemCost,
-          item_net_profit: itemProfit,
-        });
+    const vatRate = (settings && settings.vat_enabled && !isExport) ? (Number(settings.vat_rate_percent) || 14) : 0;
+    const taxAmount = Number(((subtotal * vatRate) / 100).toFixed(2));
+    const totalInvoiceAmount = Number((subtotal + taxAmount).toFixed(2));
 
-        // Deduct finished stock from product
+    const paidAmount = paymentTerms === 'cash'
+      ? totalInvoiceAmount
+      : Math.max(0, Number(data.paid_amount) || 0);
+
+    // Validation: Credit Limit on Customer
+    if (paymentTerms === 'credit' && data.customer_id) {
+      const customer = await db.customers.get(data.customer_id);
+      if (customer && customer.credit_limit > 0) {
+        const stmt = await this.getCustomerStatement(data.customer_id);
+        const currentBalance = stmt.summary?.remaining_balance || stmt.balance_due || 0;
+        const totalDueAfterThisInvoice = Number((currentBalance + (totalInvoiceAmount - paidAmount)).toFixed(2));
+        const limit = Number(customer.credit_limit) || 0;
+
+        if (totalDueAfterThisInvoice > limit) {
+          const excess = Number((totalDueAfterThisInvoice - limit).toFixed(2));
+          throw new Error(
+            `لا يمكن حفظ الفاتورة: إجمالي مديونية العميل مع الفاتورة الحالية ستصبح (${totalDueAfterThisInvoice} ج.م) وهي تتجاوز الحد الائتماني المسموح به (${limit} ج.م) بمقدار (${excess} ج.م). يرجى تحصيل دفعة نقدية أولاً أو زيادة الحد الائتماني.`
+          );
+        }
+      }
+    }
+
+    let status = 'unpaid';
+    if (paidAmount >= totalInvoiceAmount && totalInvoiceAmount > 0) {
+      status = 'paid';
+    } else if (paidAmount > 0) {
+      status = 'partially_paid';
+    }
+
+    const netProfit = CostCalculator.calculateNetProfit(subtotal, totalCogs, totalSellingExpenses);
+
+    const invoice = {
+      id,
+      invoice_number: invoiceNumber,
+      customer_id: data.customer_id,
+      outlet_id: data.outlet_id || null,
+      payment_terms: paymentTerms,
+      invoice_date: data.invoice_date || now.split('T')[0],
+      due_date: paymentTerms === 'credit' ? (data.due_date || null) : null, // Cash has NO due date
+      is_export: isExport,
+      currency,
+      exchange_rate: exchangeRate,
+      subtotal: Number(subtotal.toFixed(2)),
+      tax_amount: taxAmount,
+      shipping_expense: shipping,
+      customs_expense: customs,
+      commission_expense: commission,
+      total_selling_expenses: totalSellingExpenses,
+      total_invoice_amount: totalInvoiceAmount,
+      total_cogs: Number(totalCogs.toFixed(2)),
+      net_profit: netProfit,
+      paid_amount: paidAmount,
+      status,
+      notes: data.notes || '',
+      created_by: userId,
+      created_at: now,
+    };
+
+    await db.transaction('rw', [db.sales_invoices, db.sales_invoice_items, db.products, db.items, db.treasury_accounts, db.cash_transactions], async () => {
+      await db.sales_invoices.add(invoice);
+      for (const ii of invoiceItems) {
+        await db.sales_invoice_items.add(ii);
+
+        // Deduct finished stock from product and item
+        const prod = await db.products.get(ii.product_id);
         if (prod) {
-          const newStock = Number((currentStock - qty).toFixed(2));
+          const newStock = Number(((Number(prod.current_finished_stock) || 0) - ii.quantity).toFixed(2));
           await db.products.update(prod.id, { current_finished_stock: newStock });
+        }
+        const itemMaster = await db.items.get(ii.product_id);
+        if (itemMaster) {
+          const newStock = Number(((Number(itemMaster.current_stock) || 0) - ii.quantity).toFixed(2));
+          await db.items.update(itemMaster.id, { current_stock: newStock });
         }
       }
 
-      for (const ii of invoiceItems) {
-        await db.sales_invoice_items.add(ii);
+      // If Cash invoice or paid amount > 0, record cash inflow in outlet treasury
+      if (paidAmount > 0) {
+        let treasury = null;
+        if (data.outlet_id) {
+          treasury = await db.treasury_accounts.where('outlet_id').equals(data.outlet_id).first();
+        }
+        if (!treasury) {
+          treasury = (await db.treasury_accounts.where('is_main').equals(1).first()) ||
+                     (await db.treasury_accounts.where('account_type').equals('treasury').first());
+        }
+
+        if (treasury) {
+          const currentBal = Number(treasury.current_balance) || 0;
+          const newBal = Number((currentBal + paidAmount).toFixed(2));
+          await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
+
+          await db.cash_transactions.add({
+            id: `tx-${Date.now()}`,
+            tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+            account_id: treasury.id,
+            tx_type: 'inflow',
+            category: 'sales',
+            amount: paidAmount,
+            balance_after: newBal,
+            reference_type: 'sales_invoices',
+            reference_id: id,
+            description: `تحصيل فاتورة مبيعات ${invoiceNumber}`,
+            created_by: userId,
+            created_at: now
+          });
+        }
       }
-
-      const vatRate = (settings && settings.vat_enabled && !isExport) ? (Number(settings.vat_rate_percent) || 14) : 0;
-      const taxAmount = Number(((subtotal * vatRate) / 100).toFixed(2));
-      const totalInvoiceAmount = Number((subtotal + taxAmount).toFixed(2));
-
-      // Net profit calculation
-      const netProfit = CostCalculator.calculateNetProfit(subtotal, totalCogs, totalSellingExpenses);
-
-      const paidAmount = Math.max(0, Number(data.paid_amount) || 0);
-      let status = 'unpaid';
-      if (paidAmount >= totalInvoiceAmount && totalInvoiceAmount > 0) {
-        status = 'paid';
-      } else if (paidAmount > 0) {
-        status = 'partially_paid';
-      }
-
-      const invoice = {
-        id,
-        invoice_number: invoiceNumber,
-        customer_id: data.customer_id,
-        outlet_id: data.outlet_id || null,
-        invoice_date: data.invoice_date || now.split('T')[0],
-        due_date: data.due_date || null,
-        is_export: isExport,
-        currency,
-        exchange_rate: exchangeRate,
-        subtotal: Number(subtotal.toFixed(2)),
-        tax_amount: taxAmount,
-        shipping_expense: shipping,
-        customs_expense: customs,
-        commission_expense: commission,
-        total_selling_expenses: totalSellingExpenses,
-        total_invoice_amount: totalInvoiceAmount,
-        total_cogs: Number(totalCogs.toFixed(2)),
-        net_profit: netProfit,
-        paid_amount: paidAmount,
-        status,
-        notes: data.notes || '',
-        created_by: userId,
-        created_at: now,
-      };
-
-      await db.sales_invoices.add(invoice);
     });
 
-    await auditRepo.log(userId, 'CREATE_SALES_INVOICE', 'sales_invoices', id, null, { invoiceNumber, subtotal });
-    return await db.sales_invoices.get(id);
+    await auditRepo.log(userId, 'CREATE_SALES_INVOICE', 'sales_invoices', id, null, { invoiceNumber, subtotal, paymentTerms });
+    return invoice;
   },
 
   async collectPayment(data, userId = 'usr-accountant') {
@@ -357,7 +422,7 @@ export const salesRepo = {
   },
 
   async createCustomerReturn(data, userId = 'usr-accountant') {
-    const { customer_id, invoice_id, product_id, quantity, refund_amount, refund_method, return_date, reason } = data;
+    const { customer_id, invoice_id, product_id, quantity, refund_amount, refund_method, return_date, reason, return_mode } = data;
     if (return_date) validateNotPastDate(return_date, 'تاريخ مرتجع المبيعات');
     const returnQty = Math.max(1, Number(quantity) || 1);
     const returnAmount = Math.max(0, Number(refund_amount) || 0);
@@ -365,47 +430,98 @@ export const salesRepo = {
     const returnNumber = `RET-SLS-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();
 
-    await db.transaction('rw', [db.customer_returns, db.products, db.treasury_accounts, db.cash_transactions], async () => {
+    let actualRefundMethod = refund_method || 'deduct_balance';
+    let targetOutletId = null;
+
+    // Mode 2: Return against original invoice validation
+    if (invoice_id) {
+      const origInv = await db.sales_invoices.get(invoice_id);
+      if (!origInv) {
+        throw new Error('الفاتورة الأصلية المحددة غير موجودة');
+      }
+      targetOutletId = origInv.outlet_id;
+
+      // Check sold quantity
+      const invItems = await db.sales_invoice_items.where('invoice_id').equals(invoice_id).toArray();
+      const targetItem = invItems.find(it => it.product_id === product_id) || invItems[0];
+      if (targetItem) {
+        const soldQty = Number(targetItem.quantity) || 0;
+        // Check previously returned quantity for this invoice
+        const pastReturns = await db.customer_returns.where('invoice_id').equals(invoice_id).toArray();
+        const previouslyReturned = pastReturns
+          .filter(r => r.product_id === product_id)
+          .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+
+        const remainingSoldQty = soldQty - previouslyReturned;
+        if (returnQty > remainingSoldQty) {
+          throw new Error(
+            `الكمية المرتجعة (${returnQty}) تتجاوز الكمية المباعة المتبقية في الفاتورة الأصلية (${remainingSoldQty} قطعة)`
+          );
+        }
+      }
+
+      // If original invoice was Cash and no explicit refund_method given, refund in cash
+      if (origInv.payment_terms === 'cash' && !refund_method) {
+        actualRefundMethod = 'cash_refund';
+      }
+    }
+
+    await db.transaction('rw', [db.customer_returns, db.products, db.items, db.treasury_accounts, db.cash_transactions], async () => {
+      // Restore stock
       const prod = await db.products.get(product_id);
       if (prod) {
         const newStock = Number(((Number(prod.current_finished_stock) || 0) + returnQty).toFixed(2));
         await db.products.update(prod.id, { current_finished_stock: newStock });
       }
+      const itm = await db.items.get(product_id);
+      if (itm) {
+        const newStock = Number(((Number(itm.current_stock) || 0) + returnQty).toFixed(2));
+        await db.items.update(itm.id, { current_stock: newStock });
+      }
 
       await db.customer_returns.add({
         id: returnId,
         return_number: returnNumber,
+        return_mode: return_mode || (invoice_id ? 'against_invoice' : 'free_return'),
         customer_id,
         invoice_id: invoice_id || null,
         product_id,
         quantity: returnQty,
         refund_amount: returnAmount,
-        refund_method: refund_method || 'deduct_balance',
+        refund_method: actualRefundMethod,
         return_date: return_date || now.split('T')[0],
         reason: reason || 'مرتجع مبيعات',
         created_by: userId,
         created_at: now,
       });
 
-      // If cash refund, deduct from primary treasury
-      if (refund_method === 'cash_refund' && returnAmount > 0) {
-        const primaryAcc = (await db.treasury_accounts.where('account_type').equals('treasury').first()) || (await db.treasury_accounts.toCollection().first());
-        if (primaryAcc) {
-          const currentBal = Number(primaryAcc.current_balance) || 0;
+      // If cash refund, deduct from outlet treasury
+      if (actualRefundMethod === 'cash_refund' && returnAmount > 0) {
+        let treasury = null;
+        if (targetOutletId) {
+          treasury = await db.treasury_accounts.where('outlet_id').equals(targetOutletId).first();
+        }
+        if (!treasury) {
+          treasury = (await db.treasury_accounts.where('is_main').equals(1).first()) ||
+                     (await db.treasury_accounts.where('account_type').equals('treasury').first());
+        }
+
+        if (treasury) {
+          const currentBal = Number(treasury.current_balance) || 0;
           const newBal = Number((currentBal - returnAmount).toFixed(2));
-          await db.treasury_accounts.update(primaryAcc.id, { current_balance: newBal });
+          await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
 
           await db.cash_transactions.add({
             id: `tx-${Date.now()}`,
             tx_number: `TXN-${Date.now().toString().slice(-4)}`,
-            account_id: primaryAcc.id,
+            account_id: treasury.id,
             tx_type: 'outflow',
-            category: 'other',
+            category: 'sales_return',
             amount: returnAmount,
             balance_after: newBal,
             reference_type: 'customer_returns',
             reference_id: returnId,
-            description: `رد نقدية لمرتجع عميل ${returnNumber}`,
+            description: `رد نقدية لمرتجع عميل ${returnNumber} من خزينة المنفذ`,
             created_by: userId,
             created_at: now,
           });

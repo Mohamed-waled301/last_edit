@@ -7,57 +7,96 @@ import {
   ArrowLeftRight, 
   Download, 
   Building,
+  CheckCircle2, 
+  AlertTriangle,
+  Receipt,
+  Store,
+  Clock,
+  Layers,
   X
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import { api } from '../services/api';
-import { formatCurrency, formatNumber, formatDate, getTodayDateString, isPastDate } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatDate, getTodayDateString } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
+import { FieldError, validators } from '../utils/validation';
 
 export default function CashModule({ onBack, onNotify }) {
-  const [accountData, setAccountData] = useState({ accounts: [], totalCash: 0, totalBank: 0, grandTotal: 0 });
+  const [activeTab, setActiveTab] = useState('disbursements'); // 'disbursements' | 'treasuries' | 'transfer' | 'closing' | 'transactions'
+  const [treasuries, setTreasuries] = useState([]);
+  const [mainTreasury, setMainTreasury] = useState(null);
+  const [expenseCodes, setExpenseCodes] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [dailyClosings, setDailyClosings] = useState([]);
+  const [outlets, setOutlets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Modals
-  const [showAddAccountModal, setShowAddAccountModal] = useState(false);
-  const [showTxModal, setShowTxModal] = useState(false);
-  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showDisburseModal, setShowDisburseModal] = useState(false);
+  const [showOutletTransferModal, setShowOutletTransferModal] = useState(false);
+  const [showClosingModal, setShowClosingModal] = useState(false);
 
-  // Form State
-  const [newAccount, setNewAccount] = useState({
-    name: '',
-    account_type: 'treasury',
-    initial_balance: '',
-    bank_account_number: '',
-    bank_name: ''
-  });
-
-  const [txForm, setTxForm] = useState({
+  // Cash Disbursement Form (Requirement F)
+  const [disburseForm, setDisburseForm] = useState({
+    expense_code_id: '',
+    expense_name: '',
     account_id: '',
-    tx_type: 'inflow', // 'inflow' | 'outflow'
-    category: 'other',
     amount: '',
-    description: '',
-    tx_date: getTodayDateString()
+    tx_date: getTodayDateString(),
+    payment_method: 'نقدية (كاش)',
+    notes: ''
   });
 
-  const [transferForm, setTransferForm] = useState({
-    from_account_id: '',
-    to_account_id: '',
+  // Transfer from Outlet to Main Treasury (Requirement A5)
+  const [outletTransferForm, setOutletTransferForm] = useState({
+    outlet_id: '',
     amount: '',
+    tx_date: getTodayDateString(),
+    notes: 'توريد إيراد المنفذ إلى الخزينة الرئيسية المجمعة'
+  });
+
+  // Daily Shift Closing Form (Requirement A5)
+  const [closingForm, setClosingForm] = useState({
+    outlet_id: '',
+    closing_date: getTodayDateString(),
+    cashier_name: 'كاشير الوردية',
+    opening_cash: '500',
+    cash_sales: '0',
+    cash_expenses: '0',
+    actual_cash_counted: '',
     notes: ''
   });
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [accRes, txRes] = await Promise.all([
-        api.getAccounts(),
-        api.getTransactions()
+      const [tRes, ecRes, txRes, dcRes, outRes] = await Promise.all([
+        api.getTreasuries ? api.getTreasuries() : api.getAccounts(),
+        api.getExpenseCodes ? api.getExpenseCodes() : Promise.resolve({ data: [] }),
+        api.getTransactions(),
+        api.getDailyClosings ? api.getDailyClosings() : Promise.resolve({ data: [] }),
+        api.getOutlets()
       ]);
-      setAccountData(accRes.data || { accounts: [], totalCash: 0, totalBank: 0, grandTotal: 0 });
+
+      const trData = tRes.data || {};
+      if (trData.main_treasury || trData.outlet_treasuries) {
+        setMainTreasury(trData.main_treasury);
+        setTreasuries(trData.outlet_treasuries || []);
+      } else {
+        const accs = trData.accounts || trData || [];
+        setTreasuries(accs);
+        setMainTreasury(accs.find(a => a.is_main) || { name: 'الخزينة الرئيسية المجمعة', current_balance: 0 });
+      }
+
+      setExpenseCodes(ecRes.data || []);
       setTransactions(txRes.data || []);
+      setDailyClosings(dcRes.data || []);
+      setOutlets(outRes.data || []);
+
+      // Default disburse treasury
+      if (treasuries.length > 0 && !disburseForm.account_id) {
+        setDisburseForm(prev => ({ ...prev, account_id: treasuries[0].id }));
+      }
     } catch (err) {
       console.error('Failed to load cash data:', err);
     } finally {
@@ -67,50 +106,109 @@ export default function CashModule({ onBack, onNotify }) {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeTab]);
 
-  const handleSaveAccount = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await api.createAccount(newAccount);
-      onNotify(res.message);
-      setShowAddAccountModal(false);
-      setNewAccount({ name: '', account_type: 'treasury', initial_balance: '', bank_account_number: '', bank_name: '' });
-      loadData();
-    } catch (err) {
-      alert(err.message);
+  // When picking an expense code, auto-fill default amount
+  const handleExpenseCodeChange = (codeId) => {
+    const code = expenseCodes.find(c => String(c.id) === String(codeId));
+    if (code) {
+      setDisburseForm(prev => ({
+        ...prev,
+        expense_code_id: code.id,
+        expense_name: code.name,
+        amount: code.default_amount ? String(code.default_amount) : prev.amount
+      }));
+    } else {
+      setDisburseForm(prev => ({
+        ...prev,
+        expense_code_id: '',
+        expense_name: '',
+        amount: ''
+      }));
     }
   };
 
-  const handleSaveTx = async (e) => {
+  // Handle Cash Disbursement Save (Requirement F)
+  const handleSaveDisbursement = async (e) => {
     e.preventDefault();
-    if (txForm.tx_date && isPastDate(txForm.tx_date)) {
-      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+    if (!disburseForm.expense_code_id || !validators.positiveNumber(disburseForm.amount) || !disburseForm.account_id) {
       return;
     }
     try {
-      const res = await api.recordCashTransaction(txForm);
-      onNotify(res.message);
-      setShowTxModal(false);
-      setTxForm({ account_id: '', tx_type: 'inflow', category: 'other', amount: '', description: '', tx_date: getTodayDateString() });
+      const payload = {
+        ...disburseForm,
+        amount: parseFloat(disburseForm.amount)
+      };
+      const res = await api.disburseExpense(payload);
+      onNotify(res.message || 'تم صرف النقدية وتسجيل سند الصرف بنجاح ✓');
+      setShowDisburseModal(false);
+      setDisburseForm({
+        expense_code_id: '',
+        expense_name: '',
+        account_id: treasuries[0]?.id || '',
+        amount: '',
+        tx_date: getTodayDateString(),
+        payment_method: 'نقدية (كاش)',
+        notes: ''
+      });
       loadData();
     } catch (err) {
       alert(err.message);
     }
   };
 
-  const handleSaveTransfer = async (e) => {
+  // Handle Transfer Outlet -> Main (Requirement A5)
+  const handleSaveOutletTransfer = async (e) => {
     e.preventDefault();
+    if (!outletTransferForm.outlet_id || !validators.positiveNumber(outletTransferForm.amount)) {
+      return;
+    }
     try {
-      const res = await api.transferCash(transferForm);
-      onNotify(res.message);
-      setShowTransferModal(false);
-      setTransferForm({ from_account_id: '', to_account_id: '', amount: '', notes: '' });
+      const res = await api.transferOutletToMain(
+        outletTransferForm.outlet_id,
+        parseFloat(outletTransferForm.amount),
+        outletTransferForm.notes
+      );
+      onNotify(res.message || 'تم توريد النقدية من المنفذ إلى الخزينة الرئيسية بنجاح ✓');
+      setShowOutletTransferModal(false);
+      setOutletTransferForm({
+        outlet_id: '',
+        amount: '',
+        tx_date: getTodayDateString(),
+        notes: 'توريد إيراد المنفذ إلى الخزينة الرئيسية المجمعة'
+      });
       loadData();
     } catch (err) {
       alert(err.message);
     }
   };
+
+  // Handle Daily Shift Closing Save (Requirement A5)
+  const handleSaveClosing = async (e) => {
+    e.preventDefault();
+    if (!closingForm.outlet_id || !validators.positiveNumber(closingForm.actual_cash_counted)) {
+      return;
+    }
+    try {
+      const payload = {
+        ...closingForm,
+        opening_cash: parseFloat(closingForm.opening_cash) || 0,
+        cash_sales: parseFloat(closingForm.cash_sales) || 0,
+        cash_expenses: parseFloat(closingForm.cash_expenses) || 0,
+        actual_cash_counted: parseFloat(closingForm.actual_cash_counted) || 0
+      };
+      const res = await api.createDailyClosing(payload);
+      onNotify(res.message || 'تم اعتماد تقفيل الوردية اليومية بنجاح ✓');
+      setShowClosingModal(false);
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // Aggregated total across all outlets + main treasury
+  const allTreasuriesList = mainTreasury ? [mainTreasury, ...treasuries] : treasuries;
+  const aggregatedCashTotal = allTreasuriesList.reduce((sum, t) => sum + (parseFloat(t.current_balance) || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -119,344 +217,467 @@ export default function CashModule({ onBack, onNotify }) {
         <div className="flex items-center gap-3">
           <BackButton onClick={onBack} />
           <div>
-            <h2 className="text-xl font-bold text-gray-900 leading-none">الخزينة والأرصدة النقدية</h2>
-            <span className="text-xs text-gray-500 font-medium">حسابات الخزائن، البنوك، أذون القبض والصرف، والتحويلات</span>
+            <h2 className="text-xl font-bold text-gray-900 leading-none">الخزينة وصرف النقدية ومنافذ البيع</h2>
+            <span className="text-xs text-gray-500 font-medium">
+              صرف النقدية بأكواد المصروفات، الخزينة المجمعة، توريد المنافذ، وتقفيل الوردية اليومي
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              const headers = ['رقم الإذن', 'التاريخ', 'الحساب', 'نوع الحركة', 'المبلغ', 'الرصيد بعد الحركة', 'البيان'];
-              const rows = transactions.map(t => [
-                t.tx_number, t.created_at, t.account_name, t.tx_type === 'inflow' ? 'وارد قبض' : 'صادر صرف', t.amount, t.balance_after, t.description
-              ]);
-              exportToExcel('حركة_الخزنة_والنقدية', headers, rows);
-            }}
-            className="h-10 px-3.5 bg-white hover:bg-gray-50 text-gray-700 rounded-md font-semibold text-sm border border-gray-300 flex items-center gap-2 cursor-pointer transition-colors"
-          >
-            <Download className="w-4 h-4 text-gray-600" />
-            <span>تصدير Excel</span>
-          </button>
-          <button
-            onClick={() => setShowTransferModal(true)}
-            className="h-10 px-3.5 bg-white hover:bg-gray-50 text-gray-700 rounded-md font-semibold text-sm border border-gray-300 flex items-center gap-2 cursor-pointer transition-colors"
-          >
-            <ArrowLeftRight className="w-4 h-4 text-gray-600" />
-            <span>تحويل بين الخزائن</span>
-          </button>
-          <button
-            onClick={() => setShowTxModal(true)}
-            className="h-10 px-4 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-md font-bold text-sm flex items-center gap-2 cursor-pointer transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ إذن قبض أو صرف</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Live Balances Summary Boxes */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-gray-200 rounded-md p-4">
-          <span className="text-xs font-semibold text-gray-500">إجمالي النقدية بالخزائن</span>
-          <div className="text-2xl font-bold text-gray-900 mt-1">
-            {formatCurrency(accountData.totalCash)}
-          </div>
-          <span className="text-xs text-gray-400 font-medium">الخزينة النقدية ومنافذ التوزيع</span>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-md p-4">
-          <span className="text-xs font-semibold text-gray-500">إجمالي الأرصدة البنكية</span>
-          <div className="text-2xl font-bold text-gray-900 mt-1">
-            {formatCurrency(accountData.totalBank)}
-          </div>
-          <span className="text-xs text-gray-400 font-medium">الحسابات والتحويلات الرسمية</span>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-md p-4">
-          <span className="text-xs font-semibold text-gray-500">إجمالي السيولة المتاحة</span>
-          <div className="text-2xl font-bold text-green-700 mt-1">
-            {formatCurrency(accountData.grandTotal)}
-          </div>
-          <span className="text-xs text-gray-400 font-medium">رصيد حي لحظي</span>
-        </div>
-      </div>
-
-      {/* Accounts List Bar */}
-      <div className="bg-white border border-gray-200 rounded-md p-4">
-        <div className="flex items-center justify-between mb-3 border-b border-gray-100 pb-2">
-          <h3 className="text-base font-bold text-gray-900">تفاصيل الخزائن والحسابات</h3>
-          <button
-            onClick={() => setShowAddAccountModal(true)}
-            className="text-xs text-[#1F3A5F] font-bold hover:underline cursor-pointer"
-          >
-            + إضافة خزنة أو حساب بنكي
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {accountData.accounts.map(acc => (
-            <div key={acc.id} className="p-3 bg-gray-50 rounded-md border border-gray-200 flex justify-between items-center">
-              <div>
-                <span className="text-sm font-bold text-gray-900 block">{acc.name}</span>
-                <span className="text-xs text-gray-500">
-                  {acc.account_type === 'treasury' ? 'خزنة نقدية' : `بنكي (${acc.bank_name || ''})`}
-                </span>
-              </div>
-              <div className="text-left font-bold text-base text-gray-900">
-                {formatCurrency(acc.current_balance)}
-              </div>
-            </div>
+        {/* Tab Buttons */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[
+            { id: 'disbursements', label: 'صرف النقدية (مصروفات)' },
+            { id: 'treasuries', label: 'الخزائن والخزينة المجمعة' },
+            { id: 'transfer', label: 'توريد المنفذ للخزينة الرئيسية' },
+            { id: 'closing', label: 'تقفيل الوردية اليومي للمنافذ' },
+            { id: 'transactions', label: 'سجل حركات النقدية' }
+          ].map(t => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`px-3 py-1.5 rounded-md font-bold text-xs cursor-pointer ${
+                activeTab === t.id
+                  ? 'bg-[#1F3A5F] text-white shadow-sm'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+              }`}
+            >
+              {t.label}
+            </button>
           ))}
         </div>
       </div>
 
-      {/* Cash Transactions Table */}
-      <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-base font-bold text-gray-900">سجل حركة المقبوضات والمصروفات</h3>
-          <span className="text-xs text-gray-500 font-medium">آخر 200 حركة نقدية وبنكية</span>
+      {/* Aggregated Header Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white border border-gray-200 rounded-md p-4">
+          <span className="text-xs font-semibold text-gray-500">الخزينة الرئيسية المجمعة (المركزية)</span>
+          <div className="text-2xl font-bold text-[#1F3A5F] mt-1 font-mono">
+            {formatCurrency(mainTreasury?.current_balance || 0)}
+          </div>
+          <span className="text-xs text-gray-400 font-medium">تجمع وتستقبل إيرادات كافة المنافذ</span>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-right border-collapse text-sm">
-            <thead>
-              <tr className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200 text-xs">
-                <th className="py-3 px-4">رقم الإذن</th>
-                <th className="py-3 px-4">التاريخ</th>
-                <th className="py-3 px-4">الخزنة / البنك</th>
-                <th className="py-3 px-4 text-center">نوع الحركة</th>
-                <th className="py-3 px-4 text-left">المبلغ</th>
-                <th className="py-3 px-4 text-left">الرصيد بعد الحركة</th>
-                <th className="py-3 px-4">البيان والشرح</th>
-                <th className="py-3 px-4">المسؤول</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {transactions.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-gray-500 font-medium">
-                    لا توجد حركات نقدية مسجلة.
-                  </td>
-                </tr>
-              ) : (
-                transactions.map(t => (
-                  <tr key={t.id} className="hover:bg-blue-50/20 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-gray-700">{t.tx_number}</td>
-                    <td className="py-3 px-4 text-gray-600 text-xs">{formatDate(t.created_at)}</td>
-                    <td className="py-3 px-4 text-gray-800 font-medium">{t.account_name}</td>
-                    <td className="py-3 px-4 text-center">
-                      {t.tx_type === 'inflow' ? (
-                        <span className="erp-badge-green text-xs">وارد / قبض (+)</span>
-                      ) : (
-                        <span className="erp-badge-red text-xs">صادر / صرف (-)</span>
-                      )}
-                    </td>
-                    <td className={`py-3 px-4 text-left font-bold ${t.tx_type === 'inflow' ? 'text-green-700' : 'text-red-600'}`}>
-                      {t.tx_type === 'inflow' ? `+${formatCurrency(t.amount)}` : `-${formatCurrency(t.amount)}`}
-                    </td>
-                    <td className="py-3 px-4 text-left font-semibold text-gray-900">{formatCurrency(t.balance_after)}</td>
-                    <td className="py-3 px-4 text-gray-700 text-xs">{t.description}</td>
-                    <td className="py-3 px-4 text-gray-500 text-xs">{t.user_name || 'النظام'}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="bg-white border border-gray-200 rounded-md p-4">
+          <span className="text-xs font-semibold text-gray-500">إجمالي النقدية بمنافذ البيع ({treasuries.length} خزينة منفذ)</span>
+          <div className="text-2xl font-bold text-green-700 mt-1 font-mono">
+            {formatCurrency(treasuries.reduce((s, t) => s + (t.current_balance || 0), 0))}
+          </div>
+          <span className="text-xs text-gray-400 font-medium">سيولة نقدية في أدراج الكاشير بالمعارض</span>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-md p-4">
+          <span className="text-xs font-semibold text-gray-500">إجمالي السيولة النقدية الكلية</span>
+          <div className="text-2xl font-bold text-gray-900 mt-1 font-mono">
+            {formatCurrency(aggregatedCashTotal)}
+          </div>
+          <span className="text-xs text-gray-400 font-medium">الرصيد الفعلي المتاح بالشركة</span>
         </div>
       </div>
 
-      {/* MODAL 1: ADD ACCOUNT */}
-      {showAddAccountModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-md p-6 max-w-lg w-full border border-gray-300">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900">إضافة خزنة أو حساب بنكي جديد</h3>
-              <button onClick={() => setShowAddAccountModal(false)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
+      {/* TAB 1: CASH DISBURSEMENTS (Requirement F) */}
+      {activeTab === 'disbursements' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-gray-200 rounded-md p-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-gray-900">سندات صرف النقدية (مصروفات تشغيلية)</h3>
+              <p className="text-xs text-gray-500 font-medium">اختيار كود المصروف، إدراج المبلغ الافتراضي وتعديله، واختيار الخزينة المنصرف منها</p>
             </div>
+            <button
+              onClick={() => setShowDisburseModal(true)}
+              className="h-10 px-4 bg-red-600 hover:bg-red-700 text-white rounded-md font-bold text-sm flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ صرف نقدية جديد (إذن صرف)</span>
+            </button>
+          </div>
 
-            <form onSubmit={handleSaveAccount} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">اسم الحساب *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="مثال: خزنة المعرض / حساب بنك مصر"
-                  value={newAccount.name}
-                  onChange={e => setNewAccount({ ...newAccount, name: e.target.value })}
-                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">نوع الحساب</label>
-                  <select
-                    value={newAccount.account_type}
-                    onChange={e => setNewAccount({ ...newAccount, account_type: e.target.value })}
-                    className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
-                  >
-                    <option value="treasury">خزنة كاش</option>
-                    <option value="bank">حساب بنكي</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">الرصيد الافتتاحي</label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={newAccount.initial_balance}
-                    onChange={e => setNewAccount({ ...newAccount, initial_balance: e.target.value })}
-                    className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {newAccount.account_type === 'bank' && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">اسم البنك</label>
-                    <input
-                      type="text"
-                      placeholder="البنك الأهلي / بنك مصر"
-                      value={newAccount.bank_name}
-                      onChange={e => setNewAccount({ ...newAccount, bank_name: e.target.value })}
-                      className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">رقم الحساب</label>
-                    <input
-                      type="text"
-                      value={newAccount.bank_account_number}
-                      onChange={e => setNewAccount({ ...newAccount, bank_account_number: e.target.value })}
-                      className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAddAccountModal(false)}
-                  className="h-12 px-6 rounded-md font-medium text-sm border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 cursor-pointer"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="h-12 px-6 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-md font-bold text-sm cursor-pointer"
-                >
-                  حفظ الحساب ✓
-                </button>
-              </div>
-            </form>
+          <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200 text-xs">
+                    <th className="py-3 px-4">رقم السند</th>
+                    <th className="py-3 px-4">التاريخ</th>
+                    <th className="py-3 px-4">كود / بند المصروف</th>
+                    <th className="py-3 px-4">الخزينة المنصرف منها</th>
+                    <th className="py-3 px-4 text-left">المبلغ المنصرف</th>
+                    <th className="py-3 px-4 text-left">الرصيد المتبقي</th>
+                    <th className="py-3 px-4">البيان والملاحظات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {transactions.filter(t => t.tx_type === 'outflow').length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-gray-500 font-medium">
+                        لا توجد سندات صرف مسجلة حتى الآن.
+                      </td>
+                    </tr>
+                  ) : (
+                    transactions.filter(t => t.tx_type === 'outflow').map(t => (
+                      <tr key={t.id} className="hover:bg-red-50/20 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-gray-900">{t.tx_number || `TX-${t.id}`}</td>
+                        <td className="py-3 px-4 text-xs text-gray-600">{formatDate(t.created_at || t.tx_date)}</td>
+                        <td className="py-3 px-4 font-bold text-red-700">{t.category || t.expense_name || 'مصروف تشغيل'}</td>
+                        <td className="py-3 px-4 text-xs font-semibold text-gray-700">{t.account_name}</td>
+                        <td className="py-3 px-4 text-left font-mono font-black text-red-600">
+                          -{formatCurrency(t.amount)}
+                        </td>
+                        <td className="py-3 px-4 text-left font-mono text-xs text-gray-600">{formatCurrency(t.balance_after || 0)}</td>
+                        <td className="py-3 px-4 text-xs text-gray-600">{t.description || '-'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 2: RECORD TRANSACTION */}
-      {showTxModal && (
+      {/* TAB 2: TREASURIES SCREEN (Requirement A5) */}
+      {activeTab === 'treasuries' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-gray-200 rounded-md p-3 flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-gray-900">هيكل الخزائن: خزينة لكل منفذ بيع + الخزينة المركزية المجمعة</h3>
+              <p className="text-xs text-gray-500 font-medium">الخزينة الرئيسية تجمع وتراقب حركة كافة خزائن المعارض والفروع</p>
+            </div>
+            <button
+              onClick={() => setShowOutletTransferModal(true)}
+              className="h-10 px-4 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-md font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm"
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              <span>تحويل من منفذ للخزينة الرئيسية</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Main Treasury Card */}
+            {mainTreasury && (
+              <div className="bg-gradient-to-br from-[#1F3A5F] to-[#12243d] text-white rounded-md p-5 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="w-5 h-5 text-amber-400" />
+                    <span className="font-bold text-base">{mainTreasury.name}</span>
+                  </div>
+                  <span className="bg-amber-400 text-slate-900 text-xs px-2.5 py-0.5 rounded font-black">
+                    الخزينة المجمعة المركزية
+                  </span>
+                </div>
+                <div className="text-3xl font-black font-mono tracking-tight text-emerald-400">
+                  {formatCurrency(mainTreasury.current_balance || 0)}
+                </div>
+                <div className="text-xs text-gray-300 pt-2 border-t border-white/10 flex justify-between">
+                  <span>تستقبل توريدات نهاية اليوم من كافة المعارض</span>
+                  <span className="font-semibold text-white">حساب رقم #1</span>
+                </div>
+              </div>
+            )}
+
+            {/* Outlet Treasuries */}
+            {treasuries.map(t => (
+              <div key={t.id} className="bg-white border border-gray-200 rounded-md p-5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Store className="w-4 h-4 text-blue-800" />
+                    <span className="font-bold text-gray-900 text-sm">{t.name}</span>
+                  </div>
+                  <span className="bg-blue-50 text-blue-900 text-xs px-2 py-0.5 rounded font-semibold">
+                    خزينة منفذ بيع
+                  </span>
+                </div>
+                <div className="text-2xl font-bold font-mono text-gray-900">
+                  {formatCurrency(t.current_balance || 0)}
+                </div>
+                <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+                  <span>الفرع / المنفذ: {t.outlet_name || 'معرض الملابس'}</span>
+                  <button
+                    onClick={() => {
+                      setOutletTransferForm(prev => ({ ...prev, outlet_id: t.outlet_id || t.id }));
+                      setShowOutletTransferModal(true);
+                    }}
+                    className="text-[#1F3A5F] font-bold hover:underline cursor-pointer"
+                  >
+                    توريد للرئيسية ←
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: TRANSFER OUTLET -> MAIN (Requirement A5) */}
+      {activeTab === 'transfer' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-gray-200 rounded-md p-3 flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-gray-900">توريد نقدية من منافذ البيع إلى الخزينة الرئيسية</h3>
+              <p className="text-xs text-gray-500 font-medium">ترحيل متحصلات المبيعات اليومية من خزينة الفرع إلى الخزينة المركزية المجمعة</p>
+            </div>
+            <button
+              onClick={() => setShowOutletTransferModal(true)}
+              className="h-10 px-4 bg-[#1F3A5F] text-white rounded-md font-bold text-sm flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ إذن توريد جديد</span>
+            </button>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
+            <table className="w-full text-right border-collapse text-sm">
+              <thead className="bg-gray-100 border-b border-gray-200 text-xs font-bold text-gray-700">
+                <tr>
+                  <th className="py-3 px-4">رقم التحويل</th>
+                  <th className="py-3 px-4">التاريخ</th>
+                  <th className="py-3 px-4">منفذ البيع (المصدر)</th>
+                  <th className="py-3 px-4">إلى الخزينة (الوجهة)</th>
+                  <th className="py-3 px-4 text-left">المبلغ المحول</th>
+                  <th className="py-3 px-4">البيان</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {transactions.filter(t => t.category === 'تحويل من منفذ للخزينة الرئيسية' || t.tx_type === 'transfer').length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-gray-500 font-medium">
+                      لا توجد حركات توريد مسجلة.
+                    </td>
+                  </tr>
+                ) : (
+                  transactions.filter(t => t.category === 'تحويل من منفذ للخزينة الرئيسية' || t.tx_type === 'transfer').map(t => (
+                    <tr key={t.id} className="hover:bg-blue-50/20">
+                      <td className="py-3 px-4 font-mono font-bold text-gray-900">{t.tx_number || `TR-${t.id}`}</td>
+                      <td className="py-3 px-4 text-xs text-gray-600">{formatDate(t.created_at || t.tx_date)}</td>
+                      <td className="py-3 px-4 font-semibold text-gray-800">{t.from_account_name || 'منفذ البيع'}</td>
+                      <td className="py-3 px-4 font-bold text-[#1F3A5F]">{mainTreasury?.name || 'الخزينة الرئيسية'}</td>
+                      <td className="py-3 px-4 text-left font-mono font-bold text-green-700">{formatCurrency(t.amount)}</td>
+                      <td className="py-3 px-4 text-xs text-gray-600">{t.description || '-'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: DAILY CLOSING (Requirement A5: Daily closing per outlet) */}
+      {activeTab === 'closing' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-gray-200 rounded-md p-3 flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-gray-900">تقفيل الوردية اليومي لمنافذ البيع (Daily Shift Closings)</h3>
+              <p className="text-xs text-gray-500 font-medium">مطابقة الرصيد الدفتري مع النقدية الفعلية بالدرج وتوثيق العجز أو الزيادة</p>
+            </div>
+            <button
+              onClick={() => setShowClosingModal(true)}
+              className="h-10 px-4 bg-[#1F3A5F] text-white rounded-md font-bold text-sm flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ تقفيل وردية جديد</span>
+            </button>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
+            <table className="w-full text-right border-collapse text-sm">
+              <thead className="bg-gray-100 border-b border-gray-200 text-xs font-bold text-gray-700">
+                <tr>
+                  <th className="py-3 px-4">رقم التقفيل</th>
+                  <th className="py-3 px-4">التاريخ</th>
+                  <th className="py-3 px-4">منفذ البيع</th>
+                  <th className="py-3 px-4">اسم الكاشير</th>
+                  <th className="py-3 px-4 text-center">عهدة البداية</th>
+                  <th className="py-3 px-4 text-center">مبيعات نقدية</th>
+                  <th className="py-3 px-4 text-center">مصروفات</th>
+                  <th className="py-3 px-4 text-left">المعدود بالدرج</th>
+                  <th className="py-3 px-4 text-center">الفارق (عجز/زيادة)</th>
+                  <th className="py-3 px-4 text-center">الحالة</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {dailyClosings.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="py-8 text-center text-gray-500 font-medium">
+                      لا توجد تقفيلات وردية مسجلة.
+                    </td>
+                  </tr>
+                ) : (
+                  dailyClosings.map(dc => {
+                    const variance = parseFloat(dc.variance) || 0;
+                    return (
+                      <tr key={dc.id} className="hover:bg-blue-50/20">
+                        <td className="py-3 px-4 font-mono font-bold text-gray-900">{dc.closing_number || `CLS-${dc.id}`}</td>
+                        <td className="py-3 px-4 text-xs text-gray-600">{formatDate(dc.closing_date)}</td>
+                        <td className="py-3 px-4 font-bold text-gray-800">{dc.outlet_name}</td>
+                        <td className="py-3 px-4 text-xs text-gray-700">{dc.cashier_name}</td>
+                        <td className="py-3 px-4 text-center font-mono text-xs">{formatCurrency(dc.opening_cash)}</td>
+                        <td className="py-3 px-4 text-center font-mono text-xs text-green-700">+{formatCurrency(dc.cash_sales)}</td>
+                        <td className="py-3 px-4 text-center font-mono text-xs text-red-600">-{formatCurrency(dc.cash_expenses)}</td>
+                        <td className="py-3 px-4 text-left font-mono font-bold text-blue-900">{formatCurrency(dc.actual_cash_counted)}</td>
+                        <td className="py-3 px-4 text-center font-mono font-bold">
+                          {variance === 0 ? (
+                            <span className="text-green-700 text-xs">مطابق ✓</span>
+                          ) : variance > 0 ? (
+                            <span className="text-blue-700 text-xs">+{formatCurrency(variance)} (زيادة)</span>
+                          ) : (
+                            <span className="text-red-600 text-xs">{formatCurrency(variance)} (عجز!)</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="erp-badge-green text-xs">معتمد ✓</span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: ALL TRANSACTIONS */}
+      {activeTab === 'transactions' && (
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
+          <table className="w-full text-right border-collapse text-sm">
+            <thead className="bg-gray-100 border-b border-gray-200 text-xs font-bold text-gray-700">
+              <tr>
+                <th className="py-3 px-4">رقم الحركة</th>
+                <th className="py-3 px-4">التاريخ</th>
+                <th className="py-3 px-4">الحساب / الخزينة</th>
+                <th className="py-3 px-4">النوع</th>
+                <th className="py-3 px-4 text-left">المبلغ</th>
+                <th className="py-3 px-4 text-left">الرصيد بعدها</th>
+                <th className="py-3 px-4">البيان</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {transactions.map(t => (
+                <tr key={t.id} className="hover:bg-blue-50/20">
+                  <td className="py-3 px-4 font-mono font-bold text-gray-900">{t.tx_number || `TX-${t.id}`}</td>
+                  <td className="py-3 px-4 text-xs text-gray-600">{formatDate(t.created_at || t.tx_date)}</td>
+                  <td className="py-3 px-4 text-xs font-semibold text-gray-800">{t.account_name}</td>
+                  <td className="py-3 px-4 text-xs">
+                    {t.tx_type === 'inflow' ? (
+                      <span className="erp-badge-green">قبض وارد</span>
+                    ) : (
+                      <span className="erp-badge-red">صرف صادر</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-left font-mono font-bold">
+                    <span className={t.tx_type === 'inflow' ? 'text-green-700' : 'text-red-600'}>
+                      {t.tx_type === 'inflow' ? `+${formatCurrency(t.amount)}` : `-${formatCurrency(t.amount)}`}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-left font-mono text-xs text-gray-700">{formatCurrency(t.balance_after || 0)}</td>
+                  <td className="py-3 px-4 text-xs text-gray-600">{t.description || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* MODAL: CASH DISBURSEMENT (Requirement F) */}
+      {showDisburseModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-md p-6 max-w-lg w-full border border-gray-300">
-            <div className="flex items-center justify-between pb-3 mb-2 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900">إذن قبض أو صرف مباشر</h3>
-              <button onClick={() => setShowTxModal(false)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-200">
+              <h3 className="text-base font-bold text-gray-900">صرف نقدية (إذن صرف مصروفات)</h3>
+              <button onClick={() => setShowDisburseModal(false)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-xs text-gray-500 font-medium mb-4">
-              تسجيل مصروفات النثرية، البوفيه، الصيانة، أو إيداعات وسحوبات صاحب العمل
+            <p className="text-xs text-gray-500 mb-4">
+              اختر كود المصروف وسيتم تحميل المبلغ الافتراضي تلقائياً مع إمكانية تعديله وخصمه من الخزينة.
             </p>
 
-            <form onSubmit={handleSaveTx} className="space-y-4">
+            <form onSubmit={handleSaveDisbursement} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">الخزنة / الحساب البنكي *</label>
+                <label className="block font-bold text-gray-700 mb-1">كود المصروف *</label>
                 <select
                   required
-                  value={txForm.account_id}
-                  onChange={e => setTxForm({ ...txForm, account_id: e.target.value })}
-                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                  value={disburseForm.expense_code_id}
+                  onChange={e => handleExpenseCodeChange(e.target.value)}
+                  className="w-full h-10 rounded border border-gray-300 px-3 text-xs focus:border-[#1F3A5F] focus:outline-none"
                 >
-                  <option value="">اختر الخزنة...</option>
-                  {accountData.accounts.map(acc => (
-                    <option key={acc.id} value={acc.id}>{acc.name} (المتاح: {formatCurrency(acc.current_balance)})</option>
+                  <option value="">اختر كود المصروف من القائمة...</option>
+                  {expenseCodes.map(ec => (
+                    <option key={ec.id} value={ec.id}>
+                      {ec.code || ec.id} - {ec.name} (الافتراضي: {formatCurrency(ec.default_amount || 0)})
+                    </option>
                   ))}
                 </select>
+                {!disburseForm.expense_code_id && <FieldError error="يرجى اختيار كود المصروف" />}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">المبلغ المراد صرفه (جنيه) *</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  required
+                  placeholder="المبلغ"
+                  value={disburseForm.amount}
+                  onChange={e => setDisburseForm({ ...disburseForm, amount: e.target.value })}
+                  className="w-full h-10 rounded border border-gray-300 px-3 font-bold text-red-600 text-sm focus:border-[#1F3A5F] focus:outline-none"
+                />
+                {!validators.positiveNumber(disburseForm.amount) && <FieldError error="أدخل مبلغاً أكبر من الصفر" />}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">نوع الحركة *</label>
+                  <label className="block font-bold text-gray-700 mb-1">الصرف من خزينة *</label>
                   <select
-                    value={txForm.tx_type}
-                    onChange={e => setTxForm({ ...txForm, tx_type: e.target.value })}
-                    className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
-                  >
-                    <option value="inflow">إذن قبض (وارد للخزنة +)</option>
-                    <option value="outflow">إذن صرف (صادر من الخزنة -)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">المبلغ (جنيه) *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="any"
                     required
-                    value={txForm.amount}
-                    onChange={e => setTxForm({ ...txForm, amount: e.target.value })}
-                    className="w-full h-12 rounded-md border border-gray-300 px-3 text-base font-bold focus:border-[#1F3A5F] focus:outline-none"
+                    value={disburseForm.account_id}
+                    onChange={e => setDisburseForm({ ...disburseForm, account_id: e.target.value })}
+                    className="w-full h-10 rounded border border-gray-300 px-2 text-xs"
+                  >
+                    {allTreasuriesList.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} (المتاح: {formatCurrency(t.current_balance || 0)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">تاريخ الصرف *</label>
+                  <input
+                    type="date"
+                    required
+                    value={disburseForm.tx_date}
+                    onChange={e => setDisburseForm({ ...disburseForm, tx_date: e.target.value })}
+                    className="w-full h-10 rounded border border-gray-300 px-3 text-xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">تاريخ الحركة</label>
-                <input
-                  type="date"
-                  min={getTodayDateString()}
-                  value={txForm.tx_date}
-                  onChange={e => {
-                    if (isPastDate(e.target.value)) {
-                      alert('ممنوع اعتماد تاريخ في الماضي! يجب اختيار تاريخ اليوم أو تاريخ مستقبلي.');
-                      return;
-                    }
-                    setTxForm({ ...txForm, tx_date: e.target.value });
-                  }}
-                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">بيان وشرح الحركة *</label>
+                <label className="block font-bold text-gray-700 mb-1">ملاحظات وبيان الصرف</label>
                 <input
                   type="text"
-                  required
-                  placeholder="مثال: صيانة ومعايرة دورية لخطوط الإنتاج ومختبر الجودة"
-                  value={txForm.description}
-                  onChange={e => setTxForm({ ...txForm, description: e.target.value })}
-                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                  placeholder="مثال: سداد بوفيه وعمال تحميل"
+                  value={disburseForm.notes}
+                  onChange={e => setDisburseForm({ ...disburseForm, notes: e.target.value })}
+                  className="w-full h-10 rounded border border-gray-300 px-3"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={() => setShowTxModal(false)}
-                  className="h-12 px-6 rounded-md font-medium text-sm border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 cursor-pointer"
+                  onClick={() => setShowDisburseModal(false)}
+                  className="h-10 px-4 rounded border border-gray-300 bg-white"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
-                  className="h-12 px-6 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-md font-bold text-sm cursor-pointer"
+                  disabled={!disburseForm.expense_code_id || !validators.positiveNumber(disburseForm.amount)}
+                  className="h-10 px-5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded font-bold shadow-sm"
                 >
-                  حفظ الحركة ✓
+                  صرف المبلغ وخصم الخزينة ✓
                 </button>
               </div>
             </form>
@@ -464,77 +685,207 @@ export default function CashModule({ onBack, onNotify }) {
         </div>
       )}
 
-      {/* MODAL 3: TRANSFER BETWEEN ACCOUNTS */}
-      {showTransferModal && (
+      {/* MODAL: OUTLET -> MAIN TRANSFER (Requirement A5) */}
+      {showOutletTransferModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-md p-6 max-w-lg w-full border border-gray-300">
-            <div className="flex items-center justify-between pb-3 mb-2 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900">تحويل نقدية بين الخزائن والبنوك</h3>
-              <button onClick={() => setShowTransferModal(false)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-200">
+              <h3 className="text-base font-bold text-gray-900">توريد نقدية من منفذ بيع إلى الخزينة الرئيسية</h3>
+              <button onClick={() => setShowOutletTransferModal(false)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-xs text-gray-500 font-medium mb-4">
-              يتم خصم المبلغ من الحساب الأول وإيداعه فوراً في الحساب الثاني مع تسجيل القيود
-            </p>
 
-            <form onSubmit={handleSaveTransfer} className="space-y-4">
+            <form onSubmit={handleSaveOutletTransfer} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">التحويل من (الخصم) *</label>
+                <label className="block font-bold text-gray-700 mb-1">المنفذ المحول منه (الخزينة المصدر) *</label>
                 <select
                   required
-                  value={transferForm.from_account_id}
-                  onChange={e => setTransferForm({ ...transferForm, from_account_id: e.target.value })}
-                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+                  value={outletTransferForm.outlet_id}
+                  onChange={e => setOutletTransferForm({ ...outletTransferForm, outlet_id: e.target.value })}
+                  className="w-full h-10 rounded border border-gray-300 px-3 text-xs"
                 >
-                  <option value="">اختر الحساب...</option>
-                  {accountData.accounts.map(acc => (
-                    <option key={acc.id} value={acc.id}>{acc.name} (المتاح: {formatCurrency(acc.current_balance)})</option>
+                  <option value="">اختر المنفذ...</option>
+                  {outlets.map(o => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">التحويل إلى (الإيداع) *</label>
-                <select
-                  required
-                  value={transferForm.to_account_id}
-                  onChange={e => setTransferForm({ ...transferForm, to_account_id: e.target.value })}
-                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
-                >
-                  <option value="">اختر الحساب...</option>
-                  {accountData.accounts.map(acc => (
-                    <option key={acc.id} value={acc.id}>{acc.name}</option>
-                  ))}
-                </select>
+                <label className="block font-bold text-gray-700 mb-1">الخزينة المستلمة (الوجهة)</label>
+                <input
+                  type="text"
+                  disabled
+                  value={mainTreasury?.name || 'الخزينة الرئيسية المجمعة'}
+                  className="w-full h-10 rounded border border-gray-300 px-3 bg-gray-50 text-gray-700 font-bold"
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">مبلغ التحويل (جنيه) *</label>
+                <label className="block font-bold text-gray-700 mb-1">المبلغ المحول (جنيه) *</label>
                 <input
                   type="number"
                   min="1"
                   step="any"
                   required
-                  value={transferForm.amount}
-                  onChange={e => setTransferForm({ ...transferForm, amount: e.target.value })}
-                  className="w-full h-12 rounded-md border border-gray-300 px-3 text-base font-bold focus:border-[#1F3A5F] focus:outline-none"
+                  placeholder="المبلغ"
+                  value={outletTransferForm.amount}
+                  onChange={e => setOutletTransferForm({ ...outletTransferForm, amount: e.target.value })}
+                  className="w-full h-10 rounded border border-gray-300 px-3 font-bold text-green-700 text-sm"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">بيان السند</label>
+                <input
+                  type="text"
+                  value={outletTransferForm.notes}
+                  onChange={e => setOutletTransferForm({ ...outletTransferForm, notes: e.target.value })}
+                  className="w-full h-10 rounded border border-gray-300 px-3"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={() => setShowTransferModal(false)}
-                  className="h-12 px-6 rounded-md font-medium text-sm border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 cursor-pointer"
+                  onClick={() => setShowOutletTransferModal(false)}
+                  className="h-10 px-4 rounded border border-gray-300 bg-white"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
-                  className="h-12 px-6 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-md font-bold text-sm cursor-pointer"
+                  className="h-10 px-5 bg-[#1F3A5F] text-white rounded font-bold"
                 >
-                  تنفيذ التحويل بنجاح ✓
+                  تأكيد التوريد للخزينة الرئيسية ✓
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DAILY CLOSING (Requirement A5) */}
+      {showClosingModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-md p-6 max-w-lg w-full border border-gray-300">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-200">
+              <h3 className="text-base font-bold text-gray-900">تقفيل وردية يومي لمنفذ بيع</h3>
+              <button onClick={() => setShowClosingModal(false)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveClosing} className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">منفذ البيع *</label>
+                  <select
+                    required
+                    value={closingForm.outlet_id}
+                    onChange={e => setClosingForm({ ...closingForm, outlet_id: e.target.value })}
+                    className="w-full h-10 rounded border border-gray-300 px-2 text-xs"
+                  >
+                    <option value="">اختر المنفذ...</option>
+                    {outlets.map(o => (
+                      <option key={o.id} value={o.id}>{o.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">تاريخ الوردية *</label>
+                  <input
+                    type="date"
+                    required
+                    value={closingForm.closing_date}
+                    onChange={e => setClosingForm({ ...closingForm, closing_date: e.target.value })}
+                    className="w-full h-10 rounded border border-gray-300 px-3 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">اسم الكاشير المستلم للوردية</label>
+                <input
+                  type="text"
+                  value={closingForm.cashier_name}
+                  onChange={e => setClosingForm({ ...closingForm, cashier_name: e.target.value })}
+                  className="w-full h-10 rounded border border-gray-300 px-3"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">عهدة بداية الدرج</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={closingForm.opening_cash}
+                    onChange={e => setClosingForm({ ...closingForm, opening_cash: e.target.value })}
+                    className="w-full h-9 rounded border border-gray-300 px-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">مبيعات نقدية</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={closingForm.cash_sales}
+                    onChange={e => setClosingForm({ ...closingForm, cash_sales: e.target.value })}
+                    className="w-full h-9 rounded border border-gray-300 px-2 font-mono text-green-700"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">مصروفات درج</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={closingForm.cash_expenses}
+                    onChange={e => setClosingForm({ ...closingForm, cash_expenses: e.target.value })}
+                    className="w-full h-9 rounded border border-gray-300 px-2 font-mono text-red-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">النقدية الفعلية بعد الجرد والعدّ (جنيه) *</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  placeholder="المبلغ الفعلي الموجود بالدرج"
+                  value={closingForm.actual_cash_counted}
+                  onChange={e => setClosingForm({ ...closingForm, actual_cash_counted: e.target.value })}
+                  className="w-full h-10 rounded border border-gray-300 px-3 font-mono font-bold text-sm text-blue-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">ملاحظات التقفيل</label>
+                <input
+                  type="text"
+                  placeholder="أسباب العجز أو الزيادة إن وجدت"
+                  value={closingForm.notes}
+                  onChange={e => setClosingForm({ ...closingForm, notes: e.target.value })}
+                  className="w-full h-10 rounded border border-gray-300 px-3"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowClosingModal(false)}
+                  className="h-10 px-4 rounded border border-gray-300 bg-white"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="h-10 px-5 bg-[#1F3A5F] text-white rounded font-bold"
+                >
+                  اعتماد تقفيل الوردية ✓
                 </button>
               </div>
             </form>

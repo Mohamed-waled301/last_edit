@@ -183,7 +183,95 @@ export const reportsRepo = {
       supplierAging,
       customerAging,
     };
+  },
+
+  /**
+   * Products Report (تقرير المنتجات وتفاصيل التسعير والتكاليف)
+   * Shows: cost price, average cost price, selling price, average selling price, total stock, total cost, total sales value
+   */
+  async getProductsReport() {
+    const items = await db.items.toArray();
+    const products = await db.products.toArray();
+    const salesItems = await db.sales_invoice_items.toArray();
+
+    // Map sales items to compute average actual selling price per product
+    const salesByProd = new Map();
+    for (const si of salesItems) {
+      const pid = si.product_id;
+      if (!salesByProd.has(pid)) {
+        salesByProd.set(pid, { totalRevenue: 0, totalQty: 0 });
+      }
+      const curr = salesByProd.get(pid);
+      curr.totalRevenue += (Number(si.total_price) || 0);
+      curr.totalQty += (Number(si.quantity) || 0);
+    }
+
+    // Combine from items (finished goods) and products
+    const combined = [];
+    const seenIds = new Set();
+
+    for (const item of items) {
+      if (item.item_type !== 'raw_material') {
+        seenIds.add(item.id);
+        const stock = Number(item.current_stock) || 0;
+        const costPrice = Number(item.cost_price) || Number(item.average_cost) || 0;
+        const sellingPrice = Number(item.selling_price) || 0;
+
+        const salesData = salesByProd.get(item.id) || { totalRevenue: 0, totalQty: 0 };
+        const avgSellingPrice = salesData.totalQty > 0
+          ? Number((salesData.totalRevenue / salesData.totalQty).toFixed(2))
+          : sellingPrice;
+
+        combined.push({
+          id: item.id,
+          code: item.code,
+          name: item.name,
+          category: item.item_group || item.item_department || 'عام',
+          unit: item.unit || 'قطعة',
+          stock,
+          cost_price: costPrice,
+          average_cost_price: costPrice,
+          selling_price: sellingPrice,
+          average_selling_price: avgSellingPrice,
+          total_cost_value: Number((stock * costPrice).toFixed(2)),
+          total_sales_value: Number((stock * sellingPrice).toFixed(2)),
+          margin_percent: costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(1)) : 0,
+        });
+      }
+    }
+
+    for (const prod of products) {
+      if (!seenIds.has(prod.id)) {
+        const stock = Number(prod.current_finished_stock) || 0;
+        const costPrice = Number(prod.cost_price) || Number(prod.bom_materials_cost) || 0;
+        const sellingPrice = Number(prod.selling_price) || Number(prod.suggested_selling_price) || 0;
+
+        const salesData = salesByProd.get(prod.id) || { totalRevenue: 0, totalQty: 0 };
+        const avgSellingPrice = salesData.totalQty > 0
+          ? Number((salesData.totalRevenue / salesData.totalQty).toFixed(2))
+          : sellingPrice;
+
+        combined.push({
+          id: prod.id,
+          code: prod.code,
+          name: prod.name,
+          category: prod.category || 'عام',
+          unit: prod.unit || 'قطعة',
+          stock,
+          cost_price: costPrice,
+          average_cost_price: costPrice,
+          selling_price: sellingPrice,
+          average_selling_price: avgSellingPrice,
+          total_cost_value: Number((stock * costPrice).toFixed(2)),
+          total_sales_value: Number((stock * sellingPrice).toFixed(2)),
+          margin_percent: costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(1)) : 0,
+        });
+      }
+    }
+
+    return combined;
   }
 };
 
 export default reportsRepo;
+

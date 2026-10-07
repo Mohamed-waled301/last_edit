@@ -1,6 +1,7 @@
 /**
  * Workshop ERP - Core Cost Calculation Engine (محرك احتساب التكاليف النقي)
  * Pure TypeScript functions for manufacturing cost calculations with non-negative validation.
+ * Optimized for Clothing Factory operations: fabric waste, clothing stages, and outsourced manufacturing.
  */
 
 export interface Stage1CostParams {
@@ -37,6 +38,27 @@ export interface LaborCostParams {
   batchQty?: number;
 }
 
+export interface ClothingBOMItem {
+  quantity_per_unit: number;
+  unit_cost: number;
+  waste_percent?: number;
+}
+
+export interface ClothingStageCosts {
+  cuttingLabor?: number;
+  sewingLabor?: number;
+  ironingPackingLabor?: number;
+  internalOverhead?: number;
+}
+
+export interface OutsourcedStageParams {
+  internalStageCost: number;
+  serviceRate: number; // سعر خدمة المصنع الخارجي للقطعة
+  batchQuantity: number;
+  transportCost?: number;
+  additionalMaterialsCost?: number;
+}
+
 export class CostCalculator {
   /**
    * 1. Weighted Average Cost for Raw Materials (متوسط التكلفة المرجح للخامات)
@@ -62,7 +84,7 @@ export class CostCalculator {
   }
 
   /**
-   * 2. Standard Material Usage from BOM with Waste (استهلاك الخامات حسب شجرة المنتج ونسبة الهالك)
+   * 2. Standard Material Usage from BOM with Fabric Waste Percentage
    * Formula: batchQty * bomQtyPerUnit * (1 + wastePercent / 100)
    */
   static calculateStandardMaterialUsage(
@@ -77,6 +99,21 @@ export class CostCalculator {
     const multiplier = 1 + (waste / 100);
     const totalRequired = bQty * unitQty * multiplier;
     return Number(totalRequired.toFixed(3));
+  }
+
+  /**
+   * 2b. Calculate Clothing BOM Total Cost with Fabric Waste
+   */
+  static calculateClothingBOMCost(items: ClothingBOMItem[] = []): number {
+    let total = 0;
+    for (const it of items) {
+      const q = Math.max(0, Number(it.quantity_per_unit) || 0);
+      const c = Math.max(0, Number(it.unit_cost) || 0);
+      const w = Math.max(0, Number(it.waste_percent) || 0);
+      const effectiveQty = q * (1 + (w / 100));
+      total += effectiveQty * c;
+    }
+    return Number(total.toFixed(2));
   }
 
   /**
@@ -100,8 +137,27 @@ export class CostCalculator {
   }
 
   /**
-   * 4. Hourly Overhead Rate from Monthly Total (معدل ساعة التشغيل الشهرية)
-   * Formula: totalOverhead / estimatedMachineHours
+   * 3b. Clothing Stages Labor Cost (قص -> خياطة -> كي وتعبئة)
+   */
+  static calculateClothingInternalStagesCost(
+    materialsCost: number,
+    stages: ClothingStageCosts,
+    batchQty: number = 1
+  ): { totalInternalCost: number; unitInternalCost: number } {
+    const mat = Math.max(0, Number(materialsCost) || 0);
+    const cut = Math.max(0, Number(stages.cuttingLabor) || 0);
+    const sew = Math.max(0, Number(stages.sewingLabor) || 0);
+    const iron = Math.max(0, Number(stages.ironingPackingLabor) || 0);
+    const ovh = Math.max(0, Number(stages.internalOverhead) || 0);
+    const qty = Math.max(1, Number(batchQty) || 1);
+
+    const totalInternalCost = Number((mat + cut + sew + iron + ovh).toFixed(2));
+    const unitInternalCost = Number((totalInternalCost / qty).toFixed(4));
+    return { totalInternalCost, unitInternalCost };
+  }
+
+  /**
+   * 4. Hourly Overhead Rate from Monthly Total
    */
   static calculateHourlyOverheadRate(
     totalOverhead: number,
@@ -114,8 +170,7 @@ export class CostCalculator {
   }
 
   /**
-   * 5. Allocated Factory Overhead (نصيب الدفعة من مصاريف التشغيل الشهرية)
-   * Formula: machineHours * hourlyOverheadRate
+   * 5. Allocated Factory Overhead
    */
   static calculateAllocatedOverhead(
     machineHours: number,
@@ -127,9 +182,7 @@ export class CostCalculator {
   }
 
   /**
-   * 6. Stage 1 Manufacturing Cost (إجمالي وتكلفة الوحدة لمرحلة التصنيع 1)
-   * Total = Materials + Labor + Overhead + External
-   * Unit = Total / batchQuantity
+   * 6. Stage 1 Manufacturing Cost (مرحلة التصنيع الداخلية)
    */
   static calculateStage1Cost({
     materialsCost = 0,
@@ -154,10 +207,8 @@ export class CostCalculator {
   }
 
   /**
-   * 7. Stage 2 Finishing & Cumulative Cost (المرحلة 2: التشطيب والتكلفة النهائية التراكمية)
-   * Stage 2 Total = Finishing Labor + Finishing Transport + Finishing Materials
-   * Cumulative Total = Stage 1 Transferred + Stage 2 Total
-   * Final Unit Cost = Cumulative Total / finishingQuantity
+   * 7. Stage 2 Outsourced / Finishing Cumulative Cost (التصنيع لدى الغير - التكلفة التراكمية)
+   * Formula: Internal Stage Cost + Outsourced Stage Cost = Final Cost
    */
   static calculateStage2Cost({
     stage1TransferredCost = 0,
@@ -184,8 +235,39 @@ export class CostCalculator {
   }
 
   /**
-   * 8. Suggested Selling Price (سعر البيع المقترح بهامش الربح)
-   * Formula: finalUnitCost * (1 + targetProfitMarginPercent / 100)
+   * 7b. Outsourced Manufacturing Accumulation Helper
+   */
+  static calculateOutsourcedAccumulation({
+    internalStageCost,
+    serviceRate,
+    batchQuantity,
+    transportCost = 0,
+    additionalMaterialsCost = 0
+  }: OutsourcedStageParams): {
+    outsourcedStageCost: number;
+    finalTotalCost: number;
+    finalUnitCost: number;
+  } {
+    const internal = Math.max(0, Number(internalStageCost) || 0);
+    const qty = Math.max(1, Number(batchQuantity) || 1);
+    const rate = Math.max(0, Number(serviceRate) || 0);
+    const transport = Math.max(0, Number(transportCost) || 0);
+    const materials = Math.max(0, Number(additionalMaterialsCost) || 0);
+
+    const serviceTotal = rate * qty;
+    const outsourcedStageCost = Number((serviceTotal + transport + materials).toFixed(2));
+    const finalTotalCost = Number((internal + outsourcedStageCost).toFixed(2));
+    const finalUnitCost = Number((finalTotalCost / qty).toFixed(4));
+
+    return {
+      outsourcedStageCost,
+      finalTotalCost,
+      finalUnitCost
+    };
+  }
+
+  /**
+   * 8. Suggested Selling Price
    */
   static calculateSuggestedPrice(
     finalUnitCost: number,
@@ -198,8 +280,7 @@ export class CostCalculator {
   }
 
   /**
-   * 9. Net Profit Calculation for Sale (صافي الربح الحقيقي للصفقة)
-   * Net Profit = Selling Subtotal - COGS - Selling Expenses (Shipping + Customs + Commission)
+   * 9. Net Profit Calculation for Sale
    */
   static calculateNetProfit(
     sellingSubtotal: number,
@@ -213,6 +294,33 @@ export class CostCalculator {
     const netProfit = rev - cost - exp;
     return Number(netProfit.toFixed(2));
   }
+}
+
+export function calculateClothingInternalStagesCost(
+  cuttingCost: number = 0,
+  sewingCost: number = 0,
+  ironingPackingCost: number = 0
+): number {
+  const cut = Math.max(0, Number(cuttingCost) || 0);
+  const sew = Math.max(0, Number(sewingCost) || 0);
+  const iron = Math.max(0, Number(ironingPackingCost) || 0);
+  return Number((cut + sew + iron).toFixed(2));
+}
+
+export function calculateOutsourcedAccumulation(
+  internalStageCost: number = 0,
+  outsourcedStageCost: number = 0
+): number {
+  const internal = Math.max(0, Number(internalStageCost) || 0);
+  const outsourced = Math.max(0, Number(outsourcedStageCost) || 0);
+  return Number((internal + outsourced).toFixed(2));
+}
+
+export function calculateClothingBOMCost(
+  items: ClothingBOMItem[],
+  fabricWastePercent: number = 0
+): number {
+  return CostCalculator.calculateClothingBOMCost(items, fabricWastePercent);
 }
 
 export default CostCalculator;

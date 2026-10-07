@@ -182,12 +182,24 @@ export const suppliersRepo = {
     const poNumber = data.po_number || `PO-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();
 
-    let totalAmount = 0;
+    const paymentTerms = data.payment_terms || 'cash';
+    let dueDate = null;
+    if (paymentTerms === 'credit') {
+      if (data.due_date) {
+        dueDate = data.due_date;
+      } else if (data.credit_days) {
+        const d = new Date(data.order_date || now);
+        d.setDate(d.getDate() + (Number(data.credit_days) || 30));
+        dueDate = d.toISOString().split('T')[0];
+      }
+    }
+
+    let subtotal = 0;
     const items = (data.items || []).map((item, idx) => {
       const qty = Math.max(0, Number(item.quantity_ordered) || 0);
       const price = Math.max(0, Number(item.unit_price) || 0);
       const total = Number((qty * price).toFixed(2));
-      totalAmount += total;
+      subtotal += total;
       return {
         id: `poi-${Date.now()}-${idx}`,
         po_id: id,
@@ -198,23 +210,57 @@ export const suppliersRepo = {
       };
     });
 
+    const discountPercent = Math.max(0, Number(data.discount_percent) || 0);
+    const discountValue = data.discount_value !== undefined
+      ? Math.max(0, Number(data.discount_value) || 0)
+      : Number(((subtotal * discountPercent) / 100).toFixed(2));
+
+    const additionalExpenses = Math.max(0, Number(data.additional_expenses) || 0);
+    const grandTotal = Math.max(0, Number((subtotal - discountValue + additionalExpenses).toFixed(2)));
+
     const po = {
       id,
       po_number: poNumber,
       supplier_id: data.supplier_id,
+      payment_terms: paymentTerms,
+      credit_days: paymentTerms === 'credit' ? (Number(data.credit_days) || 30) : 0,
+      due_date: dueDate,
       order_date: data.order_date || now.split('T')[0],
       expected_date: data.expected_date || null,
-      total_amount: Number(totalAmount.toFixed(2)),
+      subtotal: Number(subtotal.toFixed(2)),
+      discount_percent: discountPercent,
+      discount_value: discountValue,
+      additional_expenses: additionalExpenses,
+      total_amount: grandTotal,
+      grand_total: grandTotal,
       status: 'ordered',
       notes: data.notes || '',
       created_by: userId,
       created_at: now,
     };
 
-    await db.transaction('rw', [db.purchase_orders, db.purchase_order_items], async () => {
+    await db.transaction('rw', [db.purchase_orders, db.purchase_order_items, db.materials, db.items], async () => {
       await db.purchase_orders.add(po);
       for (const itm of items) {
         await db.purchase_order_items.add(itm);
+
+        // Update item's cost price and last purchase price in database
+        if (itm.unit_price > 0) {
+          const mat = await db.materials.get(itm.material_id);
+          if (mat) {
+            await db.materials.update(mat.id, {
+              last_purchase_price: itm.unit_price,
+              cost_price: itm.unit_price,
+            });
+          }
+          const itemMaster = await db.items.get(itm.material_id);
+          if (itemMaster) {
+            await db.items.update(itemMaster.id, {
+              last_purchase_price: itm.unit_price,
+              cost_price: itm.unit_price,
+            });
+          }
+        }
       }
     });
 

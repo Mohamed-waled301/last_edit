@@ -1,6 +1,6 @@
 /**
  * Workshop ERP - Pure Balance & Accounting Engine (محرك احتساب الأرصدة والحسابات)
- * Computes customer, supplier, and treasury balances accurately.
+ * Computes customer, supplier, unified party, and treasury balances accurately.
  */
 
 export interface InvoiceRecord {
@@ -24,9 +24,16 @@ export interface BalanceSummary {
   balanceDue: number;
 }
 
+export interface PartyBalanceSummary {
+  supplierBalance: number; // فلوس علينا للمورد
+  customerBalance: number; // فلوس لينا عند العميل
+  netBalance: number;      // الصافي (إيجابي = لنا عند العميل، سلبي = علينا للمورد)
+  maxOffsetAmount: number; // أقصى مبلغ ممكن إجراء مقاصة به = min(supplierBalance, customerBalance)
+}
+
 export class BalanceCalculator {
   /**
-   * 1. Calculate Supplier Balance (حساب رصيد المورد المستحق)
+   * 1. Calculate Supplier Balance (حساب رصيد المورد المستحق - فلوس علينا)
    * Balance = (Sum of Valid Invoices) - (Sum of Paid Amounts) - (Sum of Balance Deducted Returns)
    */
   static calculateSupplierBalance(
@@ -100,7 +107,32 @@ export class BalanceCalculator {
   }
 
   /**
-   * 3. Calculate Treasury Balance (حساب رصيد الخزينة أو البنك بعد العمليات)
+   * 3. Calculate Unified Party Balances, Net Balance & Offset (حساب رصيد الجهة الموحدة والمقاصة)
+   */
+  static calculateUnifiedPartyBalance(
+    supplierInvoices: InvoiceRecord[] = [],
+    supplierReturns: ReturnRecord[] = [],
+    customerInvoices: InvoiceRecord[] = [],
+    customerReturns: ReturnRecord[] = []
+  ): PartyBalanceSummary {
+    const supBal = this.calculateSupplierBalance(supplierInvoices, supplierReturns);
+    const custBal = this.calculateCustomerBalance(customerInvoices, customerReturns);
+
+    const supplierBalance = supBal.balanceDue;
+    const customerBalance = custBal.balanceDue;
+    const netBalance = Number((customerBalance - supplierBalance).toFixed(2));
+    const maxOffsetAmount = Math.max(0, Number(Math.min(supplierBalance, customerBalance).toFixed(2)));
+
+    return {
+      supplierBalance,
+      customerBalance,
+      netBalance,
+      maxOffsetAmount
+    };
+  }
+
+  /**
+   * 4. Calculate Treasury Balance (حساب رصيد الخزينة أو البنك بعد العمليات)
    */
   static calculateTreasuryBalance(
     initialBalance: number,
@@ -117,6 +149,43 @@ export class BalanceCalculator {
     }
     return Number(balance.toFixed(2));
   }
+}
+
+export function calculateUnifiedPartyBalance(
+  supplierVal: number | InvoiceRecord[] = 0,
+  customerVal: number | InvoiceRecord[] = 0,
+  supplierReturns: ReturnRecord[] = [],
+  customerReturns: ReturnRecord[] = []
+): {
+  supplier_balance: number;
+  customer_balance: number;
+  net_balance: number;
+  max_offset: number;
+} {
+  let sup = 0;
+  let cust = 0;
+
+  if (typeof supplierVal === 'number') {
+    sup = Math.max(0, supplierVal);
+  } else {
+    sup = BalanceCalculator.calculateSupplierBalance(supplierVal, supplierReturns).balanceDue;
+  }
+
+  if (typeof customerVal === 'number') {
+    cust = Math.max(0, customerVal);
+  } else {
+    cust = BalanceCalculator.calculateCustomerBalance(customerVal, customerReturns).balanceDue;
+  }
+
+  const net = Number((sup - cust).toFixed(2));
+  const maxOffset = Math.max(0, Number(Math.min(sup, cust).toFixed(2)));
+
+  return {
+    supplier_balance: sup,
+    customer_balance: cust,
+    net_balance: net,
+    max_offset: maxOffset
+  };
 }
 
 export default BalanceCalculator;

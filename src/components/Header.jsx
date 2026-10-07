@@ -39,10 +39,11 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
   const getRoleLabel = (role) => {
     switch (role) {
       case 'owner': return 'الرئيس التنفيذي (CEO)';
-      case 'purchasing': return 'سلاسل الإمداد';
-      case 'storekeeper': return 'المستودعات';
-      case 'production': return 'التصنيع والإنتاج';
+      case 'purchasing': return 'سلاسل الإمداد ومشتريات الأقمشة';
+      case 'storekeeper': return 'أمين مستودع الخامات';
+      case 'production': return 'مدير خطوط الإنتاج والتشغيل';
       case 'accountant': return 'المدير المالي (CFO)';
+      case 'cashier': return 'كاشير منفذ البيع';
       default: return role;
     }
   };

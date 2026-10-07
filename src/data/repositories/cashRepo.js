@@ -158,7 +158,53 @@ export const cashRepo = {
 
     await auditRepo.log(userId, 'TRANSFER_CASH', 'treasury_accounts', from_account_id, null, data);
     return { success: true };
+  },
+
+  /**
+   * Cash Disbursement: صرف النقدية المرتبطة بأكواد المصروفات
+   */
+  async disburseExpense(data, userId = 'usr-accountant') {
+    const { expense_code_id, expense_name, account_id, amount, description, tx_date } = data;
+    if (tx_date) validateNotPastDate(tx_date, 'تاريخ سند الصرف');
+    const numAmount = Math.max(0, Number(amount) || 0);
+    if (numAmount <= 0) throw new Error('مبلغ الصرف يجب أن يكون أكبر من صفر');
+
+    const txId = `tx-${Date.now()}`;
+    const txNumber = `TXN-EXP-${Date.now().toString().slice(-4)}`;
+    const now = new Date().toISOString();
+
+    await db.transaction('rw', [db.treasury_accounts, db.cash_transactions], async () => {
+      const account = await db.treasury_accounts.get(account_id);
+      if (!account) throw new Error('الخزينة المحددة غير موجودة');
+
+      const currentBal = Number(account.current_balance) || 0;
+      if (currentBal < numAmount) {
+        throw new Error(`الرصيد المتاح في الخزينة (${currentBal} ج.م) لا يكفي لصرف مبلغ (${numAmount} ج.م)`);
+      }
+
+      const newBal = Number((currentBal - numAmount).toFixed(2));
+      await db.treasury_accounts.update(account_id, { current_balance: newBal });
+
+      await db.cash_transactions.add({
+        id: txId,
+        tx_number: txNumber,
+        account_id,
+        tx_type: 'outflow',
+        category: 'operating_expense',
+        amount: numAmount,
+        balance_after: newBal,
+        reference_type: 'EXPENSE_DISBURSEMENT',
+        reference_id: expense_code_id || null,
+        description: `صرف مصروف (${expense_name || 'تشغيلي'}): ${description || ''}`,
+        created_by: userId,
+        created_at: now
+      });
+    });
+
+    await auditRepo.log(userId, 'DISBURSE_EXPENSE', 'cash_transactions', txId, null, data);
+    return { success: true, txId, txNumber };
   }
 };
 
 export default cashRepo;
+

@@ -16,10 +16,6 @@ describe('BalanceCalculator - Unit Tests', () => {
     ];
 
     const res = BalanceCalculator.calculateSupplierBalance(invoices, returns);
-    // Valid Invoiced: 10000 + 5000 + 3000 = 18000
-    // Total Paid: 4000 + 5000 + 0 = 9000
-    // Returns Deducted: 1000
-    // Balance Due: 18000 - 9000 - 1000 = 8000
     expect(res.totalInvoiced).toBe(18000);
     expect(res.totalPaid).toBe(9000);
     expect(res.totalReturns).toBe(1000);
@@ -38,14 +34,23 @@ describe('BalanceCalculator - Unit Tests', () => {
     ];
 
     const res = BalanceCalculator.calculateCustomerBalance(invoices, returns);
-    // Invoiced: 25000 + 15000 + 8000 = 48000
-    // Paid: 10000 + 15000 = 25000
-    // Returns: 3000
-    // Due: 48000 - 25000 - 3000 = 20000
     expect(res.totalInvoiced).toBe(48000);
     expect(res.totalPaid).toBe(25000);
     expect(res.totalReturns).toBe(3000);
     expect(res.balanceDue).toBe(20000);
+  });
+
+  it('calculates unified party net balance and offset capacity', () => {
+    const supInvoices = [{ total_amount: 12000, paid_amount: 2000, status: 'partially_paid' }]; // Due: 10,000
+    const supReturns: any[] = [];
+    const custInvoices = [{ total_invoice_amount: 18000, paid_amount: 4000, status: 'partially_paid' }]; // Due: 14,000
+    const custReturns: any[] = [];
+
+    const partyBal = BalanceCalculator.calculateUnifiedPartyBalance(supInvoices, supReturns, custInvoices, custReturns);
+    expect(partyBal.supplierBalance).toBe(10000);
+    expect(partyBal.customerBalance).toBe(14000);
+    expect(partyBal.netBalance).toBe(4000); // Customer owes us 4,000 net
+    expect(partyBal.maxOffsetAmount).toBe(10000); // Can offset up to 10,000
   });
 
   it('calculates treasury balance from initial balance and cash transactions', () => {
@@ -58,7 +63,6 @@ describe('BalanceCalculator - Unit Tests', () => {
     ];
 
     const finalBal = BalanceCalculator.calculateTreasuryBalance(initial, txs);
-    // 50000 + 15000 - 8000 - 2000 + 5000 = 60000
     expect(finalBal).toBe(60000);
   });
 });

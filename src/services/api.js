@@ -18,11 +18,17 @@ import {
   reportsRepo,
   backupRepo,
   auditRepo,
+  itemsRepo,
+  partiesRepo,
+  storageRepo,
+  treasuriesRepo,
+  expenseCodesRepo,
 } from '../data';
 
 let currentUserId = 'usr-owner';
 let currentUserRole = 'owner';
 let currentUserFullName = 'م. خالد المنشاوي';
+let currentUserOutletId = null;
 
 // Initialize session from sessionStorage if available
 try {
@@ -32,21 +38,24 @@ try {
     currentUserId = parsed.id || currentUserId;
     currentUserRole = parsed.role || currentUserRole;
     currentUserFullName = parsed.full_name || currentUserFullName;
+    currentUserOutletId = parsed.outlet_id || null;
   }
 } catch (e) {
   console.warn('Session read error:', e);
 }
 
-export function setActiveUser(userId, role, fullName) {
+export function setActiveUser(userId, role, fullName, outletId = null) {
   currentUserId = userId;
   currentUserRole = role;
   if (fullName) currentUserFullName = fullName;
+  currentUserOutletId = outletId;
 
   try {
     sessionStorage.setItem('erp_active_user', JSON.stringify({
       id: currentUserId,
       role: currentUserRole,
       full_name: currentUserFullName,
+      outlet_id: currentUserOutletId,
     }));
   } catch (e) {
     console.warn('Session write error:', e);
@@ -54,7 +63,7 @@ export function setActiveUser(userId, role, fullName) {
 }
 
 export function getActiveUser() {
-  return { id: currentUserId, role: currentUserRole, full_name: currentUserFullName };
+  return { id: currentUserId, role: currentUserRole, full_name: currentUserFullName, outlet_id: currentUserOutletId };
 }
 
 export function clearActiveUser() {
@@ -66,6 +75,144 @@ export const api = {
   getActiveUser,
   setActiveUser,
   clearActiveUser,
+
+  // Master Data: Items & Clothing Variants
+  getItems: async () => {
+    const list = await itemsRepo.getAll();
+    return { success: true, data: list, items: list };
+  },
+  getItem: async (id) => {
+    const item = await itemsRepo.getById(id);
+    return { success: true, data: item, item };
+  },
+  createItem: async (data) => {
+    const res = await itemsRepo.create(data, currentUserId);
+    return { success: true, data: res, item: res, message: 'تم إضافة الصنف بنجاح' };
+  },
+  updateItem: async (id, data) => {
+    const res = await itemsRepo.update(id, data, currentUserId);
+    return { success: true, data: res, item: res, message: 'تم تحديث بيانات الصنف' };
+  },
+  getNextItemCode: async (prefix = '') => {
+    const code = await itemsRepo.getNextCode(prefix);
+    return { success: true, data: code, code };
+  },
+  getItemSizes: async () => {
+    const list = await itemsRepo.getSizes();
+    return { success: true, data: list, sizes: list };
+  },
+  createItemSize: async (data) => {
+    const res = await itemsRepo.createSize(data);
+    return { success: true, data: res, size: res, message: 'تم إضافة المقاس بنجاح' };
+  },
+  getItemColors: async () => {
+    const list = await itemsRepo.getColors();
+    return { success: true, data: list, colors: list };
+  },
+  createItemColor: async (data) => {
+    const res = await itemsRepo.createColor(data);
+    return { success: true, data: res, color: res, message: 'تم إضافة اللون بنجاح' };
+  },
+
+  // Master Data: Unified Parties (Suppliers & Customers)
+  getParties: async () => {
+    const list = await partiesRepo.getAll();
+    return { success: true, data: list, parties: list };
+  },
+  getParty: async (id) => {
+    const party = await partiesRepo.getById(id);
+    return { success: true, data: party, party };
+  },
+  createParty: async (data) => {
+    const res = await partiesRepo.create(data, currentUserId);
+    return { success: true, data: res, party: res, message: 'تم إضافة جهة التعامل بنجاح' };
+  },
+  updateParty: async (id, data) => {
+    const res = await partiesRepo.update(id, data, currentUserId);
+    return { success: true, data: res, party: res, message: 'تم تحديث بيانات جهة التعامل' };
+  },
+  executePartyOffset: async (partyId, amount, notes = '') => {
+    const res = await partiesRepo.executeOffset(partyId, amount, notes, currentUserId);
+    return { success: true, data: res, ...res, message: 'تم إجراء المقاصة وتسوية الرصيد بنجاح' };
+  },
+
+  // Storage Locations & Stock Transfers & Adjustments
+  getStorageLocations: async () => {
+    const list = await storageRepo.getLocations();
+    return { success: true, data: list, locations: list };
+  },
+  createStorageLocation: async (data) => {
+    const res = await storageRepo.createLocation(data, currentUserId);
+    return { success: true, data: res, location: res, message: 'تم إضافة موقع التخزين بنجاح' };
+  },
+  updateStorageLocation: async (id, data) => {
+    const res = await storageRepo.updateLocation(id, data, currentUserId);
+    return { success: true, data: res, location: res, message: 'تم تحديث موقع التخزين' };
+  },
+  getStockTransfers: async () => {
+    const list = await storageRepo.getTransfers();
+    return { success: true, data: list, transfers: list };
+  },
+  createStockTransfer: async (data) => {
+    const res = await storageRepo.createStockTransfer(data, currentUserId);
+    return { success: true, data: res, ...res, message: 'تم تنفيذ التحويل المخزني بنجاح' };
+  },
+  getStockAdjustments: async () => {
+    const list = await storageRepo.getAdjustments();
+    return { success: true, data: list, adjustments: list };
+  },
+  createStockAdjustment: async (data) => {
+    const res = await storageRepo.createAdjustment(data, currentUserId);
+    return { success: true, data: res, ...res, message: 'تم حفظ محضر التسوية الجردية وتحديث الرصيد' };
+  },
+
+  // Treasuries & Daily Closings
+  getTreasuries: async () => {
+    const res = await treasuriesRepo.getTreasuries();
+    return { success: true, data: res, ...res };
+  },
+  createOutletTreasury: async (outletId, name, initialBalance = 0) => {
+    const res = await treasuriesRepo.createOutletTreasury(outletId, name, initialBalance, currentUserId);
+    return { success: true, data: res, treasury: res, message: 'تم إنشاء خزينة المنفذ' };
+  },
+  transferOutletToMain: async (data) => {
+    const res = await treasuriesRepo.transferOutletToMain(data, currentUserId);
+    return { success: true, data: res, message: 'تم توريد النقدية إلى الخزينة المركزية بنجاح' };
+  },
+  getDailyClosings: async (outletId = null) => {
+    const list = await treasuriesRepo.getDailyClosings(outletId);
+    return { success: true, data: list, closings: list };
+  },
+  performDailyClosing: async (data) => {
+    const res = await treasuriesRepo.performDailyClosing(data, currentUserId);
+    return { success: true, data: res, ...res, message: 'تم اعتماد تقفيل الوردية اليومية بنجاح' };
+  },
+
+  // Expense Codes & Payment Methods
+  getExpenseCodes: async () => {
+    const list = await expenseCodesRepo.getAll();
+    return { success: true, data: list, expense_codes: list };
+  },
+  createExpenseCode: async (data) => {
+    const res = await expenseCodesRepo.create(data, currentUserId);
+    return { success: true, data: res, expense_code: res, message: 'تم إضافة كود المصروف بنجاح' };
+  },
+  updateExpenseCode: async (id, data) => {
+    const res = await expenseCodesRepo.update(id, data, currentUserId);
+    return { success: true, data: res, expense_code: res, message: 'تم تحديث كود المصروف' };
+  },
+  getPaymentMethods: async () => {
+    const list = await expenseCodesRepo.getPaymentMethods();
+    return { success: true, data: list, payment_methods: list };
+  },
+  createPaymentMethod: async (data) => {
+    const res = await expenseCodesRepo.createPaymentMethod(data, currentUserId);
+    return { success: true, data: res, payment_method: res, message: 'تم إضافة طريقة الدفع' };
+  },
+  disburseExpense: async (data) => {
+    const res = await cashRepo.disburseExpense(data, currentUserId);
+    return { success: true, data: res, ...res, message: 'تم صرف النقدية وقيد المعاملة بنجاح' };
+  },
 
   // Suppliers & Purchasing
   getSuppliers: async () => {
@@ -188,18 +335,18 @@ export const api = {
     return { success: true, data: res, overhead: res, message: 'تم حفظ مصاريف التشغيل الشهرية' };
   },
 
-  // Finishing Stage 2
+  // Outsourced Manufacturing (التصنيع لدى الغير)
   getFinishingOrders: async () => {
     const list = await finishingRepo.getAll();
-    return { success: true, data: list, finishing_orders: list };
+    return { success: true, data: list, finishing_orders: list, outsourced_orders: list };
   },
   createFinishingOrder: async (data) => {
     const res = await finishingRepo.createFinishingOrder(data, currentUserId);
-    return { success: true, data: res, order: res, message: 'تم إنشاء أمر التشطيب بنجاح' };
+    return { success: true, data: res, order: res, message: 'تم إصدار أمر التشغيل لدى الغير بنجاح' };
   },
   markReadyForSale: async (id) => {
     const res = await finishingRepo.markReadyForSale(id, currentUserId);
-    return { success: true, data: res, order: res, message: 'تم اعتماد جاهزية المنتج للبيع' };
+    return { success: true, data: res, order: res, message: 'تم استلام المنتج واعتماد الجاهزية للبيع' };
   },
 
   // Sales & Outlets
@@ -223,8 +370,10 @@ export const api = {
     const o = await salesRepo.createOutlet(data, currentUserId);
     return { success: true, data: o, outlet: o, message: 'تم إضافة المعرض أو المنفذ' };
   },
-  getSalesInvoices: async () => {
-    const list = await salesRepo.getSalesInvoices();
+  getSalesInvoices: async (outletId = null) => {
+    // Check if current user is cashier restricted to specific outlet
+    const userOutletId = currentUserRole === 'cashier' ? currentUserOutletId : (outletId || null);
+    const list = await salesRepo.getSalesInvoices(userOutletId);
     return { success: true, data: list, invoices: list };
   },
   createSalesInvoice: async (data) => {
@@ -289,6 +438,10 @@ export const api = {
   getCostBreakdown: async () => {
     const cb = await reportsRepo.getCostBreakdown();
     return { success: true, data: cb, cost_breakdown: cb };
+  },
+  getProductsReport: async () => {
+    const pr = await reportsRepo.getProductsReport();
+    return { success: true, data: pr, productsReport: pr };
   },
   getProfitability: async () => {
     const prof = await reportsRepo.getProfitability();
