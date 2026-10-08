@@ -152,7 +152,7 @@ export default function CashModule({ onBack, onNotify }) {
         amount: parseFloat(disburseForm.amount)
       };
       const res = await api.disburseExpense(payload);
-      onNotify(res.message || 'تم صرف النقدية وتسجيل سند الصرف بنجاح ✓');
+      onNotify(res.message || 'تم صرف النقدية وتسجيل سند الصرف بنجاح');
       setShowDisburseModal(false);
       setDisburseForm({
         expense_code_id: '',
@@ -181,7 +181,7 @@ export default function CashModule({ onBack, onNotify }) {
         parseFloat(outletTransferForm.amount),
         outletTransferForm.notes
       );
-      onNotify(res.message || 'تم توريد النقدية من المنفذ إلى الخزينة الرئيسية بنجاح ✓');
+      onNotify(res.message || 'تم توريد النقدية من المنفذ إلى الخزينة الرئيسية بنجاح');
       setShowOutletTransferModal(false);
       setOutletTransferForm({
         outlet_id: '',
@@ -210,7 +210,7 @@ export default function CashModule({ onBack, onNotify }) {
         actual_cash_counted: parseFloat(closingForm.actual_cash_counted) || 0
       };
       const res = await api.createDailyClosing(payload);
-      onNotify(res.message || 'تم اعتماد تقفيل الوردية اليومية بنجاح ✓');
+      onNotify(res.message || 'تم اعتماد تقفيل الوردية اليومية بنجاح');
       setShowClosingModal(false);
       loadData();
     } catch (err) {
@@ -410,7 +410,7 @@ export default function CashModule({ onBack, onNotify }) {
                     }}
                     className="text-[#1F3A5F] font-bold hover:underline cursor-pointer"
                   >
-                    توريد للرئيسية ←
+                    توريد للرئيسية
                   </button>
                 </div>
               </div>
@@ -528,7 +528,7 @@ export default function CashModule({ onBack, onNotify }) {
                         <td className="py-3 px-4 text-left font-mono font-bold text-blue-900">{formatCurrency(dc.actual_cash_counted)}</td>
                         <td className="py-3 px-4 text-center font-mono font-bold">
                           {variance === 0 ? (
-                            <span className="text-green-700 text-xs">مطابق ✓</span>
+                            <span className="text-green-700 text-xs">مطابق</span>
                           ) : variance > 0 ? (
                             <span className="text-blue-700 text-xs">+{formatCurrency(variance)} (زيادة)</span>
                           ) : (
@@ -536,7 +536,7 @@ export default function CashModule({ onBack, onNotify }) {
                           )}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <span className="erp-badge-green text-xs">معتمد ✓</span>
+                          <span className="erp-badge-green text-xs">معتمد</span>
                         </td>
                       </tr>
                     );
@@ -690,7 +690,7 @@ export default function CashModule({ onBack, onNotify }) {
                   disabled={!disburseForm.expense_code_id || !validators.positiveNumber(disburseForm.amount)}
                   className="h-10 px-5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded font-bold shadow-sm"
                 >
-                  صرف المبلغ وخصم الخزينة ✓
+                  صرف المبلغ وخصم الخزينة
                 </button>
               </div>
             </form>
@@ -771,7 +771,7 @@ export default function CashModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-[#1F3A5F] text-white rounded font-bold"
                 >
-                  تأكيد التوريد للخزينة الرئيسية ✓
+                  تأكيد التوريد للخزينة الرئيسية
                 </button>
               </div>
             </form>
@@ -898,7 +898,7 @@ export default function CashModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-[#1F3A5F] text-white rounded font-bold"
                 >
-                  اعتماد تقفيل الوردية ✓
+                  اعتماد تقفيل الوردية
                 </button>
               </div>
             </form>

@@ -39,6 +39,10 @@ import ReportsModule from './modules/ReportsModule';
 import SettingsModule from './modules/SettingsModule';
 import BackupModule from './modules/BackupModule';
 
+// Section 4: Data Management (CEO Only)
+import DataManagementPage from './modules/data/DataManagementPage';
+import DataRecordFormPage from './modules/data/DataRecordFormPage';
+
 import { getActiveUser, setActiveUser } from './services/api';
 import { usersRepo, backupRepo } from './data';
 import { ensureDatabaseIntegrity, DB_NAME } from './data/db';
@@ -65,6 +69,36 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeUserRole, setActiveUserRole] = useState(getActiveUser().role);
   const [toast, setToast] = useState({ message: '', type: 'success' });
+
+  // Sidebar Pinned State (persisted in localStorage)
+  const [isSidebarPinned, setIsSidebarPinned] = useState(() => {
+    try {
+      const saved = localStorage.getItem('erp_sidebar_pinned');
+      return saved ? JSON.parse(saved) : false;
+    } catch (e) {
+      return false;
+    }
+  });
+
+  const handleTogglePin = () => {
+    setIsSidebarPinned((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('erp_sidebar_pinned', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  // Sync CSS Variable for sidebar width
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty(
+        '--sidebar-width',
+        isSidebarPinned ? '260px' : '72px'
+      );
+    }
+  }, [isSidebarPinned]);
 
   // Initialize and check setup state with automatic database integrity validation
   useEffect(() => {
@@ -156,6 +190,7 @@ export default function App() {
     if (r === 'reports') return 'reports';
     if (r === 'backup') return 'backup';
     if (r === 'settings') return 'settings';
+    if (r === 'data') return 'data';
     return 'home';
   };
 
@@ -220,7 +255,7 @@ export default function App() {
         if (subAction === 'edit' && parts[1]) {
           return <PartyFormPage partyId={parts[1]} initialType="supplier" onBack={() => navigateTo('suppliers')} onNotify={showNotification} />;
         }
-        return <PartiesListPage defaultTab="suppliers" onNavigate={navigateTo} onNotify={showNotification} />;
+        return <PartiesListPage mode="suppliers" defaultTab="suppliers" onNavigate={navigateTo} onNotify={showNotification} />;
 
       case 'customers':
         if (action === 'new') {
@@ -229,7 +264,7 @@ export default function App() {
         if (subAction === 'edit' && parts[1]) {
           return <PartyFormPage partyId={parts[1]} initialType="customer" onBack={() => navigateTo('customers')} onNotify={showNotification} />;
         }
-        return <PartiesListPage defaultTab="customers" onNavigate={navigateTo} onNotify={showNotification} />;
+        return <PartiesListPage mode="customers" defaultTab="customers" onNavigate={navigateTo} onNotify={showNotification} />;
 
       // C) Purchases
       case 'purchases':
@@ -350,6 +385,51 @@ export default function App() {
           />
         );
 
+      // Section 4: Data Management (CEO Only)
+      case 'data': {
+        // Strict Route Guard: Reject non-CEO with message and redirect
+        if (activeUserRole !== 'owner') {
+          return (
+            <DataManagementPage
+              onNavigate={navigateTo}
+              onNotify={showNotification}
+            />
+          );
+        }
+
+        // Full-page form for Add / Edit record
+        if (parts[1] && parts[2]) {
+          return (
+            <DataRecordFormPage
+              tableName={parts[1]}
+              recordId={parts[2]}
+              onBack={() => navigateTo(`data/${parts[1]}`)}
+              onNotify={showNotification}
+            />
+          );
+        }
+
+        // Specific table view
+        if (parts[1]) {
+          return (
+            <DataManagementPage
+              initialTable={parts[1]}
+              onNavigate={navigateTo}
+              onNotify={showNotification}
+            />
+          );
+        }
+
+        // Default Data Management screen
+        return (
+          <DataManagementPage
+            initialTable="items"
+            onNavigate={navigateTo}
+            onNotify={showNotification}
+          />
+        );
+      }
+
       // Home Dashboard
       case 'home':
       default:
@@ -371,21 +451,27 @@ export default function App() {
         userRole={activeUserRole}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        isPinned={isSidebarPinned}
+        onTogglePin={handleTogglePin}
       />
 
-      {/* Main Content Area (Offset by mr-0 on mobile, mr-64 on desktop lg screens) */}
-      <div className="flex-1 flex flex-col min-h-screen mr-0 lg:mr-64 min-w-0 transition-all duration-200">
+      {/* Main Content Area: Offset by 72px (unpinned) or 260px (pinned) on desktop, 0 on mobile */}
+      <div
+        className={`flex-1 flex flex-col min-h-screen min-w-0 transition-[margin] duration-250 ease-out overflow-x-hidden ${
+          isSidebarPinned ? 'mr-0 lg:mr-[260px]' : 'mr-0 lg:mr-[72px]'
+        }`}
+      >
         {/* Top Header Bar with Hamburger Toggle */}
         <Header
           currentScreen={currentSidebarScreen}
           onNavigate={navigateTo}
           onNotify={handleRoleChanged}
           onLockSession={handleLockSession}
-          onToggleSidebar={() => setSidebarOpen(prev => !prev)}
+          onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
         />
 
         {/* Dynamic Screen View wrapped with ErrorBoundary */}
-        <main className="flex-1 p-3 sm:p-5 lg:p-6 w-full max-w-[1700px] mx-auto min-w-0 overflow-y-auto">
+        <main className="flex-1 p-3 sm:p-5 lg:p-6 w-full max-w-[1700px] mx-auto min-w-0 overflow-y-auto overflow-x-hidden">
           {/* Backup Reminder Banner */}
           <BackupReminderBanner onOpenBackup={() => navigateTo('backup')} />
 

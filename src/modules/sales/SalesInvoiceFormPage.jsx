@@ -244,9 +244,14 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
     return sum + (q * p);
   }, 0);
 
-  // Credit Limit Check (Requirement F3)
+  // Credit Limit Check (Requirement F3 & Customer Deal Type Rule)
   useEffect(() => {
-    if (form.payment_terms === 'credit' && selectedCustomer && selectedCustomer.credit_limit > 0) {
+    const isCustomerCredit = selectedCustomer && (
+      selectedCustomer.customer_deal_type === 'credit' ||
+      (selectedCustomer.customer_deal_type !== 'cash' && selectedCustomer.payment_terms === 'credit')
+    );
+
+    if (form.payment_terms === 'credit' && isCustomerCredit && selectedCustomer.credit_limit > 0) {
       const limit = Number(selectedCustomer.credit_limit) || 0;
       const totalDue = customerBalance + invoiceTotal;
       if (totalDue > limit) {
@@ -328,7 +333,7 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
       };
 
       const res = await api.createSalesInvoice(payload);
-      if (onNotify) onNotify('تم إصدار فاتورة المبيعات بنجاح ✓');
+      if (onNotify) onNotify('تم إصدار فاتورة المبيعات بنجاح');
 
       if (onSaved) {
         onSaved();
@@ -574,7 +579,7 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
                 بنود الفاتورة والأسعار والخصومات
               </h2>
               <span className="text-xs text-gray-500 font-medium">
-                السعر قبل الخصم ← قيمة الخصم ← السعر بعد الخصم (صافي سعر البيع)
+                السعر قبل الخصم قيمة الخصم السعر بعد الخصم (صافي سعر البيع)
               </span>
             </div>
           </div>

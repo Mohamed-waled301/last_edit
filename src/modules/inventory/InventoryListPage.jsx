@@ -76,7 +76,7 @@ export default function InventoryListPage({ onNotify }) {
       'إجمالي قيمة المخزون (ج.م)': ((Number(it.actual_balance ?? it.current_stock) || 0) * (Number(it.cost_price) || 0)).toFixed(2)
     }));
     exportToExcel(exportData, 'تقرير_أرصدة_المخزن_الفعلية');
-    if (onNotify) onNotify('تم تصدير تقرير المخزن إلى Excel ✓');
+    if (onNotify) onNotify('تم تصدير تقرير المخزن إلى Excel');
   };
 
   return (

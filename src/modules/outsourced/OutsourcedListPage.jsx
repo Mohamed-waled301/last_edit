@@ -30,7 +30,7 @@ export default function OutsourcedListPage({ onNotify }) {
   const handleReceiveFromExternal = async (orderId) => {
     try {
       const res = await api.markReadyForSale(orderId);
-      if (onNotify) onNotify(res.message || 'تم استلام المنتج واعتماد الجاهزية للبيع بالمخزن ✓');
+      if (onNotify) onNotify(res.message || 'تم استلام المنتج واعتماد الجاهزية للبيع بالمخزن');
       loadOrders();
     } catch (err) {
       alert(err.message || 'فشل في استلام الدفعة');
@@ -140,7 +140,7 @@ export default function OutsourcedListPage({ onNotify }) {
                             استلام بالمعرض / المخزن
                           </button>
                         ) : (
-                          <span className="text-gray-400 text-xs">تم الاستلام ✓</span>
+                          <span className="text-gray-400 text-xs">تم الاستلام</span>
                         )}
                       </td>
                     </tr>

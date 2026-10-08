@@ -97,7 +97,7 @@ export default function InventoryModule({ onBack, onNotify }) {
         ...adjustmentForm,
         quantity: parseFloat(adjustmentForm.quantity)
       });
-      onNotify(res.message || 'تم تسجيل تسوية الجرد وتحديث الكميات بنجاح ✓');
+      onNotify(res.message || 'تم تسجيل تسوية الجرد وتحديث الكميات بنجاح');
       setShowAdjustmentModal(false);
       setAdjustmentForm({
         item_id: '',
@@ -127,7 +127,7 @@ export default function InventoryModule({ onBack, onNotify }) {
         ...transferForm,
         quantity: parseFloat(transferForm.quantity)
       });
-      onNotify(res.message || 'تم تسجيل التحويل المخزني بنجاح ✓');
+      onNotify(res.message || 'تم تسجيل التحويل المخزني بنجاح');
       setShowTransferModal(false);
       setTransferForm({
         from_location_id: '',
@@ -148,7 +148,7 @@ export default function InventoryModule({ onBack, onNotify }) {
     if (!validators.required(locationForm.name)) return;
     try {
       const res = await api.createStorageLocation(locationForm);
-      onNotify(res.message || 'تمت إضافة موقع التخزين بنجاح ✓');
+      onNotify(res.message || 'تمت إضافة موقع التخزين بنجاح');
       setShowLocationModal(false);
       setLocationForm({ name: '', code: '', type: 'raw_materials', capacity: '', notes: '' });
       loadData();
@@ -452,7 +452,7 @@ export default function InventoryModule({ onBack, onNotify }) {
                             {adj.notes && <span className="text-gray-400 block">{adj.notes}</span>}
                           </td>
                           <td className="py-3 px-4 text-xs font-semibold text-gray-500">
-                            لا يوجد أثر مالي (كميات فقط) ✓
+                            لا يوجد أثر مالي (كميات فقط)
                           </td>
                         </tr>
                       );
@@ -663,7 +663,7 @@ export default function InventoryModule({ onBack, onNotify }) {
                   disabled={!adjustmentForm.item_id || !validators.positiveNumber(adjustmentForm.quantity) || !validators.required(adjustmentForm.reason)}
                   className="h-10 px-5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded font-bold"
                 >
-                  حفظ التسوية وتعديل الكمية ✓
+                  حفظ التسوية وتعديل الكمية
                 </button>
               </div>
             </form>
@@ -768,7 +768,7 @@ export default function InventoryModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-[#1F3A5F] text-white rounded font-bold"
                 >
-                  تأكيد النقل المخزني ✓
+                  تأكيد النقل المخزني
                 </button>
               </div>
             </form>
@@ -847,7 +847,7 @@ export default function InventoryModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-[#1F3A5F] text-white rounded font-bold"
                 >
-                  حفظ الموقع ✓
+                  حفظ الموقع
                 </button>
               </div>
             </form>

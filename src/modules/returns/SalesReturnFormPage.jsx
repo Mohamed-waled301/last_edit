@@ -132,7 +132,7 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
         return_date: form.return_date
       });
 
-      if (onNotify) onNotify('تم تسجيل مرتجع المبيعات واسترجاع البضاعة للمخزن بنجاح ✓');
+      if (onNotify) onNotify('تم تسجيل مرتجع المبيعات واسترجاع البضاعة للمخزن بنجاح');
 
       if (onSaved) {
         onSaved();

@@ -105,7 +105,7 @@ export default function ProductionOrderFormPage({ onSaved, onNotify }) {
         notes: form.notes
       });
 
-      if (onNotify) onNotify('تم إصدار أمر التصنيع بنجاح وحجز الخامات ✓');
+      if (onNotify) onNotify('تم إصدار أمر التصنيع بنجاح وحجز الخامات');
 
       if (onSaved) {
         onSaved();

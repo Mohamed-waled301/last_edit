@@ -23,6 +23,7 @@ import {
   storageRepo,
   treasuriesRepo,
   expenseCodesRepo,
+  dataManagementRepo,
 } from '../data';
 
 let currentUserId = 'usr-owner';
@@ -500,6 +501,41 @@ export const api = {
   loadDemoData: async () => await backupRepo.loadDemoData(currentUserId),
   clearAllData: async () => await backupRepo.clearAllData(currentUserId),
   getBackups: async () => ({ success: true, data: [], backups: [] }),
+
+  // Data Management (إدارة البيانات - CEO Only)
+  getDataTables: async () => {
+    const list = await dataManagementRepo.getTables();
+    return { success: true, data: list, tables: list };
+  },
+  getTableRecords: async (tableName) => {
+    const list = await dataManagementRepo.getTableRecords(tableName);
+    return { success: true, data: list, records: list };
+  },
+  getDataRecord: async (tableName, id) => {
+    const rec = await dataManagementRepo.getRecord(tableName, id);
+    return { success: true, data: rec, record: rec };
+  },
+  createDataRecord: async (tableName, data, reason = '') => {
+    const rec = await dataManagementRepo.createRecord(tableName, data, reason);
+    return { success: true, data: rec, record: rec, message: 'تم حفظ السجل بنجاح' };
+  },
+  updateDataRecord: async (tableName, id, data, reason = '') => {
+    const rec = await dataManagementRepo.updateRecord(tableName, id, data, reason);
+    return { success: true, data: rec, record: rec, message: 'تم تحديث بيانات السجل بنجاح' };
+  },
+  deleteDataRecord: async (tableName, id, reason = '') => {
+    await dataManagementRepo.deleteRecord(tableName, id, reason);
+    return { success: true, message: 'تم حذف السجل بنجاح' };
+  },
+  checkRecordReferences: async (tableName, id) => {
+    const res = await dataManagementRepo.checkRecordReferences(tableName, id);
+    return { success: true, ...res };
+  },
+  getAuditLogsFiltered: async (filters = {}) => {
+    const logs = await dataManagementRepo.getAuditLogs(filters);
+    return { success: true, data: logs, audit_logs: logs };
+  },
 };
 
 export default api;
+

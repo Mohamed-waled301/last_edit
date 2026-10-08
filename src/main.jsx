@@ -3,9 +3,11 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import api from './services/api.js'
 
 // Global safety filter: Never allow technical IndexedDB/objectStore internal errors to popup to user
 if (typeof window !== 'undefined') {
+  window.api = api;
   const _origAlert = window.alert;
   window.alert = function (message) {
     const str = String(message || '');

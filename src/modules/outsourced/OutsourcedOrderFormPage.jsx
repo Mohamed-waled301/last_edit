@@ -137,7 +137,7 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
         notes: form.notes
       });
 
-      if (onNotify) onNotify('تم إصدار أمر التشغيل لدى الغير بنجاح ✓');
+      if (onNotify) onNotify('تم إصدار أمر التشغيل لدى الغير بنجاح');
 
       if (onSaved) {
         onSaved();

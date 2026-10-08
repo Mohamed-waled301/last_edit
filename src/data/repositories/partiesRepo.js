@@ -98,7 +98,8 @@ export const partiesRepo = {
 
     const isSupplier = data.is_supplier ? 1 : 0;
     const isCustomer = data.is_customer ? 1 : 0;
-    const creditLimit = isCustomer ? (Math.max(0, Number(data.credit_limit) || 0)) : 0; // Customer only!
+    const customerDealType = isCustomer ? (data.customer_deal_type || 'cash') : 'cash';
+    const creditLimit = (isCustomer && customerDealType === 'credit') ? (Math.max(0, Number(data.credit_limit) || 0)) : 0; // Credit customers only!
 
     const party = {
       id,
@@ -110,6 +111,7 @@ export const partiesRepo = {
       is_supplier: isSupplier,
       is_customer: isCustomer,
       supplier_type: data.supplier_type || 'goods', // 'goods' | 'service' (تشغيل خارجي)
+      customer_deal_type: customerDealType,
       payment_terms: data.payment_terms || 'cash',
       credit_limit: creditLimit, // Exists on customer side only; no supplier ceiling
       supplier_balance: Number(data.supplier_balance) || 0,
@@ -148,7 +150,8 @@ export const partiesRepo = {
           address: party.address,
           tax_number: party.tax_number,
           customer_type: 'local',
-          payment_terms: party.payment_terms,
+          customer_deal_type: customerDealType,
+          payment_terms: customerDealType === 'credit' ? 'credit' : (party.payment_terms || 'cash'),
           credit_limit: creditLimit,
           notes: party.notes,
           is_active: 1,
@@ -167,7 +170,12 @@ export const partiesRepo = {
 
     const isSupplier = data.is_supplier !== undefined ? (data.is_supplier ? 1 : 0) : current.is_supplier;
     const isCustomer = data.is_customer !== undefined ? (data.is_customer ? 1 : 0) : current.is_customer;
-    const creditLimit = isCustomer ? (data.credit_limit !== undefined ? Math.max(0, Number(data.credit_limit) || 0) : current.credit_limit) : 0;
+    const customerDealType = isCustomer 
+      ? (data.customer_deal_type ?? current.customer_deal_type ?? (current.payment_terms === 'credit' && current.credit_limit > 0 ? 'credit' : 'cash')) 
+      : 'cash';
+    const creditLimit = (isCustomer && customerDealType === 'credit')
+      ? (data.credit_limit !== undefined ? Math.max(0, Number(data.credit_limit) || 0) : (current.credit_limit || 0))
+      : 0;
 
     const updated = {
       ...current,
@@ -178,6 +186,7 @@ export const partiesRepo = {
       is_supplier: isSupplier,
       is_customer: isCustomer,
       supplier_type: data.supplier_type ?? current.supplier_type,
+      customer_deal_type: customerDealType,
       payment_terms: data.payment_terms ?? current.payment_terms,
       credit_limit: creditLimit,
       notes: data.notes ?? current.notes,
@@ -213,7 +222,8 @@ export const partiesRepo = {
           address: updated.address,
           tax_number: updated.tax_number,
           customer_type: 'local',
-          payment_terms: updated.payment_terms,
+          customer_deal_type: customerDealType,
+          payment_terms: customerDealType === 'credit' ? 'credit' : (updated.payment_terms || 'cash'),
           credit_limit: creditLimit,
           notes: updated.notes,
           is_active: updated.is_active,

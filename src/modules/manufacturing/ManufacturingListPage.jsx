@@ -30,7 +30,7 @@ export default function ManufacturingListPage({ onNotify }) {
   const handleCompleteStage1 = async (orderId) => {
     try {
       const res = await api.completeStage1(orderId);
-      if (onNotify) onNotify(res.message || 'تم إتمام مرحلة التشغيل الأولى بنجاح ✓');
+      if (onNotify) onNotify(res.message || 'تم إتمام مرحلة التشغيل الأولى بنجاح');
       loadOrders();
     } catch (err) {
       alert(err.message || 'فشل في إتمام المرحلة');

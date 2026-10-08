@@ -54,7 +54,7 @@ export default function PurchasesListPage({ onNotify }) {
       'الحالة': o.status === 'received' ? 'تم الاستلام' : 'قيد التوريد'
     }));
     exportToExcel(exportData, 'أوامر_شراء_وتوريد_الخامات');
-    if (onNotify) onNotify('تم تصدير أوامر التوريد إلى Excel ✓');
+    if (onNotify) onNotify('تم تصدير أوامر التوريد إلى Excel');
   };
 
   return (

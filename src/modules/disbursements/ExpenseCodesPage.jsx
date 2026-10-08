@@ -72,10 +72,10 @@ export default function ExpenseCodesPage({ onNotify }) {
 
       if (editingId) {
         await api.updateExpenseCode(editingId, payload);
-        if (onNotify) onNotify('تم تحديث كود المصروف بنجاح ✓');
+        if (onNotify) onNotify('تم تحديث كود المصروف بنجاح');
       } else {
         await api.createExpenseCode(payload);
-        if (onNotify) onNotify('تم إضافة كود المصروف بنجاح ✓');
+        if (onNotify) onNotify('تم إضافة كود المصروف بنجاح');
       }
 
       resetForm();

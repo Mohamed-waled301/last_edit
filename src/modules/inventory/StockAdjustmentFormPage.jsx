@@ -86,7 +86,7 @@ export default function StockAdjustmentFormPage({ onSaved, onNotify }) {
         adjustment_date: form.adjustment_date
       });
 
-      if (onNotify) onNotify('تم حفظ محضر التسوية الجردية وتحديث الرصيد بنجاح (بلا أثر مالي) ✓');
+      if (onNotify) onNotify('تم حفظ محضر التسوية الجردية وتحديث الرصيد بنجاح (بلا أثر مالي)');
 
       if (onSaved) {
         onSaved();

@@ -23,3 +23,4 @@ export { default as partiesRepo } from './repositories/partiesRepo';
 export { default as storageRepo } from './repositories/storageRepo';
 export { default as treasuriesRepo } from './repositories/treasuriesRepo';
 export { default as expenseCodesRepo } from './repositories/expenseCodesRepo';
+export { default as dataManagementRepo } from './repositories/dataManagementRepo';

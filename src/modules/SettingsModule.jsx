@@ -199,7 +199,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
                 type="submit"
                 className="w-full h-12 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-md font-bold text-base cursor-pointer transition-colors"
               >
-                حفظ الإعدادات ✓
+                حفظ الإعدادات
               </button>
             </div>
           </form>

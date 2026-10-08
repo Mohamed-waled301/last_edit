@@ -70,7 +70,7 @@ export default function ItemsListPage({ onNotify }) {
       };
     });
     exportToExcel(exportData, 'دليل_أصناف_المصنع');
-    if (onNotify) onNotify('تم تصدير دليل الأصناف إلى ملف Excel ✓');
+    if (onNotify) onNotify('تم تصدير دليل الأصناف إلى ملف Excel');
   };
 
   return (

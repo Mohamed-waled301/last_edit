@@ -10,18 +10,20 @@ import {
   CheckCircle2, 
   AlertTriangle,
   CreditCard,
-  ShieldCheck
+  ShieldCheck,
+  X
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { exportToExcel } from '../../utils/exportExcel';
 
-export default function PartiesListPage({ mode = 'suppliers', onNotify }) {
+export default function PartiesListPage({ mode = 'suppliers', defaultTab = null, onNotify }) {
+  const effectiveMode = defaultTab || mode;
   const [parties, setParties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterRole, setFilterRole] = useState(mode === 'customers' ? 'customers' : 'suppliers'); // 'all' | 'suppliers' | 'customers' | 'both'
+  const [filterRole, setFilterRole] = useState(effectiveMode === 'customers' ? 'customers' : 'suppliers'); // 'all' | 'suppliers' | 'customers' | 'both'
   const [offsetModalParty, setOffsetModalParty] = useState(null);
   const [offsetAmount, setOffsetAmount] = useState('');
   const [offsetNotes, setOffsetNotes] = useState('');
@@ -75,7 +77,7 @@ export default function PartiesListPage({ mode = 'suppliers', onNotify }) {
     try {
       setOffsetExecuting(true);
       const res = await api.executePartyOffset(offsetModalParty.id, num, offsetNotes);
-      if (onNotify) onNotify(res.message || 'تم اعتماد المقاصة وتسوية الأرصدة بنجاح ✓');
+      if (onNotify) onNotify(res.message || 'تم اعتماد المقاصة وتسوية الأرصدة بنجاح');
       setOffsetModalParty(null);
       loadParties();
     } catch (err) {
@@ -97,12 +99,12 @@ export default function PartiesListPage({ mode = 'suppliers', onNotify }) {
       'صافي الرصيد': p.net_balance || 0,
       'الحد الائتماني (عميل)': p.credit_limit || 0
     }));
-    exportToExcel(exportData, mode === 'customers' ? 'دليل_العملاء' : 'دليل_الموردين');
-    if (onNotify) onNotify('تم تصدير البيانات إلى Excel بنجاح ✓');
+    exportToExcel(exportData, effectiveMode === 'customers' ? 'دليل_العملاء' : 'دليل_الموردين');
+    if (onNotify) onNotify('تم تصدير البيانات إلى Excel بنجاح');
   };
 
-  const pageTitle = mode === 'customers' ? 'دليل العملاء' : 'دليل الموردين وجهات التعامل';
-  const pageSubtitle = mode === 'customers' 
+  const pageTitle = effectiveMode === 'customers' ? 'دليل العملاء' : 'دليل الموردين وجهات التعامل';
+  const pageSubtitle = effectiveMode === 'customers' 
     ? 'إدارة حسابات العملاء، الحدود الائتمانية، وأرصدة المديونية'
     : 'إدارة الموردين، حسابات التشغيل الخارجي، المقاصة وتسوية الأرصدة المشتركة';
 
@@ -110,7 +112,7 @@ export default function PartiesListPage({ mode = 'suppliers', onNotify }) {
     <PageContainer
       title={pageTitle}
       subtitle={pageSubtitle}
-      breadcrumbs={[{ label: mode === 'customers' ? 'العملاء' : 'الموردين' }]}
+      breadcrumbs={[{ label: effectiveMode === 'customers' ? 'العملاء' : 'الموردين' }]}
       actions={
         <div className="flex items-center gap-2">
           <button
@@ -125,12 +127,12 @@ export default function PartiesListPage({ mode = 'suppliers', onNotify }) {
           <button
             type="button"
             onClick={() => {
-              window.location.hash = mode === 'customers' ? '#/customers/new' : '#/suppliers/new';
+              window.location.hash = effectiveMode === 'customers' ? '#/customers/new' : '#/suppliers/new';
             }}
             className="px-4 py-2 rounded-md bg-[#1F3A5F] hover:bg-[#162a45] text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>{mode === 'customers' ? '+ إضافة عميل جديد' : '+ إضافة مورد / جهة تعامل'}</span>
+            <span>{effectiveMode === 'customers' ? '+ إضافة عميل جديد' : '+ إضافة مورد / جهة تعامل'}</span>
           </button>
         </div>
       }
@@ -359,7 +361,7 @@ export default function PartiesListPage({ mode = 'suppliers', onNotify }) {
                 onClick={() => setOffsetModalParty(null)}
                 className="text-gray-400 hover:text-gray-600 cursor-pointer"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 

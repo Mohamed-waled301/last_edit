@@ -49,9 +49,9 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 h-16 sticky top-0 z-20 flex items-center justify-between px-3 sm:px-6 no-print shrink-0">
-      {/* Right side: Menu button for mobile + Company Name */}
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+    <header className="bg-white border-b border-gray-200 h-16 sticky top-0 z-20 flex flex-nowrap items-center justify-between px-3 sm:px-6 no-print shrink-0 whitespace-nowrap overflow-hidden">
+      {/* Right side: Menu button for mobile + Company Name (flex: 1, min-width: 0) */}
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 overflow-hidden whitespace-nowrap">
         <button
           onClick={onToggleSidebar}
           className="p-2 -mr-1 text-gray-700 hover:bg-gray-100 rounded-md lg:hidden cursor-pointer shrink-0"
@@ -62,22 +62,25 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
           <Menu className="w-5 h-5 text-[#1F3A5F]" />
         </button>
 
-        <div className="min-w-0">
-          <h1 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 leading-tight truncate">
+        <div className="flex-1 min-w-0 overflow-hidden whitespace-nowrap">
+          <h1
+            className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 leading-tight truncate"
+            title={factoryName}
+          >
             {factoryName}
           </h1>
-          <span className="text-xs text-gray-500 font-medium hidden md:inline truncate block">
+          <span className="text-xs text-gray-500 font-medium hidden md:block truncate">
             نظام تخطيط موارد المؤسسات المتكامل (Enterprise ERP)
           </span>
         </div>
       </div>
 
-      {/* Left side: User Name, Role, and Actions */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+      {/* Left side: User Name, Role, and Actions (shrink-0, flex-nowrap) */}
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-nowrap">
         {/* Quick Backup Button */}
         <button
           onClick={() => onNavigate('backup')}
-          className={`h-9 sm:h-10 px-2.5 sm:px-3.5 rounded-md font-semibold text-xs sm:text-sm border flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-colors ${
+          className={`h-9 sm:h-10 px-2.5 sm:px-3.5 rounded-md font-semibold text-xs sm:text-sm border flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-colors shrink-0 ${
             currentScreen === 'backup'
               ? 'bg-[#1F3A5F] text-white border-[#1F3A5F]'
               : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
@@ -85,7 +88,7 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
           title="شاشة النسخ الاحتياطي وأمان البيانات"
           type="button"
         >
-          <HardDrive className="w-4 h-4 text-gray-600" />
+          <HardDrive className="w-4 h-4 text-gray-600 shrink-0" />
           <span className="hidden sm:inline">نسخة احتياطية</span>
         </button>
 
@@ -93,7 +96,7 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
         {currentUser?.role === 'owner' && (
           <button
             onClick={() => onNavigate('settings')}
-            className={`h-9 sm:h-10 px-2.5 sm:px-3.5 rounded-md font-semibold text-xs sm:text-sm border flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-colors ${
+            className={`h-9 sm:h-10 px-2.5 sm:px-3.5 rounded-md font-semibold text-xs sm:text-sm border flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-colors shrink-0 ${
               currentScreen === 'settings'
                 ? 'bg-[#1F3A5F] text-white border-[#1F3A5F]'
                 : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
@@ -101,17 +104,18 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
             title="إعدادات النظام والضرائب"
             type="button"
           >
-            <Settings className="w-4 h-4" />
+            <Settings className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">الإعدادات</span>
           </button>
         )}
 
         {/* User Account & Role Selector */}
-        <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-md px-2 sm:px-3 h-9 sm:h-10 max-w-[180px] sm:max-w-none">
+        <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-md px-2 sm:px-3 h-9 sm:h-10 max-w-[180px] sm:max-w-none shrink-0">
           <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500 shrink-0" />
           <select
             value={currentUser?.id || ''}
             onChange={handleRoleChange}
+            aria-label="المستخدم الحالي"
             className="bg-transparent font-bold text-gray-800 text-xs sm:text-sm cursor-pointer focus:outline-none border-0 p-0 truncate max-w-[90px] sm:max-w-[150px]"
           >
             {users.map(u => (
@@ -120,7 +124,7 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
               </option>
             ))}
           </select>
-          <span className="text-[11px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-gray-200 text-gray-700 font-semibold border border-gray-300 hidden md:inline shrink-0">
+          <span className="text-[11px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-gray-200 text-gray-700 font-semibold border border-gray-300 hidden md:inline shrink-0 whitespace-nowrap">
             {getRoleLabel(currentUser?.role)}
           </span>
         </div>
@@ -132,8 +136,9 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
             className="h-9 sm:h-10 px-2 sm:px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-md font-medium text-xs flex items-center gap-1 cursor-pointer transition-colors shrink-0"
             title="قفل الشاشة أو تبديل الحساب برمز PIN"
             type="button"
+            aria-label="قفل الشاشة"
           >
-            <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             <span className="hidden lg:inline">قفل</span>
           </button>
         )}

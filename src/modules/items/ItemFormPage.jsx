@@ -129,7 +129,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
       const compressed = await compressImageToBase64(file, 600, 600, 0.8);
       setForm(prev => ({ ...prev, image: compressed }));
       setImagePreview(compressed);
-      if (onNotify) onNotify('تم ضغط وتحميل صورة الصنف بنجاح ✓');
+      if (onNotify) onNotify('تم ضغط وتحميل صورة الصنف بنجاح');
     } catch (err) {
       alert(err.message || 'فشل في تحميل الصورة');
     }
@@ -292,10 +292,10 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
 
       if (isEdit) {
         await api.updateItem(itemId, payload);
-        if (onNotify) onNotify('تم تحديث بيانات الصنف بنجاح ✓');
+        if (onNotify) onNotify('تم تحديث بيانات الصنف بنجاح');
       } else {
         await api.createItem(payload);
-        if (onNotify) onNotify('تم إضافة الصنف الجديد بنجاح ✓');
+        if (onNotify) onNotify('تم إضافة الصنف الجديد بنجاح');
       }
 
       if (onSaved) {

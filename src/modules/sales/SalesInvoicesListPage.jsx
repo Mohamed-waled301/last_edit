@@ -51,7 +51,7 @@ export default function SalesInvoicesListPage({ onNotify }) {
       'الحالة': i.status === 'paid' ? 'مدفوعة بالكامل' : i.status === 'partially_paid' ? 'مدفوعة جزئياً' : 'غير مدفوعة'
     }));
     exportToExcel(exportData, 'سجل_فواتير_المبيعات');
-    if (onNotify) onNotify('تم تصدير فواتير المبيعات إلى Excel ✓');
+    if (onNotify) onNotify('تم تصدير فواتير المبيعات إلى Excel');
   };
 
   return (

@@ -105,7 +105,7 @@ export default function PageContainer({
       {hasBottomBar && (
         <aside
           aria-label="شريط الإجراءات"
-          className="fixed bottom-0 right-0 left-0 lg:left-0 lg:right-64 bg-white/95 backdrop-blur-md border-t border-gray-200 px-4 sm:px-6 py-3.5 shadow-lg z-30 flex items-center justify-between gap-4 select-none"
+          className="fixed bottom-0 right-0 left-0 lg:left-0 lg:right-[var(--sidebar-width,72px)] bg-white/95 backdrop-blur-md border-t border-gray-200 px-4 sm:px-6 py-3.5 shadow-lg z-30 flex items-center justify-between gap-4 select-none transition-[right] duration-250"
         >
           <div className="flex items-center gap-4">
             {extraBottomContent}

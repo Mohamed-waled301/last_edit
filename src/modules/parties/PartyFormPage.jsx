@@ -13,8 +13,19 @@ import { api } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 
-export default function PartyFormPage({ partyId = null, initialRole = null, onSaved, onCancel, onNotify }) {
+/**
+ * Format string/number with thousand separators using Western digits (0-9)
+ */
+function formatNumberWithSeparators(val) {
+  if (val === null || val === undefined || val === '') return '';
+  const clean = String(val).replace(/[^0-9]/g, '');
+  if (!clean) return '';
+  return Number(clean).toLocaleString('en-US');
+}
+
+export default function PartyFormPage({ partyId = null, initialRole = null, initialType = null, onSaved, onCancel, onBack, onNotify }) {
   const isEdit = Boolean(partyId);
+  const effectiveRole = initialRole || initialType;
 
   const [form, setForm] = useState({
     code: '',
@@ -22,10 +33,11 @@ export default function PartyFormPage({ partyId = null, initialRole = null, onSa
     phone: '',
     address: '',
     tax_number: '',
-    is_supplier: initialRole === 'supplier' || initialRole === null,
-    is_customer: initialRole === 'customer',
+    is_supplier: effectiveRole === 'supplier' || (effectiveRole !== 'customer' && effectiveRole === null),
+    is_customer: effectiveRole === 'customer',
     supplier_type: 'goods', // 'goods' | 'service' (تشغيل وتصنيع خارجي)
-    credit_limit: '50000', // Exists on customer side ONLY
+    customer_deal_type: 'cash', // 'cash' (نقدي) | 'credit' (آجل) - default: نقدي
+    credit_limit: '50000', // Stored in form state so switching back restores it
     payment_terms: 'cash',
     notes: ''
   });
@@ -47,6 +59,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, onSa
           const res = await api.getParty(partyId);
           if (res && res.data) {
             const p = res.data;
+            const dealType = p.customer_deal_type || (p.credit_limit && Number(p.credit_limit) > 0 ? 'credit' : (p.payment_terms === 'credit' ? 'credit' : 'cash'));
             setForm({
               code: p.code || '',
               name: p.name || '',
@@ -56,7 +69,8 @@ export default function PartyFormPage({ partyId = null, initialRole = null, onSa
               is_supplier: Boolean(p.is_supplier),
               is_customer: Boolean(p.is_customer),
               supplier_type: p.supplier_type || 'goods',
-              credit_limit: p.credit_limit ? String(p.credit_limit) : '0',
+              customer_deal_type: dealType,
+              credit_limit: p.credit_limit && Number(p.credit_limit) > 0 ? String(p.credit_limit) : '50000',
               payment_terms: p.payment_terms || 'cash',
               notes: p.notes || ''
             });
@@ -73,7 +87,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, onSa
       }
     }
     loadData();
-  }, [partyId, isEdit, initialRole]);
+  }, [partyId, isEdit, initialRole, initialType]);
 
   const validate = () => {
     const errs = {};
@@ -83,13 +97,24 @@ export default function PartyFormPage({ partyId = null, initialRole = null, onSa
       errs.role = 'يرجى تحديد صفة جهة التعامل على الأقل (مورد أو عميل أو كلاهما)';
     }
 
-    if (form.is_customer) {
-      const credErr = Validators.nonNegativeNumber(form.credit_limit, 'الحد الائتماني');
-      if (credErr) errs.credit_limit = credErr;
+    // Validation: credit limit is required and must be greater than 0 ONLY when "آجل" is selected
+    if (form.is_customer && form.customer_deal_type === 'credit') {
+      const num = Number(form.credit_limit);
+      if (!form.credit_limit || isNaN(num) || num <= 0) {
+        errs.credit_limit = 'الحد الائتماني مطلوب ويجب أن يكون أكبر من 0 للتعامل الآجل';
+      }
     }
 
     setErrors(errs);
     return Object.keys(errs).length === 0;
+  };
+
+  const handleCreditLimitChange = (e) => {
+    const rawDigits = e.target.value.replace(/[^0-9]/g, '');
+    setForm(prev => ({ ...prev, credit_limit: rawDigits }));
+    if (errors.credit_limit) {
+      setErrors(prev => ({ ...prev, credit_limit: null }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -98,6 +123,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, onSa
 
     try {
       setSaving(true);
+      const isCreditCustomer = form.is_customer && form.customer_deal_type === 'credit';
       const payload = {
         code: form.code.trim(),
         name: form.name.trim(),
@@ -107,21 +133,24 @@ export default function PartyFormPage({ partyId = null, initialRole = null, onSa
         is_supplier: form.is_supplier ? 1 : 0,
         is_customer: form.is_customer ? 1 : 0,
         supplier_type: form.supplier_type,
-        credit_limit: form.is_customer ? (Number(form.credit_limit) || 0) : 0, // Customer ONLY
+        customer_deal_type: form.is_customer ? form.customer_deal_type : 'cash',
+        credit_limit: isCreditCustomer ? (Number(form.credit_limit) || 0) : 0, // Stored only when type is 'credit', otherwise 0
         payment_terms: form.payment_terms,
         notes: form.notes
       };
 
       if (isEdit) {
         await api.updateParty(partyId, payload);
-        if (onNotify) onNotify('تم تحديث بيانات جهة التعامل بنجاح ✓');
+        if (onNotify) onNotify('تم تحديث بيانات جهة التعامل بنجاح');
       } else {
         await api.createParty(payload);
-        if (onNotify) onNotify('تم إضافة جهة التعامل بنجاح ✓');
+        if (onNotify) onNotify('تم إضافة جهة التعامل بنجاح');
       }
 
       if (onSaved) {
         onSaved();
+      } else if (onBack) {
+        onBack();
       } else {
         const dest = form.is_customer && !form.is_supplier ? '#/customers' : '#/suppliers';
         window.location.hash = dest;
@@ -133,7 +162,13 @@ export default function PartyFormPage({ partyId = null, initialRole = null, onSa
     }
   };
 
-  const isFormValid = Boolean(form.name.trim() && form.code.trim() && (form.is_supplier || form.is_customer));
+  const isCreditValid = !form.is_customer || form.customer_deal_type !== 'credit' || (Number(form.credit_limit) > 0);
+  const isFormValid = Boolean(
+    form.name.trim() && 
+    form.code.trim() && 
+    (form.is_supplier || form.is_customer) &&
+    isCreditValid
+  );
 
   return (
     <PageContainer
@@ -289,41 +324,67 @@ export default function PartyFormPage({ partyId = null, initialRole = null, onSa
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Customer Credit Limit (CUSTOMER SIDE ONLY) */}
-            {form.is_customer ? (
-              <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-md">
-                <label className="block text-xs font-bold text-emerald-900 mb-1">
-                  الحد الائتماني للعميل (ج.م) <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="0"
-                    step="100"
-                    value={form.credit_limit}
-                    onChange={(e) => setForm(prev => ({ ...prev, credit_limit: e.target.value }))}
-                    className="w-full px-3 py-2 border border-emerald-300 rounded-md text-sm font-mono font-bold text-emerald-800 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600"
-                    required={form.is_customer}
-                  />
+            {/* Customer Side Controls */}
+            {form.is_customer && (
+              <div className={`p-4 bg-emerald-50/50 border border-emerald-200 rounded-md space-y-3 ${!form.is_supplier ? 'md:col-span-2' : ''}`}>
+                <div>
+                  <label htmlFor="customer-deal-type-select" className="block text-xs font-bold text-emerald-900 mb-1">
+                    نوع التعامل
+                  </label>
+                  <select
+                    id="customer-deal-type-select"
+                    value={form.customer_deal_type}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      setForm(prev => ({ ...prev, customer_deal_type: newType }));
+                      if (errors.credit_limit) {
+                        setErrors(prev => ({ ...prev, credit_limit: null }));
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-emerald-300 rounded-md text-sm bg-white font-semibold text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-600 cursor-pointer"
+                  >
+                    <option value="cash">نقدي</option>
+                    <option value="credit">آجل</option>
+                  </select>
                 </div>
-                <span className="text-[11px] text-emerald-700 mt-1 block">
-                  يطبق على فواتير المبيعات الآجلة فقط؛ يمنع حفظ الفاتورة عند تجاوز المديونية لهذا الحد. (تم إلغاء سقف المورد بالكامل).
-                </span>
-                <FieldError error={errors.credit_limit} />
-              </div>
-            ) : (
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-md text-xs text-gray-400">
-                الحد الائتماني يظهر ويطبق على العملاء فقط، ولا يوجد سقف مالي على الموردين.
+
+                {/* Show credit limit ONLY when deal type is credit */}
+                {form.customer_deal_type === 'credit' && (
+                  <div id="credit-limit-container" className="space-y-1">
+                    <label htmlFor="party-credit-limit-input" className="block text-xs font-bold text-emerald-900 mb-1">
+                      الحد الائتماني للعميل (ج.م) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        id="party-credit-limit-input"
+                        name="credit_limit"
+                        value={formatNumberWithSeparators(form.credit_limit)}
+                        onChange={handleCreditLimitChange}
+                        placeholder="0"
+                        className="w-full px-3 py-2 border border-emerald-300 rounded-md text-sm font-mono font-bold text-emerald-800 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600 text-left"
+                        style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}
+                        required={true}
+                      />
+                    </div>
+                    <span className="text-[11px] text-emerald-700 mt-1 block">
+                      يطبق على فواتير المبيعات الآجلة فقط، ويمنع حفظ الفاتورة عند تجاوز المديونية لهذا الحد.
+                    </span>
+                    <FieldError error={errors.credit_limit} />
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Supplier Type (If Supplier) */}
+            {/* Supplier Side Controls */}
             {form.is_supplier && (
-              <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-md">
-                <label className="block text-xs font-bold text-blue-900 mb-1">
+              <div className={`p-4 bg-blue-50/50 border border-blue-200 rounded-md space-y-1 ${!form.is_customer ? 'md:col-span-2' : ''}`}>
+                <label htmlFor="supplier-type-select" className="block text-xs font-bold text-blue-900 mb-1">
                   نوع نشاط المورد
                 </label>
                 <select
+                  id="supplier-type-select"
                   value={form.supplier_type}
                   onChange={(e) => setForm(prev => ({ ...prev, supplier_type: e.target.value }))}
                   className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
@@ -334,6 +395,12 @@ export default function PartyFormPage({ partyId = null, initialRole = null, onSa
                 <span className="text-[11px] text-blue-700 mt-1 block">
                   مورد الخدمة يُستخدم في شاشة التصنيع لدى الغير واحتساب التكاليف التراكمية.
                 </span>
+              </div>
+            )}
+
+            {!form.is_customer && !form.is_supplier && (
+              <div className="md:col-span-2 p-4 bg-gray-50 border border-gray-200 rounded-md text-xs text-gray-500">
+                يرجى تحديد صفة جهة التعامل (مورد أو عميل) أعلاه لتفعيل الضوابط الخاصة بها.
               </div>
             )}
           </div>

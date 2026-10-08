@@ -73,7 +73,7 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
         notes: form.notes
       });
 
-      if (onNotify) onNotify('تم اعتماد تقفيل الوردية اليومية بنجاح ✓');
+      if (onNotify) onNotify('تم اعتماد تقفيل الوردية اليومية بنجاح');
 
       if (onSaved) {
         onSaved();

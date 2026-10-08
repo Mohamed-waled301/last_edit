@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, UserCheck, Shield, ChevronLeft, ArrowRight } from 'lucide-react';
+import { Lock, UserCheck, Shield, ChevronLeft, ArrowRight, Delete } from 'lucide-react';
 import { usersRepo } from '../data';
 import { setActiveUser } from '../services/api';
 
@@ -170,7 +170,7 @@ export const LoginScreen = ({ onLoginSuccess }) => {
               onClick={handleBackspace}
               className="h-11 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md text-xs font-bold text-gray-600 cursor-pointer"
             >
-              ⌫
+              <Delete className="w-4 h-4 mx-auto" />
             </button>
           </div>
 

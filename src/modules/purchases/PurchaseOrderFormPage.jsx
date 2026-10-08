@@ -245,7 +245,7 @@ export default function PurchaseOrderFormPage({ onSaved, onCancel, onNotify }) {
       };
 
       await api.createPurchaseOrder(payload);
-      if (onNotify) onNotify('تم إصدار أمر التوريد وتحديث أسعار التكلفة بنجاح ✓');
+      if (onNotify) onNotify('تم إصدار أمر التوريد وتحديث أسعار التكلفة بنجاح');
 
       if (onSaved) {
         onSaved();

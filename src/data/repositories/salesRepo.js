@@ -239,9 +239,14 @@ export const salesRepo = {
       : Math.max(0, Number(data.paid_amount) || 0);
 
     // Validation: Credit Limit on Customer
+    // Applies only to customers with type "آجل" and only to credit invoices. Cash customers are never blocked by a limit.
     if (paymentTerms === 'credit' && data.customer_id) {
       const customer = await db.customers.get(data.customer_id);
-      if (customer && customer.credit_limit > 0) {
+      const isCustomerCredit = customer && (
+        customer.customer_deal_type === 'credit' ||
+        (customer.customer_deal_type !== 'cash' && customer.payment_terms === 'credit')
+      );
+      if (isCustomerCredit && customer.credit_limit > 0) {
         const stmt = await this.getCustomerStatement(data.customer_id);
         const currentBalance = stmt.summary?.remaining_balance || stmt.balance_due || 0;
         const totalDueAfterThisInvoice = Number((currentBalance + (totalInvoiceAmount - paidAmount)).toFixed(2));

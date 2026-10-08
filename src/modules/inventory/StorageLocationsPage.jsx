@@ -68,10 +68,10 @@ export default function StorageLocationsPage({ onNotify }) {
       setSaving(true);
       if (editingId) {
         await api.updateStorageLocation(editingId, form);
-        if (onNotify) onNotify('تم تحديث موقع التخزين بنجاح ✓');
+        if (onNotify) onNotify('تم تحديث موقع التخزين بنجاح');
       } else {
         await api.createStorageLocation(form);
-        if (onNotify) onNotify('تم إضافة موقع التخزين بنجاح ✓');
+        if (onNotify) onNotify('تم إضافة موقع التخزين بنجاح');
       }
       resetForm();
       loadLocations();

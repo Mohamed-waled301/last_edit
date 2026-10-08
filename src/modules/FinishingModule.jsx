@@ -98,7 +98,7 @@ export default function FinishingModule({ onBack, onNotify }) {
       };
 
       const res = await api.createFinishingOrder(payload);
-      onNotify(res.message || 'تم إرسال أمر التشغيل الخارجي وحساب التكلفة التراكمية بنجاح ✓');
+      onNotify(res.message || 'تم إرسال أمر التشغيل الخارجي وحساب التكلفة التراكمية بنجاح');
       setShowAddModal(false);
       setNewOrder({
         production_order_id: '',
@@ -121,7 +121,7 @@ export default function FinishingModule({ onBack, onNotify }) {
     if (!window.confirm('هل استلمت البضاعة من المصنع الخارجي وجاهزة لدخول معرض البيع ومخزن المنتج التام؟')) return;
     try {
       const res = await api.markReadyForSale(id);
-      onNotify(res.message || 'تم توريد المنتج التام للمخزن وجاهز للبيع ✓');
+      onNotify(res.message || 'تم توريد المنتج التام للمخزن وجاهز للبيع');
       loadData();
     } catch (err) {
       alert(err.message);
@@ -218,7 +218,7 @@ export default function FinishingModule({ onBack, onNotify }) {
                     </td>
                     <td className="py-3 px-4 text-center">
                       {fo.status === 'ready_for_sale' ? (
-                        <span className="erp-badge-green text-xs">تم الاستلام وجاهز للبيع ✓</span>
+                        <span className="erp-badge-green text-xs">تم الاستلام وجاهز للبيع</span>
                       ) : (
                         <span className="erp-badge-amber text-xs">لدى المصنع الخارجي</span>
                       )}
@@ -229,7 +229,7 @@ export default function FinishingModule({ onBack, onNotify }) {
                           onClick={() => handleMarkReadyForSale(fo.id)}
                           className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold cursor-pointer shadow-sm"
                         >
-                          استلام للمخزن التام ✓
+                          استلام للمخزن التام
                         </button>
                       )}
                     </td>
@@ -393,7 +393,7 @@ export default function FinishingModule({ onBack, onNotify }) {
                   disabled={!newOrder.production_order_id || !newOrder.supplier_id || !validators.positiveNumber(newOrder.finishing_quantity)}
                   className="h-10 px-5 bg-[#1F3A5F] text-white rounded font-bold shadow-sm"
                 >
-                  إرسال للتشغيل الخارجي وحفظ التكلفة ✓
+                  إرسال للتشغيل الخارجي وحفظ التكلفة
                 </button>
               </div>
             </form>

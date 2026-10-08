@@ -111,7 +111,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
         fabric_waste_percent: parseFloat(newOrder.fabric_waste_percent) || 5
       };
       const res = await api.createProductionOrder(payload);
-      onNotify(res.message || 'تم بدء أمر تشغيل الملابس بنجاح ✓');
+      onNotify(res.message || 'تم بدء أمر تشغيل الملابس بنجاح');
       setShowAddOrderModal(false);
       setNewOrder({
         product_id: '',
@@ -135,7 +135,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
     if (!window.confirm('هل أنت متأكد من إنهاء مرحلة التشغيل الداخلي وتحويل الدفعة للمرحلة التالية (التشغيل الخارجي/التشطيب)؟')) return;
     try {
       const res = await api.completeStage1(id);
-      onNotify(res.message || 'تم إتمام المرحلة بنجاح ✓');
+      onNotify(res.message || 'تم إتمام المرحلة بنجاح');
       loadData();
     } catch (err) {
       alert(err.message);
@@ -162,7 +162,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
           <BackButton onClick={onBack} />
           <div>
             <h2 className="text-xl font-bold text-gray-900 leading-none">أوامر الإنتاج والتصنيع (مصنع ملابس)</h2>
-            <span className="text-xs text-gray-500 font-medium">مراحل الإنتاج (قص ← خياطة ← كوي وتعبئة)، هالك القماش، والتحقق من الحد الأدنى للتشغيل</span>
+            <span className="text-xs text-gray-500 font-medium">مراحل الإنتاج (قص خياطة كوي وتعبئة)، هالك القماش، والتحقق من الحد الأدنى للتشغيل</span>
           </div>
         </div>
 
@@ -228,7 +228,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
                     <td className="py-3 px-4 text-left font-bold text-[#1F3A5F]">{formatCurrency(ord.unit_stage1_cost)}</td>
                     <td className="py-3 px-4 text-center">
                       {ord.status === 'stage1_completed' ? (
-                        <span className="erp-badge-green text-xs">جاهز للمرحلة التالية ✓</span>
+                        <span className="erp-badge-green text-xs">جاهز للمرحلة التالية</span>
                       ) : (
                         <span className="erp-badge-gray text-xs">قيد التشغيل</span>
                       )}
@@ -239,7 +239,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
                           onClick={() => handleCompleteOrder(ord.id)}
                           className="px-3 py-1 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded text-xs font-semibold cursor-pointer shadow-sm"
                         >
-                          إنهاء المرحلة ✓
+                          إنهاء المرحلة
                         </button>
                       )}
                     </td>
@@ -410,7 +410,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
                   disabled={!newOrder.product_id || !validators.positiveNumber(newOrder.batch_quantity)}
                   className="h-11 px-6 bg-[#1F3A5F] hover:bg-[#172c48] disabled:opacity-50 text-white rounded-md font-bold text-sm cursor-pointer shadow-sm"
                 >
-                  اعتماد وبدء أمر التشغيل ✓
+                  اعتماد وبدء أمر التشغيل
                 </button>
               </div>
             </form>
@@ -484,7 +484,7 @@ export default function ManufacturingModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-[#1F3A5F] text-white rounded font-bold"
                 >
-                  حفظ المصاريف ✓
+                  حفظ المصاريف
                 </button>
               </div>
             </form>

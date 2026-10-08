@@ -78,7 +78,7 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
         notes: form.notes
       });
 
-      if (onNotify) onNotify('تم توريد النقدية إلى الخزينة المركزية بنجاح ✓');
+      if (onNotify) onNotify('تم توريد النقدية إلى الخزينة المركزية بنجاح');
 
       if (onSaved) {
         onSaved();

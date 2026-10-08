@@ -247,7 +247,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
         additional_expenses: parseFloat(newPO.additional_expenses) || 0
       };
       const res = await api.createPurchaseOrder(payload);
-      onNotify(res.message || 'تم إنشاء أمر الشراء وتحديث أسعار تكلفة الأصناف بنجاح ✓');
+      onNotify(res.message || 'تم إنشاء أمر الشراء وتحديث أسعار تكلفة الأصناف بنجاح');
       setShowAddPOModal(false);
       setNewPO({
         supplier_id: '',
@@ -274,7 +274,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
     if (!validators.required(newSupplier.name)) return;
     try {
       const res = await api.createSupplier ? await api.createSupplier(newSupplier) : await api.createUnifiedParty({ ...newSupplier, is_supplier: true, is_customer: false });
-      onNotify(res.message || 'تمت إضافة المورد بنجاح ✓');
+      onNotify(res.message || 'تمت إضافة المورد بنجاح');
       setShowAddSupplierModal(false);
       setNewSupplier({ name: '', phone: '', address: '', tax_number: '', payment_terms: 'credit', notes: '' });
       loadData();
@@ -289,7 +289,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
     if (!validators.required(newQuickMaterial.name)) return;
     try {
       const res = await api.createRawMaterial(newQuickMaterial);
-      onNotify(res.message || 'تمت إضافة الخامة بنجاح ✓');
+      onNotify(res.message || 'تمت إضافة الخامة بنجاح');
       setShowAddMaterialQuickModal(false);
       setNewQuickMaterial({
         name: '',
@@ -431,7 +431,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
     try {
       if (api.executeOffset && showOffsetModal) {
         const res = await api.executeOffset(showOffsetModal.supplier.id, parseFloat(offsetForm.amount), offsetForm.notes);
-        onNotify(res.message || 'تمت تسوية المقاصة بنجاح ✓');
+        onNotify(res.message || 'تمت تسوية المقاصة بنجاح');
         setShowOffsetModal(null);
         loadData();
       }
@@ -702,7 +702,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                         </td>
                         <td className="py-3 px-4 text-center">
                           {o.status === 'received' ? (
-                            <span className="erp-badge-green text-xs">تم الاستلام ✓</span>
+                            <span className="erp-badge-green text-xs">تم الاستلام</span>
                           ) : (
                             <span className="erp-badge-gray text-xs">قيد التوريد</span>
                           )}
@@ -790,7 +790,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                         <td className="py-3 px-4">
                           {g.items?.map(it => (
                             <div key={it.id} className="text-xs text-gray-700">
-                              ✓ {it.quantity_received} {it.material_unit} {it.material_name} @ {formatCurrency(it.unit_cost)}
+                              {it.quantity_received} {it.material_unit} {it.material_name} @ {formatCurrency(it.unit_cost)}
                             </div>
                           ))}
                         </td>
@@ -875,7 +875,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                         <td className="py-3 px-4 text-left font-bold text-red-600">{formatCurrency(inv.remaining_amount || (inv.total_amount - (inv.paid_amount || 0)))}</td>
                         <td className="py-3 px-4 text-center">
                           {inv.payment_status === 'paid' ? (
-                            <span className="erp-badge-green text-xs">مسددة بالكامل ✓</span>
+                            <span className="erp-badge-green text-xs">مسددة بالكامل</span>
                           ) : (
                             <span className="erp-badge-red text-xs">مستحقة</span>
                           )}
@@ -992,7 +992,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   disabled={!validators.required(newSupplier.name)}
                   className="h-11 px-6 bg-[#1F3A5F] hover:bg-[#172c48] disabled:opacity-50 text-white rounded-md font-bold text-sm cursor-pointer"
                 >
-                  حفظ المورد ✓
+                  حفظ المورد
                 </button>
               </div>
             </form>
@@ -1061,7 +1061,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-4 bg-[#1F3A5F] text-white rounded-md font-bold text-xs"
                 >
-                  حفظ وإدراج بالطلب ✓
+                  حفظ وإدراج بالطلب
                 </button>
               </div>
             </form>
@@ -1253,7 +1253,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                             className="text-red-500 hover:text-red-700 text-sm font-bold cursor-pointer"
                             title="حذف السطر"
                           >
-                            ✕
+                            <X className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -1352,7 +1352,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   disabled={!newPO.supplier_id || poGrandTotal <= 0}
                   className="h-11 px-6 bg-[#1F3A5F] hover:bg-[#172c48] disabled:opacity-50 text-white rounded-md font-bold text-sm cursor-pointer shadow-sm"
                 >
-                  اعتماد وحفظ أمر الشراء وتحديث التكلفة ✓
+                  اعتماد وحفظ أمر الشراء وتحديث التكلفة
                 </button>
               </div>
             </form>
@@ -1490,7 +1490,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-[#1F3A5F] text-white rounded-md font-bold text-xs"
                 >
-                  تأكيد الإذن وإضافة المخزون ✓
+                  تأكيد الإذن وإضافة المخزون
                 </button>
               </div>
             </form>
@@ -1599,7 +1599,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-[#1F3A5F] text-white rounded-md font-bold text-xs"
                 >
-                  حفظ الفاتورة ✓
+                  حفظ الفاتورة
                 </button>
               </div>
             </form>
@@ -1700,7 +1700,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-11 px-6 bg-[#1F3A5F] text-white rounded-md font-bold text-xs"
                 >
-                  صرف المبلغ وتأكيد السند ✓
+                  صرف المبلغ وتأكيد السند
                 </button>
               </div>
             </form>
@@ -1779,7 +1779,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   disabled={parseFloat(offsetForm.amount) <= 0 || parseFloat(offsetForm.amount) > showOffsetModal.max_offset}
                   className="h-10 px-5 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white rounded font-bold"
                 >
-                  تنفيذ المقاصة وتخفيض الأرصدة ✓
+                  تنفيذ المقاصة وتخفيض الأرصدة
                 </button>
               </div>
             </form>
@@ -1884,7 +1884,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-red-600 hover:bg-red-700 text-white rounded-md font-bold text-xs"
                 >
-                  إثبات المرتجع وخصم المخزن ✓
+                  إثبات المرتجع وخصم المخزن
                 </button>
               </div>
             </form>

@@ -199,7 +199,7 @@ export default function SalesModule({ onBack, onNotify }) {
         payment_status: newInvoice.payment_terms === 'cash' ? 'paid' : 'pending'
       };
       const res = await api.createSalesInvoice(payload);
-      onNotify(res.message || 'تم إصدار وحفظ فاتورة المبيعات بنجاح ✓');
+      onNotify(res.message || 'تم إصدار وحفظ فاتورة المبيعات بنجاح');
       setShowAddInvoiceModal(false);
       setNewInvoice({
         customer_id: '',
@@ -230,7 +230,7 @@ export default function SalesModule({ onBack, onNotify }) {
     if (!validators.required(newCustomer.name)) return;
     try {
       const res = await api.createUnifiedParty ? await api.createUnifiedParty({ ...newCustomer, is_customer: true, is_supplier: false }) : await api.createCustomer(newCustomer);
-      onNotify(res.message || 'تمت إضافة العميل بنجاح ✓');
+      onNotify(res.message || 'تمت إضافة العميل بنجاح');
       setShowAddCustomerModal(false);
       setNewCustomer({ name: '', phone: '', address: '', tax_number: '', credit_limit: '15000', notes: '' });
       loadData();
@@ -245,7 +245,7 @@ export default function SalesModule({ onBack, onNotify }) {
     if (!validators.required(newQuickProduct.name)) return;
     try {
       const res = await api.createItem ? await api.createItem(newQuickProduct) : await api.createProduct(newQuickProduct);
-      onNotify(res.message || 'تمت إضافة الموديل بنجاح ✓');
+      onNotify(res.message || 'تمت إضافة الموديل بنجاح');
       setShowAddProductModal(false);
       setNewQuickProduct({ name: '', code: '', group: 'ملابس جاهزة رجالي', type: 'finished', unit: 'قطعة', selling_price: 250, cost_price: 130 });
       loadData();
@@ -274,7 +274,7 @@ export default function SalesModule({ onBack, onNotify }) {
         refund_amount: (parseFloat(returnForm.quantity) || 1) * (parseFloat(returnForm.unit_price) || 0)
       };
       const res = await api.createCustomerReturn(payload);
-      onNotify(res.message || 'تم تسجيل المرتجع واستعادة الرصيد للمخزن بنجاح ✓');
+      onNotify(res.message || 'تم تسجيل المرتجع واستعادة الرصيد للمخزن بنجاح');
       setShowReturnModal(false);
       loadData();
     } catch (err) {
@@ -425,7 +425,7 @@ export default function SalesModule({ onBack, onNotify }) {
                         </td>
                         <td className="py-3 px-4 text-center">
                           {inv.payment_status === 'paid' ? (
-                            <span className="erp-badge-green text-xs">مسددة ✓</span>
+                            <span className="erp-badge-green text-xs">مسددة</span>
                           ) : (
                             <span className="erp-badge-amber text-xs">آجل مستحق</span>
                           )}
@@ -501,7 +501,7 @@ export default function SalesModule({ onBack, onNotify }) {
                         ) : bal > 0 ? (
                           <span className="erp-badge-amber text-xs">عليه مديونية</span>
                         ) : (
-                          <span className="erp-badge-green text-xs">خالص ✓</span>
+                          <span className="erp-badge-green text-xs">خالص</span>
                         )}
                       </td>
                     </tr>
@@ -813,7 +813,7 @@ export default function SalesModule({ onBack, onNotify }) {
                               }}
                               className="text-red-500 font-bold hover:text-red-700 text-xs"
                             >
-                              ✕
+                              <X className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -854,7 +854,7 @@ export default function SalesModule({ onBack, onNotify }) {
                   disabled={!newInvoice.customer_id || invoiceGrandTotal <= 0 || isCreditExceeded}
                   className="h-11 px-6 bg-[#1F3A5F] hover:bg-[#172c48] disabled:opacity-50 text-white rounded font-bold text-sm shadow-sm"
                 >
-                  حفظ واعتماد الفاتورة ✓
+                  حفظ واعتماد الفاتورة
                 </button>
               </div>
             </form>
@@ -918,7 +918,7 @@ export default function SalesModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-[#1F3A5F] text-white rounded font-bold"
                 >
-                  حفظ العميل ✓
+                  حفظ العميل
                 </button>
               </div>
             </form>
@@ -984,7 +984,7 @@ export default function SalesModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-[#1F3A5F] text-white rounded font-bold"
                 >
-                  حفظ الموديل ✓
+                  حفظ الموديل
                 </button>
               </div>
             </form>
@@ -1171,7 +1171,7 @@ export default function SalesModule({ onBack, onNotify }) {
                   type="submit"
                   className="h-10 px-5 bg-red-600 hover:bg-red-700 text-white rounded font-bold"
                 >
-                  إثبات المرتجع واستعادة المخزون ✓
+                  إثبات المرتجع واستعادة المخزون
                 </button>
               </div>
             </form>

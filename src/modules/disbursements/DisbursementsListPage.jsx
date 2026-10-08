@@ -52,7 +52,7 @@ export default function DisbursementsListPage({ onNotify }) {
       'التاريخ': t.created_at || t.date
     }));
     exportToExcel(exportData, 'سجل_صرف_النقدية_والمصروفات');
-    if (onNotify) onNotify('تم تصدير سجل صرف النقدية إلى Excel ✓');
+    if (onNotify) onNotify('تم تصدير سجل صرف النقدية إلى Excel');
   };
 
   return (

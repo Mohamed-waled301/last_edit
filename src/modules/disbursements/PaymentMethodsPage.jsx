@@ -41,7 +41,7 @@ export default function PaymentMethodsPage({ onNotify }) {
         name: form.name.trim()
       });
 
-      if (onNotify) onNotify('تم إضافة طريقة الدفع بنجاح ✓');
+      if (onNotify) onNotify('تم إضافة طريقة الدفع بنجاح');
       setForm({ code: '', name: '' });
       loadMethods();
     } catch (err) {

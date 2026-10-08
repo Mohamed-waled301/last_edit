@@ -91,7 +91,7 @@ export default function StockTransferFormPage({ onSaved, onNotify }) {
         notes: form.notes
       });
 
-      if (onNotify) onNotify('تم تنفيذ إذن التحويل المخزني بنجاح ✓');
+      if (onNotify) onNotify('تم تنفيذ إذن التحويل المخزني بنجاح');
 
       if (onSaved) {
         onSaved();

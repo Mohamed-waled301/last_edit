@@ -110,7 +110,7 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
         description: form.notes || `صرف مصروف ${form.expense_name}`
       });
 
-      if (onNotify) onNotify('تم صرف النقدية وقيد المعاملة بالخزينة بنجاح ✓');
+      if (onNotify) onNotify('تم صرف النقدية وقيد المعاملة بالخزينة بنجاح');
 
       if (onSaved) {
         onSaved();
