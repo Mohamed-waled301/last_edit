@@ -1,7 +1,7 @@
 /**
- * Workshop ERP - Core Cost Calculation Engine (محرك احتساب التكاليف النقي)
- * Pure TypeScript functions for manufacturing cost calculations with non-negative validation.
- * Optimized for Clothing Factory operations: fabric waste, clothing stages, and outsourced manufacturing.
+ * Apex Apparel ERP - Core Cost & Profit Calculation Engine (محرك احتساب التكاليف والربحية)
+ * Pure TypeScript functions for manufacturing cost calculations without waste percentage.
+ * Optimized for Clothing Factory operations: clothing stages, profit margins, and outsourced manufacturing.
  */
 
 export interface Stage1CostParams {
@@ -41,7 +41,6 @@ export interface LaborCostParams {
 export interface ClothingBOMItem {
   quantity_per_unit: number;
   unit_cost: number;
-  waste_percent?: number;
 }
 
 export interface ClothingStageCosts {
@@ -84,42 +83,34 @@ export class CostCalculator {
   }
 
   /**
-   * 2. Standard Material Usage from BOM with Fabric Waste Percentage
-   * Formula: batchQty * bomQtyPerUnit * (1 + wastePercent / 100)
+   * 2. Standard Material Usage from BOM (NO WASTE PERCENTAGE)
+   * Formula: batchQty * bomQtyPerUnit
    */
   static calculateStandardMaterialUsage(
     batchQty: number,
-    bomQtyPerUnit: number,
-    wastePercent: number = 0
+    bomQtyPerUnit: number
   ): number {
     const bQty = Math.max(0, Number(batchQty) || 0);
     const unitQty = Math.max(0, Number(bomQtyPerUnit) || 0);
-    const waste = Math.max(0, Number(wastePercent) || 0);
-
-    const multiplier = 1 + (waste / 100);
-    const totalRequired = bQty * unitQty * multiplier;
+    const totalRequired = bQty * unitQty;
     return Number(totalRequired.toFixed(3));
   }
 
   /**
-   * 2b. Calculate Clothing BOM Total Cost with Fabric Waste
+   * 2b. Calculate Clothing BOM Total Cost (NO WASTE PERCENTAGE)
    */
   static calculateClothingBOMCost(items: ClothingBOMItem[] = []): number {
     let total = 0;
     for (const it of items) {
       const q = Math.max(0, Number(it.quantity_per_unit) || 0);
       const c = Math.max(0, Number(it.unit_cost) || 0);
-      const w = Math.max(0, Number(it.waste_percent) || 0);
-      const effectiveQty = q * (1 + (w / 100));
-      total += effectiveQty * c;
+      total += q * c;
     }
     return Number(total.toFixed(2));
   }
 
   /**
    * 3. Labor Cost for Batch (أجور العمالة بالدفعة)
-   * Hourly: hours * hourlyRate
-   * Piece-rate: pieceRate * batchQty
    */
   static calculateLaborCost(
     laborType: 'hourly' | 'piece_rate',
@@ -182,7 +173,7 @@ export class CostCalculator {
   }
 
   /**
-   * 6. Stage 1 Manufacturing Cost (مرحلة التصنيع الداخلية)
+   * 6. Stage 1 Manufacturing Cost (مرحلة التشغيل الداخلي)
    */
   static calculateStage1Cost({
     materialsCost = 0,
@@ -207,8 +198,8 @@ export class CostCalculator {
   }
 
   /**
-   * 7. Stage 2 Outsourced / Finishing Cumulative Cost (التصنيع لدى الغير - التكلفة التراكمية)
-   * Formula: Internal Stage Cost + Outsourced Stage Cost = Final Cost
+   * 7. Stage 2 Outsourced Manufacturing Cumulative Cost (التصنيع لدى الغير - التكلفة التراكمية)
+   * Formula: Internal Stage Cost + Outsourced Stage Cost = Final Cost (NO WASTE PERCENTAGE)
    */
   static calculateStage2Cost({
     stage1TransferredCost = 0,
@@ -267,16 +258,34 @@ export class CostCalculator {
   }
 
   /**
-   * 8. Suggested Selling Price
+   * 8. Profit Margin Calculations (هامش الربح وسعر البيع)
    */
-  static calculateSuggestedPrice(
-    finalUnitCost: number,
-    targetProfitMarginPercent: number = 30
+  static calculateProfitMargin(
+    costPrice: number,
+    sellingPrice: number
+  ): { marginValue: number; marginPercent: number; marginPercentage: number } {
+    const cost = Math.max(0, Number(costPrice) || 0);
+    const sell = Math.max(0, Number(sellingPrice) || 0);
+    const marginValue = Number((sell - cost).toFixed(2));
+    const marginPercent = cost > 0 ? Number(((marginValue / cost) * 100).toFixed(2)) : 0;
+    return { marginValue, marginPercent, marginPercentage: marginPercent };
+  }
+
+  static calculateSellingPriceFromMargin(
+    costPrice: number,
+    marginPercent: number
   ): number {
-    const cost = Math.max(0, Number(finalUnitCost) || 0);
-    const margin = Math.max(0, Number(targetProfitMarginPercent) || 0);
-    const suggestedPrice = cost * (1 + (margin / 100));
-    return Number(suggestedPrice.toFixed(2));
+    const cost = Math.max(0, Number(costPrice) || 0);
+    const margin = Number(marginPercent) || 0;
+    const sellingPrice = cost * (1 + (margin / 100));
+    return Number(sellingPrice.toFixed(2));
+  }
+
+  static calculateSuggestedPrice(
+    costPrice: number,
+    marginPercent: number
+  ): number {
+    return CostCalculator.calculateSellingPriceFromMargin(costPrice, marginPercent);
   }
 
   /**
@@ -317,10 +326,23 @@ export function calculateOutsourcedAccumulation(
 }
 
 export function calculateClothingBOMCost(
-  items: ClothingBOMItem[],
-  fabricWastePercent: number = 0
+  items: ClothingBOMItem[] = []
 ): number {
-  return CostCalculator.calculateClothingBOMCost(items, fabricWastePercent);
+  return CostCalculator.calculateClothingBOMCost(items);
+}
+
+export function calculateProfitMargin(
+  costPrice: number,
+  sellingPrice: number
+): { marginValue: number; marginPercent: number } {
+  return CostCalculator.calculateProfitMargin(costPrice, sellingPrice);
+}
+
+export function calculateSellingPriceFromMargin(
+  costPrice: number,
+  marginPercent: number
+): number {
+  return CostCalculator.calculateSellingPriceFromMargin(costPrice, marginPercent);
 }
 
 export default CostCalculator;

@@ -53,21 +53,33 @@ export const itemsRepo = {
    */
   async getNextCode(prefix = '') {
     const items = await db.items.toArray();
-    let maxNum = 1000;
+    let maxNum = 0;
+    let padLen = 0;
 
     for (const itm of items) {
       if (!itm.code) continue;
-      const match = String(itm.code).match(/\d+/g);
+      if (prefix && !itm.code.toUpperCase().startsWith(prefix.toUpperCase())) {
+        continue;
+      }
+      const match = String(itm.code).match(/(\d+)(?!.*\d)/);
       if (match) {
-        const num = parseInt(match[match.length - 1], 10);
+        const rawDigits = match[1];
+        const num = parseInt(rawDigits, 10);
         if (!isNaN(num) && num > maxNum) {
           maxNum = num;
+          padLen = rawDigits.length;
         }
       }
     }
 
+    if (maxNum === 0) {
+      maxNum = 1000;
+      padLen = 4;
+    }
+
     const nextNum = maxNum + 1;
-    return prefix ? `${prefix}-${nextNum}` : String(nextNum);
+    const formattedNum = padLen > 0 ? String(nextNum).padStart(padLen, '0') : String(nextNum);
+    return prefix ? `${prefix}-${formattedNum}` : formattedNum;
   },
 
   /**

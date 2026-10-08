@@ -20,27 +20,27 @@ describe('CostCalculator - Unit Tests', () => {
     expect(r4).toBe(50);
   });
 
-  it('calculates standard BOM material usage with waste percentage', () => {
-    // 10 units batch, 2 meters per unit, 10% waste => 10 * 2 * 1.10 = 22 meters
-    const usage1 = CostCalculator.calculateStandardMaterialUsage(10, 2, 10);
-    expect(usage1).toBe(22);
+  it('calculates standard BOM material usage without waste percentage', () => {
+    // 10 units batch, 2 meters per unit => 10 * 2 = 20 meters (zero waste)
+    const usage1 = CostCalculator.calculateStandardMaterialUsage(10, 2);
+    expect(usage1).toBe(20);
 
-    // 5 units batch, 0.5 sheets per unit, 0% waste => 2.5 sheets
-    const usage2 = CostCalculator.calculateStandardMaterialUsage(5, 0.5, 0);
+    // 5 units batch, 0.5 sheets per unit => 2.5 sheets
+    const usage2 = CostCalculator.calculateStandardMaterialUsage(5, 0.5);
     expect(usage2).toBe(2.5);
   });
 
-  it('calculates clothing BOM cost including fabric waste percentage', () => {
-    // Fabric: 1.5m @ 120 EGP with 8% waste = 1.5 * 1.08 * 120 = 194.4
-    // Buttons: 6 pcs @ 2 EGP with 0% waste = 12.0
-    // Thread: 0.1 spool @ 30 EGP with 0% waste = 3.0
-    // Total = 194.4 + 12 + 3 = 209.4 EGP
+  it('calculates clothing BOM cost without waste percentage', () => {
+    // Fabric: 1.5m @ 120 EGP = 180.0
+    // Buttons: 6 pcs @ 2 EGP = 12.0
+    // Thread: 0.1 spool @ 30 EGP = 3.0
+    // Total = 180 + 12 + 3 = 195 EGP
     const bomCost = CostCalculator.calculateClothingBOMCost([
-      { quantity_per_unit: 1.5, unit_cost: 120, waste_percent: 8 },
-      { quantity_per_unit: 6, unit_cost: 2, waste_percent: 0 },
-      { quantity_per_unit: 0.1, unit_cost: 30, waste_percent: 0 },
+      { quantity_per_unit: 1.5, unit_cost: 120 },
+      { quantity_per_unit: 6, unit_cost: 2 },
+      { quantity_per_unit: 0.1, unit_cost: 30 },
     ]);
-    expect(bomCost).toBe(209.4);
+    expect(bomCost).toBe(195);
   });
 
   it('calculates clothing internal stages: cutting, sewing, and ironing/packing', () => {

@@ -78,24 +78,36 @@ export default function CashModule({ onBack, onNotify }) {
         api.getOutlets()
       ]);
 
-      const trData = tRes.data || {};
-      if (trData.main_treasury || trData.outlet_treasuries) {
-        setMainTreasury(trData.main_treasury);
-        setTreasuries(trData.outlet_treasuries || []);
-      } else {
-        const accs = trData.accounts || trData || [];
-        setTreasuries(accs);
-        setMainTreasury(accs.find(a => a.is_main) || { name: 'الخزينة الرئيسية المجمعة', current_balance: 0 });
-      }
+      const trData = tRes || {};
+      const allAccs = Array.isArray(trData.treasuries)
+        ? trData.treasuries
+        : Array.isArray(trData.data)
+          ? trData.data
+          : Array.isArray(trData.accounts)
+            ? trData.accounts
+            : Array.isArray(trData)
+              ? trData
+              : [];
 
-      setExpenseCodes(ecRes.data || []);
-      setTransactions(txRes.data || []);
-      setDailyClosings(dcRes.data || []);
-      setOutlets(outRes.data || []);
+      const main = trData.mainTreasury || trData.main_treasury || (allAccs.length > 0 ? allAccs.find(a => a?.is_main) : null) || { name: 'الخزينة الرئيسية المجمعة', current_balance: 0 };
+      const outletsList = Array.isArray(trData.outletTreasuries)
+        ? trData.outletTreasuries
+        : Array.isArray(trData.outlet_treasuries)
+          ? trData.outlet_treasuries
+          : allAccs.filter(a => !a?.is_main);
+
+      setMainTreasury(main);
+      setTreasuries(outletsList.length > 0 ? outletsList : allAccs);
+
+      setExpenseCodes(Array.isArray(ecRes?.data) ? ecRes.data : Array.isArray(ecRes?.expense_codes) ? ecRes.expense_codes : []);
+      setTransactions(Array.isArray(txRes?.data) ? txRes.data : Array.isArray(txRes?.transactions) ? txRes.transactions : []);
+      setDailyClosings(Array.isArray(dcRes?.data) ? dcRes.data : Array.isArray(dcRes?.closings) ? dcRes.closings : []);
+      setOutlets(Array.isArray(outRes?.data) ? outRes.data : Array.isArray(outRes?.outlets) ? outRes.outlets : []);
 
       // Default disburse treasury
-      if (treasuries.length > 0 && !disburseForm.account_id) {
-        setDisburseForm(prev => ({ ...prev, account_id: treasuries[0].id }));
+      const validTreasuries = outletsList.length > 0 ? outletsList : allAccs;
+      if (validTreasuries.length > 0 && !disburseForm.account_id) {
+        setDisburseForm(prev => ({ ...prev, account_id: validTreasuries[0].id }));
       }
     } catch (err) {
       console.error('Failed to load cash data:', err);
@@ -207,8 +219,9 @@ export default function CashModule({ onBack, onNotify }) {
   };
 
   // Aggregated total across all outlets + main treasury
-  const allTreasuriesList = mainTreasury ? [mainTreasury, ...treasuries] : treasuries;
-  const aggregatedCashTotal = allTreasuriesList.reduce((sum, t) => sum + (parseFloat(t.current_balance) || 0), 0);
+  const safeTreasuries = Array.isArray(treasuries) ? treasuries : [];
+  const allTreasuriesList = mainTreasury ? [mainTreasury, ...safeTreasuries] : safeTreasuries;
+  const aggregatedCashTotal = allTreasuriesList.reduce((sum, t) => sum + (parseFloat(t?.current_balance) || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -258,9 +271,9 @@ export default function CashModule({ onBack, onNotify }) {
           <span className="text-xs text-gray-400 font-medium">تجمع وتستقبل إيرادات كافة المنافذ</span>
         </div>
         <div className="bg-white border border-gray-200 rounded-md p-4">
-          <span className="text-xs font-semibold text-gray-500">إجمالي النقدية بمنافذ البيع ({treasuries.length} خزينة منفذ)</span>
+          <span className="text-xs font-semibold text-gray-500">إجمالي النقدية بمنافذ البيع ({safeTreasuries.length} خزينة منفذ)</span>
           <div className="text-2xl font-bold text-green-700 mt-1 font-mono">
-            {formatCurrency(treasuries.reduce((s, t) => s + (t.current_balance || 0), 0))}
+            {formatCurrency(safeTreasuries.reduce((s, t) => s + (t?.current_balance || 0), 0))}
           </div>
           <span className="text-xs text-gray-400 font-medium">سيولة نقدية في أدراج الكاشير بالمعارض</span>
         </div>

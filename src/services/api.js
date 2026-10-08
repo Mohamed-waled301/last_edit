@@ -32,13 +32,15 @@ let currentUserOutletId = null;
 
 // Initialize session from sessionStorage if available
 try {
-  const savedUser = sessionStorage.getItem('erp_active_user');
-  if (savedUser) {
-    const parsed = JSON.parse(savedUser);
-    currentUserId = parsed.id || currentUserId;
-    currentUserRole = parsed.role || currentUserRole;
-    currentUserFullName = parsed.full_name || currentUserFullName;
-    currentUserOutletId = parsed.outlet_id || null;
+  if (typeof sessionStorage !== 'undefined') {
+    const savedUser = sessionStorage.getItem('erp_active_user');
+    if (savedUser) {
+      const parsed = JSON.parse(savedUser);
+      currentUserId = parsed.id || currentUserId;
+      currentUserRole = parsed.role || currentUserRole;
+      currentUserFullName = parsed.full_name || currentUserFullName;
+      currentUserOutletId = parsed.outlet_id || null;
+    }
   }
 } catch (e) {
   console.warn('Session read error:', e);
@@ -51,12 +53,14 @@ export function setActiveUser(userId, role, fullName, outletId = null) {
   currentUserOutletId = outletId;
 
   try {
-    sessionStorage.setItem('erp_active_user', JSON.stringify({
-      id: currentUserId,
-      role: currentUserRole,
-      full_name: currentUserFullName,
-      outlet_id: currentUserOutletId,
-    }));
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('erp_active_user', JSON.stringify({
+        id: currentUserId,
+        role: currentUserRole,
+        full_name: currentUserFullName,
+        outlet_id: currentUserOutletId,
+      }));
+    }
   } catch (e) {
     console.warn('Session write error:', e);
   }
@@ -67,7 +71,9 @@ export function getActiveUser() {
 }
 
 export function clearActiveUser() {
-  sessionStorage.removeItem('erp_active_user');
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem('erp_active_user');
+  }
 }
 
 export const api = {
@@ -169,7 +175,20 @@ export const api = {
   // Treasuries & Daily Closings
   getTreasuries: async () => {
     const res = await treasuriesRepo.getTreasuries();
-    return { success: true, data: res, ...res };
+    const safeTreasuries = Array.isArray(res.treasuries) ? res.treasuries : [];
+    const safeOutlets = Array.isArray(res.outletTreasuries) ? res.outletTreasuries : [];
+    return {
+      success: true,
+      data: safeTreasuries,
+      treasuries: safeTreasuries,
+      mainTreasury: res.mainTreasury || null,
+      main_treasury: res.mainTreasury || null,
+      outletTreasuries: safeOutlets,
+      outlet_treasuries: safeOutlets,
+      mainTreasuryBalance: res.mainTreasuryBalance || 0,
+      totalOutletsBalance: res.totalOutletsBalance || 0,
+      aggregatedGrandTotal: res.aggregatedGrandTotal || 0,
+    };
   },
   createOutletTreasury: async (outletId, name, initialBalance = 0) => {
     const res = await treasuriesRepo.createOutletTreasury(outletId, name, initialBalance, currentUserId);
@@ -184,6 +203,10 @@ export const api = {
     return { success: true, data: list, closings: list };
   },
   performDailyClosing: async (data) => {
+    const res = await treasuriesRepo.performDailyClosing(data, currentUserId);
+    return { success: true, data: res, ...res, message: 'تم اعتماد تقفيل الوردية اليومية بنجاح' };
+  },
+  createDailyClosing: async (data) => {
     const res = await treasuriesRepo.performDailyClosing(data, currentUserId);
     return { success: true, data: res, ...res, message: 'تم اعتماد تقفيل الوردية اليومية بنجاح' };
   },
@@ -392,24 +415,25 @@ export const api = {
   // Cash & Banks
   getAccounts: async () => {
     const list = await cashRepo.getAccounts();
+    const safeList = Array.isArray(list) ? list : [];
     let totalCash = 0;
     let totalBank = 0;
-    for (const a of list) {
+    for (const a of safeList) {
       const bal = Number(a.current_balance) || 0;
       if (a.account_type === 'treasury') totalCash += bal;
       else totalBank += bal;
     }
     const grandTotal = Number((totalCash + totalBank).toFixed(2));
     const payload = {
-      accounts: list,
+      accounts: safeList,
       totalCash: Number(totalCash.toFixed(2)),
       totalBank: Number(totalBank.toFixed(2)),
       grandTotal,
     };
     return {
       success: true,
-      data: payload,
-      accounts: list,
+      data: safeList,
+      accounts: safeList,
       ...payload,
     };
   },

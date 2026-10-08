@@ -31,12 +31,18 @@ export const treasuriesRepo = {
 
     return {
       treasuries: formatted,
-      mainTreasury: formatted.find(a => a.is_main) || formatted[0],
+      mainTreasury: formatted.find(a => a.is_main) || formatted[0] || null,
+      main_treasury: formatted.find(a => a.is_main) || formatted[0] || null,
       outletTreasuries: formatted.filter(a => !a.is_main),
+      outlet_treasuries: formatted.filter(a => !a.is_main),
       mainTreasuryBalance: Number(mainTreasuryBalance.toFixed(2)),
       totalOutletsBalance: Number(totalOutletsBalance.toFixed(2)),
       aggregatedGrandTotal
     };
+  },
+
+  async getAll() {
+    return await db.treasury_accounts.filter(a => a.is_active === 1).toArray();
   },
 
   async createOutletTreasury(outletId, name, initialBalance = 0, userId = 'usr-owner') {

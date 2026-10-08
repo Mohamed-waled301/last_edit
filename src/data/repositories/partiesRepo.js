@@ -27,15 +27,32 @@ export const partiesRepo = {
         pCustReturns
       );
 
+      const initialSup = Number(party.initial_supplier_balance ?? party.supplier_balance) || 0;
+      const initialCust = Number(party.initial_customer_balance ?? party.customer_balance) || 0;
+      const finalSup = initialSup + bal.supplierBalance;
+      const finalCust = initialCust + bal.customerBalance;
+      const finalNet = Number((finalCust - finalSup).toFixed(2));
+      const finalMaxOffset = Math.max(0, Number(Math.min(finalSup, finalCust).toFixed(2)));
+
       return {
         ...party,
-        supplier_balance: bal.supplierBalance,
-        customer_balance: bal.customerBalance,
-        net_balance: bal.netBalance,
-        max_offset_amount: bal.maxOffsetAmount,
+        supplier_balance: finalSup,
+        customer_balance: finalCust,
+        net_balance: finalNet,
+        max_offset_amount: finalMaxOffset,
         is_both: party.is_supplier === 1 && party.is_customer === 1
       };
     });
+  },
+
+  async getSuppliers() {
+    const all = await this.getAll();
+    return all.filter(p => p.is_supplier === 1);
+  },
+
+  async getCustomers() {
+    const all = await this.getAll();
+    return all.filter(p => p.is_customer === 1);
   },
 
   async getById(id) {
@@ -54,12 +71,19 @@ export const partiesRepo = {
       custReturns
     );
 
+    const initialSup = Number(party.initial_supplier_balance ?? party.supplier_balance) || 0;
+    const initialCust = Number(party.initial_customer_balance ?? party.customer_balance) || 0;
+    const finalSup = initialSup + bal.supplierBalance;
+    const finalCust = initialCust + bal.customerBalance;
+    const finalNet = Number((finalCust - finalSup).toFixed(2));
+    const finalMaxOffset = Math.max(0, Number(Math.min(finalSup, finalCust).toFixed(2)));
+
     return {
       ...party,
-      supplier_balance: bal.supplierBalance,
-      customer_balance: bal.customerBalance,
-      net_balance: bal.netBalance,
-      max_offset_amount: bal.maxOffsetAmount,
+      supplier_balance: finalSup,
+      customer_balance: finalCust,
+      net_balance: finalNet,
+      max_offset_amount: finalMaxOffset,
       is_both: party.is_supplier === 1 && party.is_customer === 1
     };
   },
@@ -88,6 +112,8 @@ export const partiesRepo = {
       supplier_type: data.supplier_type || 'goods', // 'goods' | 'service' (تشغيل خارجي)
       payment_terms: data.payment_terms || 'cash',
       credit_limit: creditLimit, // Exists on customer side only; no supplier ceiling
+      supplier_balance: Number(data.supplier_balance) || 0,
+      customer_balance: Number(data.customer_balance) || 0,
       notes: data.notes || '',
       is_active: 1,
       created_at: now
@@ -221,7 +247,7 @@ export const partiesRepo = {
     const offsetId = `ofs-${Date.now()}`;
     const offsetNumber = `OFFSET-${Date.now().toString().slice(-4)}`;
 
-    await db.transaction('rw', [db.payments, db.customer_payments, db.audit_log], async () => {
+    await db.transaction('rw', [db.parties, db.payments, db.customer_payments, db.audit_log], async () => {
       // 1. Record offset on supplier side (as a payment settlement)
       await db.payments.add({
         id: `spay-ofs-${Date.now()}`,
@@ -251,6 +277,18 @@ export const partiesRepo = {
         created_by: userId,
         created_at: now
       });
+
+      // 3. Deduct from stored party balance if present
+      const rawParty = await db.parties.get(partyId);
+      if (rawParty) {
+        if (rawParty.supplier_balance != null) {
+          rawParty.supplier_balance = Math.max(0, rawParty.supplier_balance - numAmount);
+        }
+        if (rawParty.customer_balance != null) {
+          rawParty.customer_balance = Math.max(0, rawParty.customer_balance - numAmount);
+        }
+        await db.parties.put(rawParty);
+      }
     });
 
     await auditRepo.log(userId, 'EXECUTE_OFFSET', 'parties', partyId, null, {

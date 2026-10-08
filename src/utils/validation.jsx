@@ -61,10 +61,83 @@ export const Validators = {
       return 'هذا الكود مسجل بالفعل في النظام، يرجى اختيار كود آخر غير مكرر';
     }
     return null;
+  },
+
+  discountPercent(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const num = Number(value);
+    if (isNaN(num) || num < 0 || num > 100) {
+      return 'نسبة الخصم يجب أن تكون بين 0% و 100%';
+    }
+    return null;
+  },
+
+  discountValue(discountVal, subtotal) {
+    const d = Number(discountVal) || 0;
+    const sub = Number(subtotal) || 0;
+    if (d < 0) return 'قيمة الخصم لا يمكن أن تكون سالبة';
+    if (d > sub) return 'قيمة الخصم لا يمكن أن تتجاوز إجمالي المبلغ';
+    return null;
+  },
+
+  /**
+   * Line Item Completion Rule (Requirement L2)
+   * Minimum: item_id, quantity > 0, price >= 0 (if hasPrice), variant_id (if item has variants)
+   */
+  isLineItemComplete(line = {}, { hasPrice = true, hasVariants = false } = {}) {
+    if (!line) return false;
+    const itemId = line.item_id || line.material_id || line.product_id;
+    if (!itemId) return false;
+
+    const qty = Number(line.quantity ?? line.quantity_ordered ?? line.quantity_required) || 0;
+    if (qty <= 0) return false;
+
+    if (hasPrice) {
+      const price = Number(line.unit_price ?? line.unit_selling_price ?? line.price_before_discount);
+      if (isNaN(price) || price < 0) return false;
+    }
+
+    if ((hasVariants || line.has_variants) && !line.variant_id) {
+      return false;
+    }
+
+    return true;
+  },
+
+  validateLineItem(line = {}, { hasPrice = true } = {}) {
+    const errors = {};
+    const itemId = line.item_id || line.material_id || line.product_id;
+    if (!itemId) {
+      errors.item_id = 'يرجى اختيار الصنف';
+      errors.item = 'يرجى اختيار الصنف';
+    }
+
+    const qty = Number(line.quantity ?? line.quantity_ordered ?? line.quantity_required) || 0;
+    if (qty <= 0) errors.quantity = 'الكمية يجب أن تكون أكبر من صفر';
+
+    if (hasPrice) {
+      const price = Number(line.unit_price ?? line.unit_selling_price ?? line.price_before_discount);
+      if (isNaN(price) || price < 0) {
+        errors.price = 'السعر لا يمكن أن يكون سالباً';
+        errors.unit_price = 'السعر لا يمكن أن يكون سالباً';
+      }
+    }
+
+    if (line.has_variants && !line.variant_id) {
+      errors.variant_id = 'يرجى تحديد المقاس واللون';
+      errors.variant = 'يرجى تحديد المقاس واللون';
+    }
+
+    return {
+      isValid: Object.keys(errors).length === 0,
+      errors
+    };
   }
 };
 
 export const validators = Validators;
+export const isLineItemComplete = Validators.isLineItemComplete;
+export const validateLineItem = Validators.validateLineItem;
 
 /**
  * Helper component for inline Arabic error text

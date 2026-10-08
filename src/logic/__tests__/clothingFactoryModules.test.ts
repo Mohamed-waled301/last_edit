@@ -9,21 +9,21 @@ import { calculateUnifiedPartyBalance } from '../balances';
 
 describe('Clothing Factory Logic & Rules Suite', () => {
   describe('BOM & Stages Costing for Clothing Factory', () => {
-    it('calculates clothing BOM cost correctly including fabric waste percentage', () => {
+    it('calculates clothing BOM cost correctly without waste percentage', () => {
       // 1.5m denim fabric @ 100 EGP/m, 6 metal buttons @ 2 EGP, 1 metal zipper @ 8 EGP
-      // Fabric waste is 8%
+      // Zero waste percentage per requirement A4
       const items = [
-        { quantity_per_unit: 1.5, unit_cost: 100, waste_percent: 8 },
-        { quantity_per_unit: 6, unit_cost: 2, waste_percent: 0 },
-        { quantity_per_unit: 1, unit_cost: 8, waste_percent: 0 }
+        { quantity_per_unit: 1.5, unit_cost: 100 },
+        { quantity_per_unit: 6, unit_cost: 2 },
+        { quantity_per_unit: 1, unit_cost: 8 }
       ];
 
-      // Item 1 with 8% waste: 1.5 * 100 * 1.08 = 162
+      // Item 1: 1.5 * 100 = 150
       // Item 2: 6 * 2 = 12
       // Item 3: 1 * 8 = 8
-      // Total BOM: 162 + 12 + 8 = 182 EGP
-      const totalBOM = calculateClothingBOMCost(items, 8);
-      expect(totalBOM).toBe(182);
+      // Total BOM: 150 + 12 + 8 = 170 EGP
+      const totalBOM = calculateClothingBOMCost(items);
+      expect(totalBOM).toBe(170);
     });
 
     it('calculates clothing internal stages labor cost (cutting -> sewing -> ironing/packing)', () => {

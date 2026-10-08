@@ -1,5 +1,5 @@
 import React from 'react';
-export { Validators, validators, default } from './validation.jsx';
+export { Validators, validators, isLineItemComplete, validateLineItem, default } from './validation.jsx';
 
 export function FieldError({ error }) {
   if (!error) return null;

@@ -228,6 +228,7 @@ export const reportsRepo = {
           name: item.name,
           category: item.item_group || item.item_department || 'عام',
           unit: item.unit || 'قطعة',
+          image: item.image || '',
           stock,
           cost_price: costPrice,
           average_cost_price: costPrice,
@@ -236,6 +237,8 @@ export const reportsRepo = {
           total_cost_value: Number((stock * costPrice).toFixed(2)),
           total_sales_value: Number((stock * sellingPrice).toFixed(2)),
           margin_percent: costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(1)) : 0,
+          profit_margin: costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(1)) : 0,
+          profit_margin_percent: costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(1)) : 0,
         });
       }
     }
@@ -251,12 +254,15 @@ export const reportsRepo = {
           ? Number((salesData.totalRevenue / salesData.totalQty).toFixed(2))
           : sellingPrice;
 
+        const marginVal = costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(1)) : 0;
+
         combined.push({
           id: prod.id,
           code: prod.code,
           name: prod.name,
           category: prod.category || 'عام',
           unit: prod.unit || 'قطعة',
+          image: prod.image || '',
           stock,
           cost_price: costPrice,
           average_cost_price: costPrice,
@@ -264,7 +270,9 @@ export const reportsRepo = {
           average_selling_price: avgSellingPrice,
           total_cost_value: Number((stock * costPrice).toFixed(2)),
           total_sales_value: Number((stock * sellingPrice).toFixed(2)),
-          margin_percent: costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(1)) : 0,
+          margin_percent: marginVal,
+          profit_margin: marginVal,
+          profit_margin_percent: marginVal,
         });
       }
     }

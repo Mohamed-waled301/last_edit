@@ -269,6 +269,7 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
               <table className="w-full text-right border-collapse text-xs">
                 <thead>
                   <tr className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200">
+                    <th className="py-3 px-3 w-12 text-center">الصورة</th>
                     <th className="py-3 px-3">كود الصنف</th>
                     <th className="py-3 px-3">اسم المنتج / الخامة</th>
                     <th className="py-3 px-3">المجموعة</th>
@@ -285,13 +286,22 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
                 <tbody className="divide-y divide-gray-100">
                   {filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="py-8 text-center text-gray-500 font-medium">
+                      <td colSpan={12} className="py-8 text-center text-gray-500 font-medium">
                         لا توجد منتجات مطابقة لخيارات التصفية.
                       </td>
                     </tr>
                   ) : (
                     filteredProducts.map(p => (
                       <tr key={p.id} className="hover:bg-blue-50/20 transition-colors">
+                        <td className="py-2 px-2 text-center">
+                          {p.image ? (
+                            <img src={p.image} alt={p.name} className="w-9 h-9 object-cover rounded mx-auto border border-gray-200" />
+                          ) : (
+                            <div className="w-9 h-9 bg-gray-100 rounded flex items-center justify-center mx-auto text-gray-300">
+                              <Layers className="w-4 h-4" />
+                            </div>
+                          )}
+                        </td>
                         <td className="py-2.5 px-3 font-mono font-bold text-gray-900">{p.code}</td>
                         <td className="py-2.5 px-3 font-bold text-gray-900">{p.name}</td>
                         <td className="py-2.5 px-3 text-gray-500">{p.group}</td>
