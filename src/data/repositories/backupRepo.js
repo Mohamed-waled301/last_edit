@@ -701,6 +701,8 @@ export const backupRepo = {
         await table.clear();
       }
     });
+
+    await ensureDatabaseIntegrity();
     return { success: true };
   },
 
