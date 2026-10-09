@@ -70,12 +70,12 @@ export default function ItemsListPage({ onNotify }) {
       };
     });
     exportToExcel(exportData, 'دليل_أصناف_المصنع');
-    if (onNotify) onNotify('تم تصدير دليل الأصناف إلى ملف Excel');
+    if (onNotify) onNotify('تم تصدير دليل الأصناف إلى ملف إكسيل');
   };
 
   return (
     <PageContainer
-      title="دليل الأصناف والمنتجات (Master Data)"
+      title="دليل الأصناف والمنتجات"
       subtitle="إدارة بيانات الأصناف وتوصيفها، أسعار التكلفة، هوامش الربح، ومتغيرات المقاس واللون لمصنع الملابس"
       breadcrumbs={[{ label: 'الأصناف' }]}
       actions={
@@ -86,7 +86,7 @@ export default function ItemsListPage({ onNotify }) {
             className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Download className="w-4 h-4 text-gray-500" />
-            <span>تصدير Excel</span>
+            <span>تصدير إكسيل</span>
           </button>
 
           <button

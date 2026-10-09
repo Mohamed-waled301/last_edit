@@ -226,7 +226,7 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
     });
 
     exportToExcel(cleanData, `تصدير_${activeLabel}`);
-    if (onNotify) onNotify(`تم تصدير جدول (${activeLabel}) إلى Excel بنجاح`);
+    if (onNotify) onNotify(`تم تصدير جدول (${activeLabel}) إلى ملف إكسيل بنجاح`);
   };
 
   const handleConfirmDelete = async () => {
@@ -252,7 +252,7 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
   if (!isCeo) {
     return (
       <PageContainer
-        title="إدارة البيانات (CEO)"
+        title="إدارة البيانات الشاملة"
         subtitle="الوصول المباشر لقاعدة بيانات النظام"
         breadcrumbs={[{ label: 'إدارة البيانات' }]}
         onBack={() => onNavigate('home')}
@@ -263,11 +263,11 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
           </div>
           <h2 className="text-xl font-bold text-red-900">غير مصرح لك بالوصول</h2>
           <p className="text-sm text-red-700 leading-relaxed">
-            قسم إدارة البيانات مخصص حصرياً للرئيس التنفيذي (CEO). تم تسجيل محاولة الدخول في سجل الرقابة
+            قسم إدارة البيانات مخصص حصرياً للرئيس التنفيذي. تم تسجيل محاولة الدخول في سجل الرقابة
             والتعديلات لضمان أمان النظام.
           </p>
           <div className="text-xs text-gray-500 font-mono">
-            ملاحظة: هذا قيد على مستوى واجهة التطبيق (Frontend Control).
+            ملاحظة: هذا قيد على مستوى واجهة التطبيق.
           </div>
           <button
             type="button"
@@ -285,7 +285,7 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
 
   return (
     <PageContainer
-      title="إدارة البيانات الشاملة (CEO Only)"
+      title="إدارة البيانات الشاملة (للمدير العام)"
       subtitle="استعراض وتعديل كافة جداول قاعدة البيانات وسجل الرقابة مع فحص الارتباطات التلقائي"
       breadcrumbs={[{ label: 'إدارة البيانات', href: '#/data' }, { label: activeMeta.label }]}
       onBack={() => onNavigate('home')}
@@ -295,10 +295,10 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
             type="button"
             onClick={handleExport}
             className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-            title="تصدير السجلات الحالية إلى ملف Excel"
+            title="تصدير السجلات الحالية إلى ملف إكسيل"
           >
             <Download className="w-4 h-4 text-gray-500" />
-            <span>تصدير Excel</span>
+            <span>تصدير إكسيل</span>
           </button>
 
           {activeTab !== 'audit_log' && (
@@ -359,7 +359,7 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
               }`}
             >
               <History className="w-3.5 h-3.5" />
-              <span>سجل التعديلات والرقابة (Audit Log)</span>
+              <span>سجل التعديلات والرقابة والتدقيق</span>
             </button>
           </div>
         </div>
@@ -370,7 +370,7 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
                 <Filter className="w-4 h-4" />
-                تصفية سجل الرقابة والتعديلات (Read-Only Audit Trail)
+                تصفية سجل الرقابة والتعديلات (سجل تدقيق للقراءة فقط)
               </span>
               <span className="text-[11px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
                 محمي تماماً ضد التعديل أو الحذف
@@ -392,7 +392,7 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
                   <option value="">جميع الجداول</option>
                   {tables.map((t) => (
                     <option key={t.name} value={t.name}>
-                      {t.label} ({t.name})
+                      {t.label}
                     </option>
                   ))}
                 </select>
@@ -410,9 +410,9 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
                   className="w-full h-9 bg-white border border-gray-300 rounded text-xs px-2"
                 >
                   <option value="">جميع العمليات</option>
-                  <option value="add">إضافة (add)</option>
-                  <option value="edit">تعديل (edit)</option>
-                  <option value="delete">حذف (delete)</option>
+                  <option value="add">إضافة</option>
+                  <option value="edit">تعديل</option>
+                  <option value="delete">حذف</option>
                   <option value="UNAUTHORIZED_DATA_ACCESS">محاولة غير مصرحة</option>
                 </select>
               </div>

@@ -115,7 +115,7 @@ export default function StockTransferFormPage({ onSaved, onNotify }) {
 
   return (
     <PageContainer
-      title="إصدار إذن تحويل مخزني (Stock Transfer)"
+      title="إصدار إذن تحويل مخزني"
       subtitle="نقل بضاعة أو خامات بين أماكن التخزين والمعارض مع تحديث أرصدة المواقع"
       breadcrumbs={[
         { label: 'المخزن', href: '#/inventory' },

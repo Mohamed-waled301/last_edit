@@ -52,7 +52,7 @@ export default function DisbursementsListPage({ onNotify }) {
       'التاريخ': t.created_at || t.date
     }));
     exportToExcel(exportData, 'سجل_صرف_النقدية_والمصروفات');
-    if (onNotify) onNotify('تم تصدير سجل صرف النقدية إلى Excel');
+    if (onNotify) onNotify('تم تصدير سجل صرف النقدية إلى ملف إكسيل');
   };
 
   return (
@@ -68,7 +68,7 @@ export default function DisbursementsListPage({ onNotify }) {
             className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Download className="w-4 h-4 text-gray-500" />
-            <span>تصدير Excel</span>
+            <span>تصدير إكسيل</span>
           </button>
 
           <button

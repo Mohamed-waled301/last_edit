@@ -7,7 +7,7 @@
 export async function compressImageToBase64(file, maxWidth = 600, maxHeight = 600, quality = 0.75) {
   if (!file) return null;
   if (!file.type.startsWith('image/')) {
-    throw new Error('الملف المرفوع يجب أن يكون صورة بصيغة صالحة (JPG, PNG, WebP)');
+    throw new Error('الملف المرفوع يجب أن يكون ملف صورة صالح');
   }
 
   return new Promise((resolve, reject) => {

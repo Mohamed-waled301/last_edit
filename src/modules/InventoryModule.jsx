@@ -385,7 +385,7 @@ export default function InventoryModule({ onBack, onNotify }) {
                 <h4 className="font-bold text-sm">قاعدة تسويات الجرد المخزنية:</h4>
                 <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
                   تسويات العجز (هالك تشغيل وعينات فحص) أو الإضافة تقوم بتعديل الأرصدة الكمية فقط في المخزن، 
-                  <strong> دون أي تأثير مالي أو قيود محاسبية</strong>، مع حفظ سجل تدقيق كامل (Audit Trail) بالسبب والتاريخ والملاحظات.
+                  <strong> دون أي تأثير مالي أو قيود محاسبية</strong>، مع حفظ سجل تدقيق كامل بالسبب والتاريخ والملاحظات.
                 </p>
               </div>
             </div>
@@ -412,7 +412,7 @@ export default function InventoryModule({ onBack, onNotify }) {
                     <th className="py-3 px-4">الصنف / الخامة</th>
                     <th className="py-3 px-4">نوع التسوية</th>
                     <th className="py-3 px-4 text-center">الكمية المسواة</th>
-                    <th className="py-3 px-4">السبب الموثق (Audit Reason)</th>
+                    <th className="py-3 px-4">سبب الحركة الموثق</th>
                     <th className="py-3 px-4">الأثر المالي</th>
                   </tr>
                 </thead>
@@ -528,7 +528,7 @@ export default function InventoryModule({ onBack, onNotify }) {
         <div className="space-y-4">
           <div className="bg-white border border-gray-200 rounded-md p-3 flex items-center justify-between">
             <div>
-              <h3 className="text-base font-bold text-gray-900">مواقع التخزين والأرفف (Storage Locations)</h3>
+              <h3 className="text-base font-bold text-gray-900">مواقع التخزين والأرفف</h3>
               <p className="text-xs text-gray-500 font-medium">تعريف المخازن الرئيسية، عنابر التشغيل، ومنافذ التوزيع</p>
             </div>
             <button
@@ -627,7 +627,7 @@ export default function InventoryModule({ onBack, onNotify }) {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">سبب التسوية الموثق (Audit Reason) *</label>
+                <label className="block font-bold text-gray-700 mb-1">سبب التسوية الموثق *</label>
                 <input
                   type="text"
                   required
@@ -805,7 +805,7 @@ export default function InventoryModule({ onBack, onNotify }) {
                   <label className="block font-bold text-gray-700 mb-1">كود الموقع</label>
                   <input
                     type="text"
-                    placeholder="LOC-001"
+                    placeholder="مخزن-01"
                     value={locationForm.code}
                     onChange={e => setLocationForm({ ...locationForm, code: e.target.value })}
                     className="w-full h-10 rounded border border-gray-300 px-3 text-xs font-mono"

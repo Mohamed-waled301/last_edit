@@ -100,7 +100,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
       'الحد الائتماني (عميل)': p.credit_limit || 0
     }));
     exportToExcel(exportData, effectiveMode === 'customers' ? 'دليل_العملاء' : 'دليل_الموردين');
-    if (onNotify) onNotify('تم تصدير البيانات إلى Excel بنجاح');
+    if (onNotify) onNotify('تم تصدير البيانات إلى ملف إكسيل بنجاح');
   };
 
   const pageTitle = effectiveMode === 'customers' ? 'دليل العملاء' : 'دليل الموردين وجهات التعامل';
@@ -121,7 +121,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
             className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Download className="w-4 h-4 text-gray-500" />
-            <span>تصدير Excel</span>
+            <span>تصدير إكسيل</span>
           </button>
 
           <button
@@ -348,14 +348,14 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
         </div>
       </div>
 
-      {/* Offset (مقاصة) Small Confirmation Dialog */}
+      {/* تأكيد إجراء المقاصة */}
       {offsetModalParty && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5 space-y-4" dir="rtl">
             <div className="flex items-center justify-between border-b border-gray-200 pb-2">
               <h3 className="font-bold text-base text-gray-900 flex items-center gap-2">
                 <ArrowLeftRight className="w-5 h-5 text-amber-600" />
-                إجراء مقاصة مالية (Offset)
+                إجراء تسوية مقاصة مالية
               </h3>
               <button 
                 onClick={() => setOffsetModalParty(null)}

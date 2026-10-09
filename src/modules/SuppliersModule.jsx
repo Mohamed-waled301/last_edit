@@ -464,8 +464,8 @@ export default function SuppliersModule({ onBack, onNotify }) {
         <div className="flex items-center gap-1.5 flex-wrap">
           {[
             { id: 'suppliers', label: 'سجل الموردين' },
-            { id: 'orders', label: 'أوامر الشراء (PO)' },
-            { id: 'grn', label: 'أذونات الاستلام (GRN)' },
+            { id: 'orders', label: 'أوامر الشراء' },
+            { id: 'grn', label: 'أذونات الاستلام' },
             { id: 'invoices', label: 'فواتير الموردين والسداد' },
           ].map(t => (
             <button
@@ -641,7 +641,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
         <div className="space-y-4">
           <div className="bg-white border border-gray-200 rounded-md p-3 flex items-center justify-between">
             <div>
-              <h3 className="text-base font-bold text-gray-900">أوامر شراء الخامات (Purchase Orders)</h3>
+              <h3 className="text-base font-bold text-gray-900">أوامر شراء الخامات</h3>
               <p className="text-xs text-gray-500 font-medium">
                 تحديد شروط الدفع، الخصومات ومصاريف الشحن، وتحديث سعر التكلفة تلقائياً
               </p>
@@ -746,7 +746,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
         <div className="space-y-4">
           <div className="bg-white border border-gray-200 rounded-md p-3 flex items-center justify-between">
             <div>
-              <h3 className="text-base font-bold text-gray-900">أذونات استلام الخامات (GRN)</h3>
+              <h3 className="text-base font-bold text-gray-900">أذونات استلام الخامات</h3>
               <p className="text-xs text-gray-500 font-medium">
                 إضافة رصيد الخامات للمخزن وتحديث متوسط التكلفة المرجح تلقائياً
               </p>
@@ -938,7 +938,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">رقم الهاتف</label>
                   <input
                     type="tel"
-                    placeholder="010xxxxxxxx"
+                    placeholder="01012345678"
                     value={newSupplier.phone}
                     onChange={e => setNewSupplier({ ...newSupplier, phone: e.target.value })}
                     className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-mono focus:border-[#1F3A5F] focus:outline-none"
@@ -1075,7 +1075,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
           <div className="bg-white rounded-md p-6 max-w-3xl w-full border border-gray-300 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-200">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">إنشاء أمر شراء خامات (PO)</h3>
+                <h3 className="text-lg font-bold text-gray-900">إنشاء أمر شراء خامات</h3>
                 <p className="text-xs text-gray-500 font-medium">سعر التكلفة يُجلب تلقائياً من بطاقة الصنف وتعديله يحدّث قاعدة البيانات</p>
               </div>
               <button onClick={() => setShowAddPOModal(false)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
@@ -1135,7 +1135,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                         onChange={() => setNewPO({ ...newPO, payment_terms: 'credit' })}
                         className="text-[#1F3A5F]"
                       />
-                      <span>آجل (Credit)</span>
+                      <span>آجل</span>
                     </label>
                     <label className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer">
                       <input
@@ -1145,7 +1145,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                         onChange={() => setNewPO({ ...newPO, payment_terms: 'cash', expected_date: '' })}
                         className="text-[#1F3A5F]"
                       />
-                      <span>نقدي (Cash)</span>
+                      <span>نقدي</span>
                     </label>
                   </div>
                 </div>
@@ -1365,7 +1365,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-md p-6 max-w-xl w-full border border-gray-300 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900">إثبات استلام خامات بالمخزن (GRN)</h3>
+              <h3 className="text-lg font-bold text-gray-900">إثبات استلام خامات بالمخزن</h3>
               <button onClick={() => setShowAddGRNModal(false)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>

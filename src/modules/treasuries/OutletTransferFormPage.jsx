@@ -96,7 +96,7 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
 
   return (
     <PageContainer
-      title="توريد نقدية من المعرض للخزينة الرئيسية (Outlet -> Main)"
+      title="توريد نقدية من المعرض للخزينة الرئيسية"
       subtitle="نقل السيولة النقدية من خزينة نقطة البيع بالمعرض إلى الخزينة المركزية المجمعة"
       breadcrumbs={[
         { label: 'الخزائن', href: '#/treasuries' },

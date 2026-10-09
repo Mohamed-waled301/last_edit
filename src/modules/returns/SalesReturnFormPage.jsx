@@ -156,7 +156,7 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
 
   return (
     <PageContainer
-      title="تسجيل مرتجع مبيعات (Sales Return)"
+      title="تسجيل مرتجع مبيعات"
       subtitle="مرتجع حر (بدون أصل) أو مرتجع مرتبط بفاتورة مبيعات مع حصر الكمية المباعة واسترجاع الرصيد"
       breadcrumbs={[
         { label: 'المرتجعات', href: '#/returns' },
@@ -196,7 +196,7 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
                   : 'border-gray-200 hover:border-gray-300 bg-white'
               }`}
             >
-              <div className="font-bold text-sm text-[#1F3A5F] mb-1">مرتجع مرتبط بفاتورة مبيعات (Invoice Return)</div>
+              <div className="font-bold text-sm text-[#1F3A5F] mb-1">مرتجع مرتبط بفاتورة مبيعات</div>
               <p className="text-xs text-gray-500">
                 البحث برقم الفاتورة الأصلية، التحقق الصارم من عدم تجاوز الكمية المباعة، والرد حسب طريقة سداد الفاتورة.
               </p>
@@ -211,7 +211,7 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
                   : 'border-gray-200 hover:border-gray-300 bg-white'
               }`}
             >
-              <div className="font-bold text-sm text-[#1F3A5F] mb-1">مرتجع حر (Free Return)</div>
+              <div className="font-bold text-sm text-[#1F3A5F] mb-1">مرتجع حر</div>
               <p className="text-xs text-gray-500">
                 تسجيل مرتجع بدون ربط بفاتورة مبيعات سابقة مع استرجاع القطع لرصيد المخزن وتسوية الحساب.
               </p>

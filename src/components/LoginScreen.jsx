@@ -4,11 +4,11 @@ import { usersRepo } from '../data';
 import { setActiveUser } from '../services/api';
 
 const roleLabels = {
-  owner: 'الرئيس التنفيذي / المدير العام (CEO)',
+  owner: 'الرئيس التنفيذي / المدير العام',
   purchasing: 'مدير المشتريات وسلاسل الإمداد',
   storekeeper: 'مدير المستودعات واللوجستيات',
   production: 'مدير العمليات والتصنيع الهندسي',
-  accountant: 'المدير المالي والمراقب المالي (CFO)',
+  accountant: 'المدير المالي والمراقب المالي',
 };
 
 export const LoginScreen = ({ onLoginSuccess }) => {
@@ -42,7 +42,7 @@ export const LoginScreen = ({ onLoginSuccess }) => {
     setError('');
 
     if (!pin) {
-      setError('يرجى إدخال رمز الدخول (PIN)');
+      setError('يرجى إدخال رمز الدخول');
       return;
     }
 
@@ -121,7 +121,7 @@ export const LoginScreen = ({ onLoginSuccess }) => {
         {/* PIN Input & Keypad */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">رمز الدخول (PIN):</label>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">رمز الدخول السري:</label>
             <input
               type="password"
               maxLength={6}

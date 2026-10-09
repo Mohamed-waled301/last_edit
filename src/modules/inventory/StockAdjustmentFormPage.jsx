@@ -104,7 +104,7 @@ export default function StockAdjustmentFormPage({ onSaved, onNotify }) {
 
   return (
     <PageContainer
-      title="تسجيل محضر تسوية جردية (Stock Adjustment)"
+      title="تسجيل محضر تسوية جردية"
       subtitle="تسوية عجز (توالف / عينات) أو زيادة جردية - تغير الكميات فقط وبلا أي أثر مالي أو محاسبي"
       breadcrumbs={[
         { label: 'المخزن', href: '#/inventory' },
@@ -161,8 +161,8 @@ export default function StockAdjustmentFormPage({ onSaved, onNotify }) {
                   onChange={(e) => setForm(prev => ({ ...prev, sub_type: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-bold bg-white text-rose-700 focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 >
-                  <option value="waste">توالف وهالك تشغيل (Waste)</option>
-                  <option value="samples">عينات عرض ونماذج (Samples)</option>
+                  <option value="waste">توالف وهالك تشغيل</option>
+                  <option value="samples">عينات عرض ونماذج</option>
                 </select>
               </div>
             ) : (
@@ -267,7 +267,7 @@ export default function StockAdjustmentFormPage({ onSaved, onNotify }) {
             {/* Reason (Audit Trail) - Requirement D2 */}
             <div className={selectedItemVariants.length > 0 ? 'md:col-span-3' : 'md:col-span-2'}>
               <label className="block text-xs font-bold text-gray-700 mb-1">
-                سبب التسوية (سجل التدقيق Audit Trail) <span className="text-red-500">*</span>
+                سبب التسوية (سجل التدقيق الرقابي) <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"

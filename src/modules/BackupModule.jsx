@@ -63,7 +63,7 @@ export const BackupModule = ({ onBack, onNotify }) => {
     try {
       const res = await backupRepo.exportAllData();
       setLastBackupDate(res.timestamp);
-      onNotify('تم تنزيل النسخة الاحتياطية بنجاح بصيغة JSON على جهازك', 'success');
+      onNotify('تم تنزيل النسخة الاحتياطية بنجاح على جهازك', 'success');
       await loadBackupInfo();
     } catch (err) {
       onNotify(err.message || 'حدث خطأ أثناء تصدير النسخة الاحتياطية', 'error');
@@ -85,7 +85,7 @@ export const BackupModule = ({ onBack, onNotify }) => {
         setPendingFileContent(text);
         setShowRestoreModal(true);
       } catch {
-        onNotify('الملف المحدد غير صالح، يرجى اختيار ملف نسخة احتياطية بصيغة JSON', 'error');
+        onNotify('الملف المحدد غير صالح، يرجى اختيار ملف نسخة احتياطية معتمد', 'error');
       }
     };
     reader.readAsText(file);
@@ -109,7 +109,7 @@ export const BackupModule = ({ onBack, onNotify }) => {
   };
 
   const handleLoadDemo = async () => {
-    if (!window.confirm('هل تريد استبدال البيانات الحالية بالبيانات التجريبية المتكاملة للمؤسسة (Enterprise ERP Demo)؟')) return;
+    if (!window.confirm('هل تريد استبدال البيانات الحالية بالبيانات الاسترشادية المتكاملة للمؤسسة؟')) return;
     try {
       await backupRepo.loadDemoData(currentUser.id);
       onNotify('تم تحميل البيانات التجريبية للمؤسسة بنجاح!', 'success');
@@ -159,9 +159,9 @@ export const BackupModule = ({ onBack, onNotify }) => {
         <div className="flex items-start gap-3">
           <ShieldCheck className="w-6 h-6 text-[#1F3A5F] shrink-0 mt-0.5" />
           <div className="text-sm">
-            <h3 className="font-bold text-[#1F2937] mb-1">الربط المركزي بقاعدة بيانات MySQL السحابية</h3>
+            <h3 className="font-bold text-[#1F2937] mb-1">الربط المركزي بقاعدة البيانات السحابية</h3>
             <p className="text-gray-600 leading-relaxed">
-              بيانات النظام مربوطة مركزياً ومحفوظة على خادم قاعدة بيانات MySQL السحابية. يمكنك في أي وقت تنزيل نسخة احتياطية إضافية كاملة من بياناتك بصيغة JSON كأرشيف محلي إضافي أو استرجاعها عند الحاجة.
+              بيانات النظام مربوطة مركزياً ومحفوظة على خادم قاعدة البيانات السحابية. يمكنك في أي وقت تنزيل نسخة احتياطية إضافية كاملة من بياناتك كأرشيف محلي إضافي أو استرجاعها عند الحاجة.
             </p>
           </div>
         </div>
@@ -177,7 +177,7 @@ export const BackupModule = ({ onBack, onNotify }) => {
             </div>
             <h2 className="text-xl font-bold text-[#1F2937] mb-2">1. حفظ نسخة احتياطية</h2>
             <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              تصدير وحفظ كامل بيانات المؤسسة (الموردين، سلاسل الإمداد، شجرة المنتجات BOM، أوامر التصنيع، فواتير المبيعات، والتدفقات النقدية) في ملف واحد بصيغة JSON يحمل تاريخ اليوم.
+              تصدير وحفظ كامل بيانات المؤسسة (الموردين، سلاسل الإمداد، شجرة مكونات المنتجات، أوامر التصنيع، فواتير المبيعات، والتدفقات النقدية) في ملف مستقل يحمل تاريخ اليوم.
             </p>
           </div>
 
@@ -221,7 +221,7 @@ export const BackupModule = ({ onBack, onNotify }) => {
               className="hidden"
             />
             <div className="text-xs text-gray-500">
-              ملفات المدعومة: <span className="font-mono font-bold">.JSON</span>
+              الملف المطلوب: <span className="font-bold">ملف بيانات النظام</span>
             </div>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -239,19 +239,19 @@ export const BackupModule = ({ onBack, onNotify }) => {
       <div className="bg-white border border-gray-200 rounded-md p-5">
         <h3 className="font-bold text-[#1F2937] text-base mb-4 flex items-center gap-2">
           <Database className="w-5 h-5 text-gray-600" />
-          <span>حالة التخزين المحلي وقاعدة البيانات</span>
+          <span>حالة التخزين وقاعدة البيانات</span>
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-3 border border-gray-200 rounded-md bg-gray-50">
             <div className="text-xs text-gray-500 mb-1">عدد جداول النظام</div>
-            <div className="text-xl font-bold text-[#1F2937]">{stats.tables} جدولاً محلياً</div>
+            <div className="text-xl font-bold text-[#1F2937]">{stats.tables} جدولاً</div>
           </div>
           <div className="p-3 border border-gray-200 rounded-md bg-gray-50">
             <div className="text-xs text-gray-500 mb-1">إجمالي السجلات المحفوظة</div>
             <div className="text-xl font-bold text-[#1F2937]">{stats.totalRecords} سجلاً</div>
           </div>
           <div className="p-3 border border-gray-200 rounded-md bg-gray-50">
-            <div className="text-xs text-gray-500 mb-1">حالة التخزين الدائم (Storage Persist)</div>
+            <div className="text-xs text-gray-500 mb-1">حالة التخزين المحلي</div>
             <div className="flex items-center gap-2 text-base font-bold text-emerald-700">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <span>مفعل ومحمي في المتصفح</span>
@@ -263,24 +263,17 @@ export const BackupModule = ({ onBack, onNotify }) => {
       {/* Demo Data & Reset Actions (Prompt Requirement 5) */}
       {isOwner && (
         <div className="bg-white border border-gray-200 rounded-md p-5">
-          <h3 className="font-bold text-[#1F2937] text-base mb-2">إجراءات متقدمة للبيانات (للمالك فقط)</h3>
+          <h3 className="font-bold text-[#1F2937] text-base mb-2">إجراءات تصفير البيانات (للمالك فقط)</h3>
           <p className="text-xs text-gray-500 mb-4">
-            يمكنك تحميل بيانات تجريبية استرشادية، أو تصفير النظام بالكامل للبدء على بياض.
+            تصفير النظام بالكامل للبدء على بياض بسجلات فارغة بنسبة 100%.
           </p>
           <div className="flex flex-wrap items-center gap-4">
-            <button
-              onClick={handleLoadDemo}
-              className="px-4 h-11 bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 font-semibold rounded-md text-sm transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <RefreshCw className="w-4 h-4 text-[#1F3A5F]" />
-              <span>تحميل بيانات تجريبية استرشادية</span>
-            </button>
             <button
               onClick={() => setShowClearModal(true)}
               className="px-4 h-11 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-semibold rounded-md text-sm transition-colors flex items-center gap-2 cursor-pointer"
             >
               <Trash2 className="w-4 h-4 text-red-600" />
-              <span>مسح كل البيانات (تصفير شامل)</span>
+              <span>مسح كل البيانات (تصفير شامل للصفر)</span>
             </button>
           </div>
         </div>

@@ -20,6 +20,12 @@ async function migrate() {
   await connection.query(schemaSql);
   console.log('Schema created successfully!');
 
+  // 1.5 Ensure no mock sizes/colors or mock data exist
+  await connection.query('SET FOREIGN_KEY_CHECKS = 0');
+  await connection.query('TRUNCATE TABLE `item_sizes`');
+  await connection.query('TRUNCATE TABLE `item_colors`');
+  await connection.query('SET FOREIGN_KEY_CHECKS = 1');
+
   // 2. Run Seed
   console.log('Executing seed.sql...');
   const seedSql = fs.readFileSync(path.resolve('seed.sql'), 'utf8');

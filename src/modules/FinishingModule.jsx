@@ -31,13 +31,13 @@ export default function FinishingModule({ onBack, onNotify }) {
   // Form State
   const [newOrder, setNewOrder] = useState({
     production_order_id: '',
-    supplier_id: '', // Service supplier (المصنع الخارجي)
+    supplier_id: '',
     factory_name: '',
-    finishing_quantity: '50',
+    finishing_quantity: '',
     transfer_date: getTodayDateString(),
-    service_type: 'تطريز وطباعة وتشطيب خارجي', // e.g. تطريز، صباغة، غسيل، طباعة
-    service_fee_per_piece: '12',
-    transport_cost: '250',
+    service_type: 'تطريز وطباعة وتشطيب خارجي',
+    service_fee_per_piece: '',
+    transport_cost: '',
     notes: ''
   });
 
@@ -154,7 +154,7 @@ export default function FinishingModule({ onBack, onNotify }) {
             className="h-10 px-3.5 bg-white hover:bg-gray-50 text-gray-700 rounded-md font-semibold text-sm border border-gray-300 flex items-center gap-2 cursor-pointer transition-colors"
           >
             <Download className="w-4 h-4 text-gray-600" />
-            <span>تصدير Excel</span>
+            <span>تصدير إكسيل</span>
           </button>
           <button
             onClick={() => setShowAddModal(true)}
@@ -308,7 +308,7 @@ export default function FinishingModule({ onBack, onNotify }) {
                     className="w-full h-10 rounded border border-gray-300 px-2 text-xs"
                   >
                     <option value="تطريز وطباعة">تطريز وطباعة شعارات</option>
-                    <option value="غسيل ومعالجة جينز">غسيل ومعالجة جينز (Stone Wash)</option>
+                    <option value="غسيل ومعالجة جينز">غسيل ومعالجة جينز</option>
                     <option value="صباغة خاصة">صباغة خاصة للأقمشة</option>
                     <option value="تشطيب وتجهيز كامل">تشطيب وتركيب إكسسوارات كامل</option>
                   </select>

@@ -76,7 +76,7 @@ export default function InventoryListPage({ onNotify }) {
       'إجمالي قيمة المخزون (ج.م)': ((Number(it.actual_balance ?? it.current_stock) || 0) * (Number(it.cost_price) || 0)).toFixed(2)
     }));
     exportToExcel(exportData, 'تقرير_أرصدة_المخزن_الفعلية');
-    if (onNotify) onNotify('تم تصدير تقرير المخزن إلى Excel');
+    if (onNotify) onNotify('تم تصدير تقرير المخزن إلى ملف إكسيل');
   };
 
   return (
@@ -92,7 +92,7 @@ export default function InventoryListPage({ onNotify }) {
             className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Download className="w-4 h-4 text-gray-500" />
-            <span>تصدير Excel</span>
+            <span>تصدير إكسيل</span>
           </button>
 
           <button

@@ -154,7 +154,7 @@ export default function DataRecordFormPage({ tableName, recordId, onBack, onNoti
         onBack={onBack}
       >
         <div className="p-8 text-center bg-red-50 text-red-700 font-bold border border-red-200 rounded-md">
-          غير مصرح لك بتعديل بيانات النظام. هذه الصلاحية مخصصة للرئيس التنفيذي (CEO) فقط.
+          غير مصرح لك بتعديل بيانات النظام. هذه الصلاحية مخصصة للإدارة العليا فقط.
         </div>
       </PageContainer>
     );
@@ -207,7 +207,7 @@ export default function DataRecordFormPage({ tableName, recordId, onBack, onNoti
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">معرف السجل (ID):</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">معرف السجل:</label>
               <input
                 type="text"
                 value={formData.id || ''}

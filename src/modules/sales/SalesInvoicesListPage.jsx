@@ -51,13 +51,13 @@ export default function SalesInvoicesListPage({ onNotify }) {
       'الحالة': i.status === 'paid' ? 'مدفوعة بالكامل' : i.status === 'partially_paid' ? 'مدفوعة جزئياً' : 'غير مدفوعة'
     }));
     exportToExcel(exportData, 'سجل_فواتير_المبيعات');
-    if (onNotify) onNotify('تم تصدير فواتير المبيعات إلى Excel');
+    if (onNotify) onNotify('تم تصدير فواتير المبيعات إلى ملف إكسيل');
   };
 
   return (
     <PageContainer
-      title="فواتير المبيعات (Sales Invoices)"
-      subtitle="إدارة فواتير المبيعات النقدية والآجلة، البحث برقم الفاتورة، والطباعة الحرارية و A4"
+      title="فواتير المبيعات"
+      subtitle="إدارة فواتير المبيعات النقدية والآجلة، البحث برقم الفاتورة، والطباعة الحرارية والورقية الكاملة"
       breadcrumbs={[{ label: 'المبيعات' }]}
       actions={
         <div className="flex items-center gap-2">
@@ -67,7 +67,7 @@ export default function SalesInvoicesListPage({ onNotify }) {
             className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Download className="w-4 h-4 text-gray-500" />
-            <span>تصدير Excel</span>
+            <span>تصدير إكسيل</span>
           </button>
 
           <button
@@ -163,7 +163,7 @@ export default function SalesInvoicesListPage({ onNotify }) {
                           type="button"
                           onClick={() => { window.location.hash = `#/sales/${inv.id}/print`; }}
                           className="px-2.5 py-1 text-xs text-[#1F3A5F] hover:bg-blue-50 border border-gray-200 rounded font-bold cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-                          title="معاينة وطباعة الفاتورة A4 وحراري"
+                          title="معاينة وطباعة الفاتورة قياس كامل وحراري"
                         >
                           <Printer className="w-3.5 h-3.5" />
                           <span>طباعة</span>

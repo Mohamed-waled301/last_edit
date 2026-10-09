@@ -202,7 +202,7 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
           <div className="bg-white border border-gray-200 rounded-md p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-bold text-gray-900">تقرير المنتجات والخامات التراكمي (Products Report)</h3>
+                <h3 className="text-base font-bold text-gray-900">تقرير المنتجات والخامات التراكمي</h3>
                 <p className="text-xs text-gray-500 font-medium">
                   عرض سعر التكلفة، متوسط سعر التكلفة، سعر البيع، ومتوسط سعر البيع، مع الإجماليات وهوامش الربح
                 </p>
@@ -212,7 +212,7 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
                 className="h-10 px-4 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-md font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm"
               >
                 <Download className="w-4 h-4" />
-                <span>تصدير إلى Excel</span>
+                <span>تصدير إلى إكسيل</span>
               </button>
             </div>
 
@@ -364,7 +364,7 @@ export default function ReportsModule({ onBack, userRole, onNotify }) {
               className="h-10 px-3.5 bg-white hover:bg-gray-50 text-gray-700 rounded-md font-semibold text-sm border border-gray-300 flex items-center gap-2 cursor-pointer transition-colors"
             >
               <Download className="w-4 h-4 text-gray-600" />
-              <span>تصدير Excel</span>
+              <span>تصدير إكسيل</span>
             </button>
           </div>
 

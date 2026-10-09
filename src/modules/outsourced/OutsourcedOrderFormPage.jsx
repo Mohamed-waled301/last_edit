@@ -155,7 +155,7 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
 
   return (
     <PageContainer
-      title="إصدار أمر تصنيع وتشغيل لدى الغير (Outsourced Manufacturing)"
+      title="إصدار أمر تصنيع وتشغيل لدى الغير"
       subtitle="تكاليف تراكمية: تكلفة المرحلة الداخلية + تكلفة التشغيل الخارجي = التكلفة النهائية (بدون نسب هالك)"
       breadcrumbs={[
         { label: 'التصنيع لدى الغير', href: '#/outsourced' },
@@ -288,7 +288,7 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
           <div className="flex items-center justify-between border-b border-gray-100 pb-2">
             <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-emerald-600" />
-              احتساب التكلفة التراكمية (Cumulative Costing)
+              احتساب التكلفة التراكمية للمنتج
             </h2>
             <span className="text-xs text-gray-500 font-bold">
               تكلفة داخلية + تكلفة خارجية = التكلفة النهائية (بدون نسب هالك)

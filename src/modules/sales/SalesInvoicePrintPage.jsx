@@ -77,7 +77,7 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
                 printMode === 'a4' ? 'bg-white text-[#1F3A5F] shadow-xs' : 'text-gray-600'
               }`}
             >
-              فاتورة رسمية A4
+              فاتورة رسمية قياس كامل
             </button>
             <button
               onClick={() => setPrintMode('thermal')}
@@ -85,7 +85,7 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
                 printMode === 'thermal' ? 'bg-white text-[#1F3A5F] shadow-xs' : 'text-gray-600'
               }`}
             >
-              إيصال حراري (80mm)
+              إيصال طباعة حرارية
             </button>
           </div>
 
@@ -95,7 +95,7 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
             className="px-5 py-2 bg-[#1F3A5F] hover:bg-[#162a45] text-white rounded-md font-bold text-xs flex items-center gap-2 cursor-pointer shadow-xs"
           >
             <Printer className="w-4 h-4" />
-            <span>طباعة الآن (Print)</span>
+            <span>طباعة الآن</span>
           </button>
         </div>
       </div>
@@ -107,7 +107,7 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
           <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-6">
             <div>
               <h2 className="text-2xl font-bold text-[#1F3A5F]">شركة أبيكس لصناعة الملابس الجاهزة</h2>
-              <p className="text-xs text-gray-500 mt-1">Apex Apparel Manufacturing & Export Enterprise</p>
+              <p className="text-xs text-gray-500 mt-1">مؤسسة صناعة وتصدير الملابس الجاهزة</p>
               <p className="text-xs text-gray-600 mt-1">المنطقة الصناعية - المحلة الكبرى / القاهرة</p>
               <p className="text-xs text-gray-600">س.ت: 489201 • ب.ض: 789-204-110</p>
             </div>
@@ -206,7 +206,7 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
         <div className="max-w-[320px] mx-auto bg-white p-4 shadow-md rounded-md font-mono text-xs border border-gray-300 print:shadow-none print:border-none print:p-0">
           <div className="text-center border-b border-dashed border-gray-400 pb-3 mb-3">
             <h3 className="font-bold text-sm">مصنع أبيكس للملابس</h3>
-            <p className="text-[10px] text-gray-600">Apex Apparel Store</p>
+            <p className="text-[10px] text-gray-600">معرض ومنفذ بيع الملابس الجاهزة</p>
             <p className="text-[10px] text-gray-600">س.ت 489201 • ب.ض 789204110</p>
             <div className="mt-2 text-right">
               <div>رقم الفاتورة: <strong>{invoice.invoice_number}</strong></div>

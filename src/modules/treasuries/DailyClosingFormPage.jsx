@@ -89,7 +89,7 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
 
   return (
     <PageContainer
-      title="تقفيل الوردية اليومية للكاشير (Daily Shift Closing)"
+      title="تقفيل الوردية اليومية للكاشير"
       subtitle="حصر النقدية الفعلية ومطابقتها مع مبيعات المنفذ والمصروفات، واحتساب العجز أو الزيادة"
       breadcrumbs={[
         { label: 'الخزائن', href: '#/treasuries' },

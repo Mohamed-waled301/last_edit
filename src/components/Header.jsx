@@ -38,11 +38,11 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
 
   const getRoleLabel = (role) => {
     switch (role) {
-      case 'owner': return 'الرئيس التنفيذي (CEO)';
+      case 'owner': return 'الرئيس التنفيذي';
       case 'purchasing': return 'سلاسل الإمداد ومشتريات الأقمشة';
       case 'storekeeper': return 'أمين مستودع الخامات';
       case 'production': return 'مدير خطوط الإنتاج والتشغيل';
-      case 'accountant': return 'المدير المالي (CFO)';
+      case 'accountant': return 'المدير المالي';
       case 'cashier': return 'كاشير منفذ البيع';
       default: return role;
     }
@@ -70,7 +70,7 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
             {factoryName}
           </h1>
           <span className="text-xs text-gray-500 font-medium hidden md:block truncate">
-            نظام تخطيط موارد المؤسسات المتكامل (Enterprise ERP)
+            نظام تخطيط موارد المؤسسات الشامل
           </span>
         </div>
       </div>
@@ -134,7 +134,7 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
           <button
             onClick={onLockSession}
             className="h-9 sm:h-10 px-2 sm:px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-md font-medium text-xs flex items-center gap-1 cursor-pointer transition-colors shrink-0"
-            title="قفل الشاشة أو تبديل الحساب برمز PIN"
+            title="قفل الشاشة أو تبديل الحساب"
             type="button"
             aria-label="قفل الشاشة"
           >

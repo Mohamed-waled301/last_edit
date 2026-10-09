@@ -45,7 +45,7 @@ export default function OutsourcedListPage({ onNotify }) {
 
   return (
     <PageContainer
-      title="التصنيع والتشغيل لدى الغير (Outsourced Manufacturing)"
+      title="التصنيع والتشغيل لدى الغير"
       subtitle="متابعة عمليات التطريز، الغسيل، والطباعة بالمصانع الخارجية وحساب التكلفة التراكمية"
       breadcrumbs={[{ label: 'التصنيع لدى الغير' }]}
       actions={

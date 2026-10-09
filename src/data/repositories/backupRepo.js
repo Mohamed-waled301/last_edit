@@ -49,7 +49,7 @@ export const backupRepo = {
     try {
       parsed = typeof jsonContent === 'string' ? JSON.parse(jsonContent) : jsonContent;
     } catch {
-      throw new Error('ملف النسخة الاحتياطية غير صالح (JSON تالف)');
+      throw new Error('ملف النسخة الاحتياطية غير صالح (ملف تالف)');
     }
 
     if (!parsed || !parsed.data) {
@@ -95,8 +95,8 @@ export const backupRepo = {
       // 1. Enterprise Profile & Settings
       await db.settings.put({
         id: 1,
-        factory_name: 'مصنع النيل الحديث للملابس الجاهزة والمنسوجات (Nile Garments Factory)',
-        phone: '+20 2 2450 8899',
+        factory_name: 'مصنع النيل الحديث للملابس الجاهزة والمنسوجات',
+        phone: '01012345678',
         address: 'المنطقة الصناعية B3 - مجمع مصانع الغزل والنسيج - مدينة العاشر من رمضان',
         vat_enabled: 1,
         vat_rate_percent: 14.0,
@@ -114,18 +114,18 @@ export const backupRepo = {
 
       // 3. Corporate Users & Roles (including outlet cashier)
       await db.users.bulkAdd([
-        { id: 'usr-owner', username: 'owner', full_name: 'م. خالد المنشاوي (الرئيس التنفيذي - CEO)', password_hash: '1234', role: 'owner', outlet_id: null, is_active: 1, created_at: now },
+        { id: 'usr-owner', username: 'owner', full_name: 'م. خالد المنشاوي (الرئيس التنفيذي)', password_hash: '1234', role: 'owner', outlet_id: null, is_active: 1, created_at: now },
         { id: 'usr-purchasing', username: 'purchasing', full_name: 'أ. مروان الشريف (مدير المشتريات ومستلزمات الإنتاج)', password_hash: '1234', role: 'purchasing', outlet_id: null, is_active: 1, created_at: now },
         { id: 'usr-storekeeper', username: 'storekeeper', full_name: 'أ. أيمن القاضي (مدير مستودع الأقمشة والملابس)', password_hash: '1234', role: 'storekeeper', outlet_id: null, is_active: 1, created_at: now },
         { id: 'usr-production', username: 'production', full_name: 'م. يوسف النجار (مدير صالة القص والتشغيل)', password_hash: '1234', role: 'production', outlet_id: null, is_active: 1, created_at: now },
-        { id: 'usr-accountant', username: 'accountant', full_name: 'أ. طارق عبد الرحمن (المدير المالي - CFO)', password_hash: '1234', role: 'accountant', outlet_id: null, is_active: 1, created_at: now },
+        { id: 'usr-accountant', username: 'accountant', full_name: 'أ. طارق عبد الرحمن (المدير المالي)', password_hash: '1234', role: 'accountant', outlet_id: null, is_active: 1, created_at: now },
         { id: 'usr-cashier', username: 'cashier', full_name: 'أ. سارة عادل (كاشير معرض وسط البلد)', password_hash: '1234', role: 'cashier', outlet_id: 'out-2', is_active: 1, created_at: now },
       ]);
 
       // 4. Treasuries (Main aggregating treasury + one per outlet)
       await db.treasury_accounts.bulkAdd([
         { id: 'acc-main', name: 'الخزينة المركزية الرئيسية - إدارة المصنع', account_type: 'treasury', outlet_id: null, is_main: 1, current_balance: 185000, bank_account_number: '', bank_name: '', is_active: 1, created_at: now },
-        { id: 'acc-cib', name: 'حساب العمليات التشغيلية - البنك التجاري الدولي (CIB)', account_type: 'bank', outlet_id: null, is_main: 0, current_balance: 620000, bank_account_number: 'EG65CIB000000010992384756', bank_name: 'Commercial International Bank', is_active: 1, created_at: now },
+        { id: 'acc-cib', name: 'حساب العمليات التشغيلية - البنك التجاري الدولي', account_type: 'bank', outlet_id: null, is_main: 0, current_balance: 620000, bank_account_number: '010992384756', bank_name: 'البنك التجاري الدولي', is_active: 1, created_at: now },
         { id: 'acc-out-1', name: 'خزينة منفذ بيع المصنع (العاشر من رمضان)', account_type: 'treasury', outlet_id: 'out-1', is_main: 0, current_balance: 42000, bank_account_number: '', bank_name: '', is_active: 1, created_at: now },
         { id: 'acc-out-2', name: 'خزينة معرض وسط البلد (القاهرة)', account_type: 'treasury', outlet_id: 'out-2', is_main: 0, current_balance: 38500, bank_account_number: '', bank_name: '', is_active: 1, created_at: now },
         { id: 'acc-out-3', name: 'خزينة معرض سيتي ستارز (مدينة نصر)', account_type: 'treasury', outlet_id: 'out-3', is_main: 0, current_balance: 55000, bank_account_number: '', bank_name: '', is_active: 1, created_at: now },
@@ -141,15 +141,15 @@ export const backupRepo = {
 
       // 6. Master Data: Sizes & Colors
       await db.item_sizes.bulkAdd([
-        { id: 'sz-1', name: 'S (صغير)', code: 'S', is_active: 1 },
-        { id: 'sz-2', name: 'M (وسط)', code: 'M', is_active: 1 },
-        { id: 'sz-3', name: 'L (كبير)', code: 'L', is_active: 1 },
-        { id: 'sz-4', name: 'XL (كبير جداً)', code: 'XL', is_active: 1 },
-        { id: 'sz-5', name: 'XXL (2 إكس)', code: 'XXL', is_active: 1 },
-        { id: 'sz-6', name: '30 (بنطلون)', code: '30', is_active: 1 },
-        { id: 'sz-7', name: '32 (بنطلون)', code: '32', is_active: 1 },
-        { id: 'sz-8', name: '34 (بنطلون)', code: '34', is_active: 1 },
-        { id: 'sz-9', name: '36 (بنطلون)', code: '36', is_active: 1 },
+        { id: 'sz-1', name: 'صغير', code: 'S', is_active: 1 },
+        { id: 'sz-2', name: 'وسط', code: 'M', is_active: 1 },
+        { id: 'sz-3', name: 'كبير', code: 'L', is_active: 1 },
+        { id: 'sz-4', name: 'كبير جداً', code: 'XL', is_active: 1 },
+        { id: 'sz-5', name: '2 إكس', code: 'XXL', is_active: 1 },
+        { id: 'sz-6', name: '30', code: '30', is_active: 1 },
+        { id: 'sz-7', name: '32', code: '32', is_active: 1 },
+        { id: 'sz-8', name: '34', code: '34', is_active: 1 },
+        { id: 'sz-9', name: '36', code: '36', is_active: 1 },
       ]);
 
       await db.item_colors.bulkAdd([
@@ -188,7 +188,7 @@ export const backupRepo = {
         { id: 'pty-4', code: 'PRT-SUP-04', name: 'المصرية الألمانية لمغاسل وتجهيز وصباغة الجينز', phone: '01200445566', address: 'أبو رواش - المنطقة الصناعية - الجيزة', tax_number: '501-772-831', is_supplier: 1, is_customer: 0, supplier_type: 'service', payment_terms: 'credit', credit_limit: 0, notes: 'مورد خدمة - تشغيل لدى الغير: غسيل إنزيم، تبييض ثلجي، وكرمشة حرارية للجينز', is_active: 1, created_at: now },
         { id: 'pty-5', code: 'PRT-BOTH-05', name: 'شركة طيبة للملابس الجاهزة وتوزيع الجملة', phone: '01019988771', address: 'العتبة - وسط البلد - القاهرة', tax_number: '612-334-550', is_supplier: 1, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 250000, notes: 'شريك استراتيجي: نشتري منهم أقمشة مستوردة ونبيع لهم ملابس تامة جاهزة (مورد وعميل - يسمح بالمقاصة)', is_active: 1, created_at: now },
         { id: 'pty-6', code: 'PRT-CUST-06', name: 'مجموعة فاشون لاند للمتاجر وسلاسل التوزيع', phone: '0223891000', address: 'مدينة نصر - المنطقة الأولى - القاهرة', tax_number: '710-440-120', is_supplier: 0, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 180000, notes: 'عميل رئيسي - طلبيات جملة دورية لكولكشن الصيف والشتاء', is_active: 1, created_at: now },
-        { id: 'pty-7', code: 'PRT-CUST-07', name: 'سلسلة متاجر كاجوال كلوب (Casual Club Egypt)', phone: '01009876543', address: 'المهندسين - شارع لبنان - الجيزة', tax_number: '820-550-230', is_supplier: 0, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 200000, notes: 'عميل معتمد لتوزيع البناطيل الجينز والتيشيرتات البولو', is_active: 1, created_at: now },
+        { id: 'pty-7', code: 'PRT-CUST-07', name: 'سلسلة متاجر كاجوال كلوب', phone: '01009876543', address: 'المهندسين - شارع لبنان - الجيزة', tax_number: '820-550-230', is_supplier: 0, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 200000, notes: 'عميل معتمد لتوزيع البناطيل الجينز والتيشيرتات البولو', is_active: 1, created_at: now },
       ]);
 
       // Sync into legacy suppliers and customers tables
@@ -203,7 +203,7 @@ export const backupRepo = {
       await db.customers.bulkAdd([
         { id: 'pty-5', name: 'شركة طيبة للملابس الجاهزة وتوزيع الجملة', phone: '01019988771', address: 'العتبة', tax_number: '612-334-550', customer_type: 'local', payment_terms: 'credit', credit_limit: 250000, notes: 'عميل جملة ومورد أقمشة', is_active: 1, created_at: now },
         { id: 'pty-6', name: 'مجموعة فاشون لاند للمتاجر وسلاسل التوزيع', phone: '0223891000', address: 'مدينة نصر', tax_number: '710-440-120', customer_type: 'local', payment_terms: 'credit', credit_limit: 180000, notes: 'عميل جملة ملابس', is_active: 1, created_at: now },
-        { id: 'pty-7', name: 'سلسلة متاجر كاجوال كلوب (Casual Club Egypt)', phone: '01009876543', address: 'المهندسين', tax_number: '820-550-230', customer_type: 'local', payment_terms: 'credit', credit_limit: 200000, notes: 'عميل توزيع بناطيل جينز وتيشيرتات', is_active: 1, created_at: now },
+        { id: 'pty-7', name: 'سلسلة متاجر كاجوال كلوب', phone: '01009876543', address: 'المهندسين', tax_number: '820-550-230', customer_type: 'local', payment_terms: 'credit', credit_limit: 200000, notes: 'عميل توزيع بناطيل جينز وتيشيرتات', is_active: 1, created_at: now },
       ]);
 
       // 10. Raw Materials (خامات الملابس ومستلزمات الإنتاج)

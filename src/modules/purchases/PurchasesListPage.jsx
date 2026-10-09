@@ -54,7 +54,7 @@ export default function PurchasesListPage({ onNotify }) {
       'الحالة': o.status === 'received' ? 'تم الاستلام' : 'قيد التوريد'
     }));
     exportToExcel(exportData, 'أوامر_شراء_وتوريد_الخامات');
-    if (onNotify) onNotify('تم تصدير أوامر التوريد إلى Excel');
+    if (onNotify) onNotify('تم تصدير أوامر التوريد إلى ملف إكسيل');
   };
 
   return (
@@ -70,7 +70,7 @@ export default function PurchasesListPage({ onNotify }) {
             className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Download className="w-4 h-4 text-gray-500" />
-            <span>تصدير Excel</span>
+            <span>تصدير إكسيل</span>
           </button>
 
           <button

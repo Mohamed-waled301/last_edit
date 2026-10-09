@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Factory, User, Lock, Sparkles, CheckCircle2 } from 'lucide-react';
-import { usersRepo, backupRepo } from '../data';
+import { Factory, CheckCircle2 } from 'lucide-react';
+import { usersRepo } from '../data';
 import { setActiveUser } from '../services/api';
 
 export const SetupScreen = ({ onComplete }) => {
-  const [factoryName, setFactoryName] = useState('مجموعة القمة للصناعات المتطورة والأنظمة الذكية');
-  const [ownerName, setOwnerName] = useState('م. خالد المنشاوي');
-  const [pin, setPin] = useState('1234');
-  const [confirmPin, setConfirmPin] = useState('1234');
-  const [loadDemo, setLoadDemo] = useState(false);
+  const [factoryName, setFactoryName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -25,7 +24,7 @@ export const SetupScreen = ({ onComplete }) => {
       return;
     }
     if (!pin || pin.length < 4 || pin.length > 6) {
-      setError('رمز الدخول (PIN) يجب أن يكون من 4 إلى 6 أرقام');
+      setError('رمز الدخول يجب أن يكون من 4 إلى 6 أرقام');
       return;
     }
     if (pin !== confirmPin) {
@@ -35,14 +34,10 @@ export const SetupScreen = ({ onComplete }) => {
 
     setLoading(true);
     try {
-      if (loadDemo) {
-        await backupRepo.loadDemoData('usr-owner');
-      }
-      
       const user = await usersRepo.createOwner(factoryName.trim(), ownerName.trim(), pin);
       setActiveUser(user.id, user.role, user.full_name);
 
-      // Attempt to sync clean setup to MySQL backend if online
+      // Attempt to sync clean setup to backend if online
       try {
         await fetch('/api/setup/init', {
           method: 'POST',
@@ -75,7 +70,7 @@ export const SetupScreen = ({ onComplete }) => {
             <Factory className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-bold text-[#1F2937]">مرحباً بك في نظام تخطيط موارد المؤسسات المتكامل</h1>
-          <p className="text-gray-600 text-sm mt-1">Enterprise Resource Planning (ERP) - نظام الإدارة السحابي المتكامل</p>
+          <p className="text-gray-600 text-sm mt-1">نظام إدارة وتخطيط العمليات والمصانع المتكامل</p>
         </div>
 
         {error && (
@@ -93,21 +88,21 @@ export const SetupScreen = ({ onComplete }) => {
                 value={factoryName}
                 onChange={(e) => setFactoryName(e.target.value)}
                 className="w-full h-12 px-3 border border-gray-300 rounded-md text-base focus:border-[#1F3A5F] focus:outline-none"
-                placeholder="مثال: مجموعة القمة للصناعات المتطورة"
+                placeholder="اكتب اسم المنشأة أو المصنع"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">اسم المدير التنفيذي / المالك (CEO) *</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">اسم المدير التنفيذي / المالك *</label>
             <div className="relative">
               <input
                 type="text"
                 value={ownerName}
                 onChange={(e) => setOwnerName(e.target.value)}
                 className="w-full h-12 px-3 border border-gray-300 rounded-md text-base focus:border-[#1F3A5F] focus:outline-none"
-                placeholder="مثال: م. خالد المنشاوي"
+                placeholder="اكتب اسم المدير المسؤول"
                 required
               />
             </div>
@@ -115,7 +110,7 @@ export const SetupScreen = ({ onComplete }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">رمز الدخول (PIN) *</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">رمز الدخول السري *</label>
               <input
                 type="password"
                 maxLength={6}
@@ -138,23 +133,6 @@ export const SetupScreen = ({ onComplete }) => {
                 required
               />
             </div>
-          </div>
-
-          {/* Load Demo Data Checkbox */}
-          <div className="p-3.5 border border-gray-200 rounded-md bg-gray-50 flex items-center justify-between cursor-pointer" onClick={() => setLoadDemo(!loadDemo)}>
-            <div className="flex items-center gap-3">
-              <Sparkles className="w-5 h-5 text-[#1F3A5F]" />
-              <div>
-                <div className="text-sm font-bold text-gray-800">تحميل البيانات التجريبية للمؤسسة (Enterprise Demo)</div>
-                <div className="text-xs text-gray-500">سلاسل إمداد، خامات، شجرة منتجات BOM، أوامر تشغيل، وفواتير مبيعات نموذجية</div>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={loadDemo}
-              onChange={(e) => setLoadDemo(e.target.checked)}
-              className="w-5 h-5 text-[#1F3A5F] rounded border-gray-300 cursor-pointer"
-            />
           </div>
 
           <button

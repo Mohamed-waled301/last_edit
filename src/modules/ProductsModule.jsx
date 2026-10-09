@@ -460,7 +460,7 @@ export default function ProductsModule({ onBack, onNotify }) {
         <div className="flex items-center gap-3">
           <BackButton onClick={onBack} />
           <div>
-            <h2 className="text-xl font-bold text-gray-900 leading-none">البيانات الأساسية والأصناف (Master Data)</h2>
+            <h2 className="text-xl font-bold text-gray-900 leading-none">البيانات الأساسية والأصناف</h2>
             <span className="text-xs text-gray-500 font-medium">دليل الأصناف والمقاسات والألوان، جهات التعامل الموحدة، ومستودعات التخزين</span>
           </div>
         </div>
@@ -576,7 +576,7 @@ export default function ProductsModule({ onBack, onNotify }) {
               className="h-10 px-3.5 bg-white hover:bg-gray-50 text-gray-700 rounded-md font-semibold text-sm border border-gray-300 flex items-center gap-2 cursor-pointer transition-colors"
             >
               <Download className="w-4 h-4 text-gray-600" />
-              <span>تصدير Excel</span>
+              <span>تصدير إكسيل</span>
             </button>
           </div>
 
@@ -660,10 +660,10 @@ export default function ProductsModule({ onBack, onNotify }) {
                             <button
                               onClick={() => handleOpenBOM(it)}
                               className="px-2.5 py-1 bg-white hover:bg-gray-50 text-[#1F3A5F] rounded border border-[#1F3A5F]/30 text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
-                              title="شجرة المكونات والهالك (BOM)"
+                              title="شجرة مكونات المنتج"
                             >
                               <Layers className="w-3.5 h-3.5" />
-                              <span>شجرة BOM</span>
+                              <span>شجرة المكونات</span>
                             </button>
                           )}
                         </td>
@@ -792,13 +792,13 @@ export default function ProductsModule({ onBack, onNotify }) {
           {/* Sizes */}
           <div className="bg-white border border-gray-200 rounded-md p-5 space-y-4">
             <h3 className="text-base font-bold text-gray-900 border-b pb-2 flex items-center justify-between">
-              <span>إدارة مقاسات الملابس (Sizes)</span>
+              <span>إدارة مقاسات الملابس</span>
               <span className="text-xs text-gray-500 font-normal">{sizes.length} مقاس مسجل</span>
             </h3>
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="اسم المقاس الجديد (مثال: 4XL أو 38)..."
+                placeholder="اسم المقاس الجديد (مثال: 38 أو خاص)..."
                 value={newSizeName}
                 onChange={e => setNewSizeName(e.target.value)}
                 className="flex-1 h-10 border border-gray-300 rounded px-3 text-sm focus:border-[#1F3A5F] focus:outline-none"
@@ -822,7 +822,7 @@ export default function ProductsModule({ onBack, onNotify }) {
           {/* Colors */}
           <div className="bg-white border border-gray-200 rounded-md p-5 space-y-4">
             <h3 className="text-base font-bold text-gray-900 border-b pb-2 flex items-center justify-between">
-              <span>إدارة ألوان الأقمشة والملابس (Colors)</span>
+              <span>إدارة ألوان الأقمشة والملابس</span>
               <span className="text-xs text-gray-500 font-normal">{colors.length} لون مسجل</span>
             </h3>
             <div className="flex gap-2">
@@ -863,7 +863,7 @@ export default function ProductsModule({ onBack, onNotify }) {
       {activeTab === 'locations' && (
         <div className="bg-white border border-gray-200 rounded-md p-5 space-y-4">
           <h3 className="text-base font-bold text-gray-900 border-b pb-2 flex items-center justify-between">
-            <span>مواقع ومستودعات التخزين (Storage Locations)</span>
+            <span>مواقع ومستودعات التخزين</span>
             <span className="text-xs text-gray-500 font-normal">{locations.length} موقع مسجل</span>
           </h3>
           <div className="flex gap-2 max-w-lg">
@@ -953,7 +953,7 @@ export default function ProductsModule({ onBack, onNotify }) {
       {activeTab === 'payment_methods' && (
         <div className="bg-white border border-gray-200 rounded-md p-5 space-y-4">
           <h3 className="text-base font-bold text-gray-900 border-b pb-2 flex items-center justify-between">
-            <span>طرق دفع الموردين والتحصيل (Payment Methods)</span>
+            <span>طرق دفع الموردين والتحصيل</span>
             <span className="text-xs text-gray-500 font-normal">{paymentMethods.length} طريقة مسجلة</span>
           </h3>
           <div className="flex gap-2 max-w-md">
@@ -1113,7 +1113,7 @@ export default function ProductsModule({ onBack, onNotify }) {
 
               {/* Image upload stored as compressed base64 */}
               <div className="border border-gray-200 rounded p-3">
-                <label className="block text-sm font-semibold text-gray-700 mb-1">صورة الصنف (تخزين مضغوط base64)</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">صورة الصنف (تخزين مضغوط)</label>
                 <div className="flex items-center gap-4">
                   <input
                     type="file"
@@ -1131,7 +1131,7 @@ export default function ProductsModule({ onBack, onNotify }) {
               {itemForm.item_type === 'finished' && (
                 <div className="border border-gray-200 rounded p-4 bg-blue-50/20 space-y-3">
                   <h4 className="text-sm font-bold text-gray-900 flex items-center justify-between">
-                    <span>دعم مقاسات وألوان الملابس (Variants Matrix)</span>
+                    <span>دعم مقاسات وألوان الملابس (مصفوفة المتغيرات)</span>
                     <span className="text-xs text-gray-500">اختر المقاسات والألوان المتاحة لهذا الموديل</span>
                   </h4>
 
@@ -1192,7 +1192,7 @@ export default function ProductsModule({ onBack, onNotify }) {
                           <tr>
                             <th className="p-2">المقاس</th>
                             <th className="p-2">اللون</th>
-                            <th className="p-2">كود SKU</th>
+                            <th className="p-2">كود الباركود</th>
                             <th className="p-2">رصيد أول المدة</th>
                           </tr>
                         </thead>
@@ -1273,7 +1273,7 @@ export default function ProductsModule({ onBack, onNotify }) {
                     onChange={e => setPartyForm({ ...partyForm, is_supplier: e.target.checked })}
                     className="w-4 h-4 text-[#1F3A5F] rounded"
                   />
-                  <span>مورد (Supplier)</span>
+                  <span>مورد</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer font-bold text-sm text-gray-800">
                   <input
@@ -1282,7 +1282,7 @@ export default function ProductsModule({ onBack, onNotify }) {
                     onChange={e => setPartyForm({ ...partyForm, is_customer: e.target.checked })}
                     className="w-4 h-4 text-[#1F3A5F] rounded"
                   />
-                  <span>عميل (Customer)</span>
+                  <span>عميل</span>
                 </label>
               </div>
               <FieldError error={partyErrors.type} />
@@ -1390,7 +1390,7 @@ export default function ProductsModule({ onBack, onNotify }) {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-md p-6 max-w-md w-full border border-gray-300">
             <div className="flex items-center justify-between pb-3 mb-2 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900">إجراء مقاصة أرصدة (Offset)</h3>
+              <h3 className="text-lg font-bold text-gray-900">إجراء مقاصة أرصدة</h3>
               <button onClick={() => setShowOffsetModal(null)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
@@ -1530,7 +1530,7 @@ export default function ProductsModule({ onBack, onNotify }) {
           <div className="bg-white rounded-md p-6 max-w-2xl w-full border border-gray-300 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 mb-2 border-b border-gray-200">
               <h3 className="text-lg font-bold text-gray-900">
-                شجرة المكونات وهالك الأقمشة (BOM): {showBOMModal.name}
+                شجرة المكونات واستهلاك الأقمشة: {showBOMModal.name}
               </h3>
               <button onClick={() => setShowBOMModal(null)} className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer">
                 <X className="w-5 h-5" />

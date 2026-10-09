@@ -358,7 +358,7 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
 
   return (
     <PageContainer
-      title="إصدار فاتورة مبيعات جديدة (Sales Invoice)"
+      title="إصدار فاتورة مبيعات جديدة"
       subtitle="شروط دفع نقدي أو آجل، فحص الحد الائتماني للعميل، وجدول الأسعار قبل وبعد الخصم"
       breadcrumbs={[
         { label: 'المبيعات', href: '#/sales' },
@@ -523,8 +523,8 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
                 }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-bold bg-white text-[#1F3A5F] focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               >
-                <option value="cash">نقدي (Cash) - لا يشترط تاريخ استحقاق</option>
-                <option value="credit">آجل (Credit) - يتطلب تاريخ استحقاق إلزامي</option>
+                <option value="cash">نقدي - لا يشترط تاريخ استحقاق</option>
+                <option value="credit">آجل - يتطلب تاريخ استحقاق إلزامي</option>
               </select>
             </div>
 

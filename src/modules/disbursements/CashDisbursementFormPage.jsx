@@ -128,7 +128,7 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
 
   return (
     <PageContainer
-      title="صرف نقدية جديد (Cash Disbursement)"
+      title="صرف نقدية جديد"
       subtitle="اختيار كود المصروف، الملء التلقائي للمبلغ، تحديد الخزينة المنصرف منها، وتسجيل حركة نقدية صادرة"
       breadcrumbs={[
         { label: 'صرف النقدية', href: '#/disbursements' },

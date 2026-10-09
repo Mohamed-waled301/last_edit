@@ -269,7 +269,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
                 type="tel"
                 value={form.phone}
                 onChange={(e) => setForm(prev => ({ ...prev, phone: e.target.value }))}
-                placeholder="010XXXXXXXX"
+                placeholder="01012345678"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
             </div>
@@ -296,8 +296,8 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
                 onChange={(e) => setForm(prev => ({ ...prev, payment_terms: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               >
-                <option value="cash">نقدي (Cash)</option>
-                <option value="credit">آجل (Credit)</option>
+                <option value="cash">نقدي</option>
+                <option value="credit">آجل</option>
               </select>
             </div>
 
@@ -389,8 +389,8 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
                   onChange={(e) => setForm(prev => ({ ...prev, supplier_type: e.target.value }))}
                   className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 >
-                  <option value="goods">توريد خامات ومستلزمات إنتاج (Goods)</option>
-                  <option value="service">مصنع تشغيل خارجي لدى الغير (Service - تطريز / غسيل / حياكة)</option>
+                  <option value="goods">توريد خامات ومستلزمات إنتاج</option>
+                  <option value="service">مصنع تشغيل خارجي لدى الغير (خدمات تطريز / غسيل / حياكة)</option>
                 </select>
                 <span className="text-[11px] text-blue-700 mt-1 block">
                   مورد الخدمة يُستخدم في شاشة التصنيع لدى الغير واحتساب التكاليف التراكمية.

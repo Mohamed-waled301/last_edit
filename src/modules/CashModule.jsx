@@ -478,7 +478,7 @@ export default function CashModule({ onBack, onNotify }) {
         <div className="space-y-4">
           <div className="bg-white border border-gray-200 rounded-md p-3 flex items-center justify-between">
             <div>
-              <h3 className="text-base font-bold text-gray-900">تقفيل الوردية اليومي لمنافذ البيع (Daily Shift Closings)</h3>
+              <h3 className="text-base font-bold text-gray-900">تقفيل الوردية اليومي لمنافذ البيع</h3>
               <p className="text-xs text-gray-500 font-medium">مطابقة الرصيد الدفتري مع النقدية الفعلية بالدرج وتوثيق العجز أو الزيادة</p>
             </div>
             <button

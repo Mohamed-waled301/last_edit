@@ -314,7 +314,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
 
   return (
     <PageContainer
-      title={isEdit ? `تعديل صنف: ${form.name || form.code}` : 'إضافة صنف جديد (Master Data)'}
+      title={isEdit ? `تعديل صنف: ${form.name || form.code}` : 'إضافة صنف جديد'}
       subtitle="تسجيل بيانات الصنف مع تكويد آلي، هامش الربح الحي، صور الصنف، ومتغيرات المقاس واللون"
       breadcrumbs={[
         { label: 'الأصناف', href: '#/items' },
@@ -358,7 +358,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                   type="text"
                   value={form.code}
                   onChange={(e) => setForm(prev => ({ ...prev, code: e.target.value }))}
-                  placeholder="مثال: 1001 أو TSH-01"
+                  placeholder="مثال: 1001 أو 01"
                   className={`w-full px-3 py-2 border rounded-md text-sm font-mono focus:outline-none focus:ring-1 ${
                     errors.code ? 'border-red-500 focus:ring-red-500 bg-red-50/30' : 'border-gray-300 focus:ring-[#1F3A5F]'
                   }`}
@@ -453,13 +453,13 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                 onChange={(e) => setForm(prev => ({ ...prev, unit: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               >
-                <option value="قطعة">قطعة (Pcs)</option>
+                <option value="قطعة">قطعة</option>
                 <option value="دريزن">دريزن (12 قطعة)</option>
-                <option value="متر">متر (Meters)</option>
-                <option value="كجم">كيلوجرام (Kg)</option>
-                <option value="بكرة">بكرة خيط (Spool)</option>
-                <option value="كيس">كيس (Bag)</option>
-                <option value="كرتونة">كرتونة (Box)</option>
+                <option value="متر">متر</option>
+                <option value="كجم">كيلوجرام</option>
+                <option value="بكرة">بكرة خيط</option>
+                <option value="كيس">كيس</option>
+                <option value="كرتونة">كرتونة</option>
               </select>
             </div>
 
@@ -488,7 +488,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
             {/* Image Upload with Canvas Base64 Compression */}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
-                صورة الصنف (ضغط تلقائي Base64)
+                صورة الصنف (ضغط تلقائي للحجم)
               </label>
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-md cursor-pointer text-xs font-bold text-gray-700 transition-colors">
@@ -651,11 +651,11 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                   onChange={(e) => setNewVariant(p => ({ ...p, size: e.target.value }))}
                   className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md text-xs font-bold bg-white"
                 >
-                  <option value="S (صغير)">S (صغير)</option>
-                  <option value="M (وسط)">M (وسط)</option>
-                  <option value="L (كبير)">L (كبير)</option>
-                  <option value="XL (كبير جداً)">XL (كبير جداً)</option>
-                  <option value="XXL (2 إكس)">XXL (2 إكس)</option>
+                  <option value="صغير">صغير</option>
+                  <option value="وسط">وسط</option>
+                  <option value="كبير">كبير</option>
+                  <option value="كبير جداً">كبير جداً</option>
+                  <option value="كبير مضاعف">كبير مضاعف</option>
                   <option value="30 (بنطلون)">30 (بنطلون)</option>
                   <option value="32 (بنطلون)">32 (بنطلون)</option>
                   <option value="34 (بنطلون)">34 (بنطلون)</option>
@@ -711,7 +711,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                       <th className="p-2.5">#</th>
                       <th className="p-2.5">المقاس</th>
                       <th className="p-2.5">اللون</th>
-                      <th className="p-2.5">كود الباركود (SKU)</th>
+                      <th className="p-2.5">كود الباركود والتتبع</th>
                       <th className="p-2.5 text-center">الرصيد الافتتاحي</th>
                       <th className="p-2.5 text-center">الرصيد الفعلي</th>
                       <th className="p-2.5 text-center">إجراء</th>

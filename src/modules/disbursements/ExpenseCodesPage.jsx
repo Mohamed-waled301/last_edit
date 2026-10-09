@@ -89,7 +89,7 @@ export default function ExpenseCodesPage({ onNotify }) {
 
   return (
     <PageContainer
-      title="شاشة تكويد المصروفات (Expense Codes)"
+      title="شاشة تكويد المصروفات"
       subtitle="إدارة أكواد المصروفات التشغيلية والمبالغ الافتراضية للتعبئة الآلية في سندات الصرف"
       breadcrumbs={[
         { label: 'صرف النقدية', href: '#/disbursements' },
@@ -113,7 +113,7 @@ export default function ExpenseCodesPage({ onNotify }) {
                 type="text"
                 value={form.code}
                 onChange={(e) => setForm(p => ({ ...p, code: e.target.value }))}
-                placeholder="مثال: EXP-01 أو ELEC"
+                placeholder="مثال: 01 أو كهرباء"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
             </div>

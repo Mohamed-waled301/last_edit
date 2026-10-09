@@ -269,8 +269,8 @@ export default function PurchaseOrderFormPage({ onSaved, onCancel, onNotify }) {
 
   return (
     <PageContainer
-      title="إصدار أمر توريد مشتريات جديد (PO)"
-      subtitle="شروط سداد نقدي أو آجل، تحديث تلقائي لسعر التكلفة بالماستر داتا، واحتساب الخصومات والمصاريف"
+      title="إصدار أمر توريد مشتريات جديد"
+      subtitle="شروط سداد نقدي أو آجل، تحديث تلقائي لسعر التكلفة بدليل الأصناف، واحتساب الخصومات والمصاريف"
       breadcrumbs={[
         { label: 'المشتريات', href: '#/purchases' },
         { label: 'أمر توريد جديد' }
@@ -373,8 +373,8 @@ export default function PurchaseOrderFormPage({ onSaved, onCancel, onNotify }) {
                 onChange={(e) => setForm(prev => ({ ...prev, payment_terms: e.target.value, due_date: e.target.value === 'cash' ? '' : prev.due_date }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white font-bold text-[#1F3A5F] focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               >
-                <option value="cash">نقدي (Cash) - لا يشترط تاريخ استحقاق</option>
-                <option value="credit">آجل (Credit) - يتطلب تاريخ استحقاق إلزامي</option>
+                <option value="cash">نقدي - لا يشترط تاريخ استحقاق</option>
+                <option value="credit">آجل - يتطلب تاريخ استحقاق إلزامي</option>
               </select>
             </div>
 

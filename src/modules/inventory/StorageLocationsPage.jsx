@@ -84,7 +84,7 @@ export default function StorageLocationsPage({ onNotify }) {
 
   return (
     <PageContainer
-      title="أماكن ومواقع التخزين (Storage Locations)"
+      title="أماكن ومواقع التخزين"
       subtitle="إدارة مخازن المصنع (مخزن الأقمشة، المستلزمات، الإنتاج التام، ومخازن المعارض والمنافذ)"
       breadcrumbs={[
         { label: 'المخزن', href: '#/inventory' },
@@ -108,7 +108,7 @@ export default function StorageLocationsPage({ onNotify }) {
                 type="text"
                 value={form.code}
                 onChange={(e) => setForm(p => ({ ...p, code: e.target.value }))}
-                placeholder="مثال: LOC-FAB-01"
+                placeholder="مثال: 01 أو مخزن-1"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
             </div>
@@ -137,10 +137,10 @@ export default function StorageLocationsPage({ onNotify }) {
                 onChange={(e) => setForm(p => ({ ...p, location_type: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               >
-                <option value="warehouse">مخزن عام رئيسي (Warehouse)</option>
-                <option value="fabric">مخزن خامات وأقمشة (Fabric)</option>
-                <option value="accessories">مخزن إكسسوارات ومستلزمات (Accessories)</option>
-                <option value="outlet">مخزن فرع ومعرض بيع (Outlet Store)</option>
+                <option value="warehouse">مخزن عام رئيسي</option>
+                <option value="fabric">مخزن خامات وأقمشة</option>
+                <option value="accessories">مخزن إكسسوارات ومستلزمات</option>
+                <option value="outlet">مخزن فرع ومعرض بيع</option>
               </select>
             </div>
 

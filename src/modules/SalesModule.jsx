@@ -648,7 +648,7 @@ export default function SalesModule({ onBack, onNotify }) {
                         checked={newInvoice.payment_terms === 'cash'}
                         onChange={() => setNewInvoice({ ...newInvoice, payment_terms: 'cash', due_date: '' })}
                       />
-                      <span>نقدي (Cash)</span>
+                      <span>نقدي</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer font-semibold">
                       <input
@@ -657,7 +657,7 @@ export default function SalesModule({ onBack, onNotify }) {
                         checked={newInvoice.payment_terms === 'credit'}
                         onChange={() => setNewInvoice({ ...newInvoice, payment_terms: 'credit' })}
                       />
-                      <span>آجل (Credit)</span>
+                      <span>آجل</span>
                     </label>
                   </div>
                 </div>
@@ -1192,13 +1192,13 @@ export default function SalesModule({ onBack, onNotify }) {
                     onClick={() => setPrintLayout('a4')}
                     className={`px-3 py-1 rounded cursor-pointer ${printLayout === 'a4' ? 'bg-[#1F3A5F] text-white' : 'text-gray-700'}`}
                   >
-                    نموذج A4 كامل
+                    نموذج ورقي كامل
                   </button>
                   <button
                     onClick={() => setPrintLayout('thermal')}
                     className={`px-3 py-1 rounded cursor-pointer ${printLayout === 'thermal' ? 'bg-[#1F3A5F] text-white' : 'text-gray-700'}`}
                   >
-                    إيصال حراري (80mm Thermal)
+                    إيصال حراري
                   </button>
                 </div>
               </div>
@@ -1244,7 +1244,7 @@ export default function SalesModule({ onBack, onNotify }) {
                   <div className="text-left">
                     <span className="text-gray-500 block">شروط الدفع والمنفذ:</span>
                     <strong className="text-sm text-gray-900 block mt-0.5">
-                      {showPrintModal.payment_terms === 'cash' ? 'نقدي فوري (Cash)' : `آجل (استحقاق: ${formatDate(showPrintModal.due_date)})`}
+                      {showPrintModal.payment_terms === 'cash' ? 'نقدي فوري' : `آجل (استحقاق: ${formatDate(showPrintModal.due_date)})`}
                     </strong>
                     <span className="text-gray-600 block">المنفذ: {showPrintModal.outlet_name || 'الرئيسي'}</span>
                   </div>

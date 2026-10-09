@@ -53,7 +53,7 @@ export default function PaymentMethodsPage({ onNotify }) {
 
   return (
     <PageContainer
-      title="طرق دفع الموردين (Payment Methods)"
+      title="طرق دفع وسداد الموردين"
       subtitle="إدارة قائمة طرق السداد المتاحة (نقدية، تحويل بنكي، شيكات، إيداع) لاختيارها عند السداد"
       breadcrumbs={[
         { label: 'صرف النقدية', href: '#/disbursements' },
@@ -77,7 +77,7 @@ export default function PaymentMethodsPage({ onNotify }) {
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))}
-                placeholder="مثال: شيك بنكي، تحويل بنكي (InstaPay)..."
+                placeholder="مثال: شيك بنكي، تحويل فوري، تحويل بنكي..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
@@ -91,7 +91,7 @@ export default function PaymentMethodsPage({ onNotify }) {
                 type="text"
                 value={form.code}
                 onChange={(e) => setForm(p => ({ ...p, code: e.target.value }))}
-                placeholder="مثال: CHEQUE أو BANK_TRF"
+                placeholder="مثال: شيك أو تحويل أو إيداع"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
             </div>

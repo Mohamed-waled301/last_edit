@@ -11,7 +11,7 @@ export const TABLE_METADATA = {
   item_colors: { label: 'ألوان الأصناف', group: 'الأصناف والمخزون' },
   materials: { label: 'الخامات ومستلزمات الإنتاج', group: 'الأصناف والمخزون' },
   products: { label: 'المنتجات والموديلات', group: 'الأصناف والمخزون' },
-  bom_items: { label: 'بطاقة مقادير الخامات (BOM)', group: 'الأصناف والمخزون' },
+  bom_items: { label: 'بطاقة مقادير الخامات', group: 'الأصناف والمخزون' },
   storage_locations: { label: 'مواقع ومستودعات التخزين', group: 'الأصناف والمخزون' },
   stock_movements: { label: 'حركات المخزون', group: 'الأصناف والمخزون' },
   stock_transfers: { label: 'التحويلات المخزنية', group: 'الأصناف والمخزون' },
@@ -25,7 +25,7 @@ export const TABLE_METADATA = {
 
   purchase_orders: { label: 'أوامر الشراء', group: 'المشتريات' },
   purchase_order_items: { label: 'بنود أوامر الشراء', group: 'المشتريات' },
-  goods_receipts: { label: 'أذون استلام البضاعة (GRN)', group: 'المشتريات' },
+  goods_receipts: { label: 'أذون استلام البضاعة', group: 'المشتريات' },
   goods_receipt_items: { label: 'بنود أذون الاستلام', group: 'المشتريات' },
   supplier_invoices: { label: 'فواتير الموردين', group: 'المشتريات' },
   payments: { label: 'سندات صرف الموردين', group: 'المشتريات' },
@@ -183,12 +183,12 @@ function assertCeoRole(operation = 'edit', tableName = 'system') {
         record_id: null,
         old_data: null,
         new_data: JSON.stringify({ attempted_operation: operation, user }),
-        reason: 'محاولة تعديل بيانات النظام مباشرة بدون صلاحية الرئيس التنفيذي (CEO)',
+        reason: 'محاولة تعديل بيانات النظام مباشرة بدون صلاحية الإدارة العليا',
         created_at: new Date().toISOString(),
       }).catch(() => {});
     } catch (e) {}
 
-    throw new Error('غير مصرح. هذه العملية مخصصة للرئيس التنفيذي (CEO) فقط.');
+    throw new Error('غير مصرح. هذه العملية مخصصة للإدارة العليا فقط.');
   }
 }
 
@@ -355,7 +355,7 @@ export const dataManagementRepo = {
       await db.audit_log.add({
         id: `aud-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         user_id: user.id || 'usr-owner',
-        user_name: user.full_name || 'الرئيس التنفيذي (CEO)',
+        user_name: user.full_name || 'الإدارة العامة',
         action: 'add',
         operation: 'add',
         entity_type: tableName,
@@ -382,7 +382,7 @@ export const dataManagementRepo = {
     assertCeoRole('update', tableName);
 
     if (tableName === 'audit_log') {
-      throw new Error('سجل التعديلات محمي ضد التعديل أو الحذف (Read-Only).');
+      throw new Error('سجل التعديلات محمي ضد التعديل أو الحذف (للقراءة فقط).');
     }
 
     if (!db[tableName]) {
@@ -429,7 +429,7 @@ export const dataManagementRepo = {
       await db.audit_log.add({
         id: `aud-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         user_id: user.id || 'usr-owner',
-        user_name: user.full_name || 'الرئيس التنفيذي (CEO)',
+        user_name: user.full_name || 'الإدارة العامة',
         action: 'edit',
         operation: 'edit',
         entity_type: tableName,
@@ -456,7 +456,7 @@ export const dataManagementRepo = {
     assertCeoRole('delete', tableName);
 
     if (tableName === 'audit_log') {
-      throw new Error('لا يمكن حذف أي سجل من سجل التعديلات نهائياً (Read-Only Audit Trail).');
+      throw new Error('لا يمكن حذف أي سجل من سجل التعديلات نهائياً (سجل تدقيق محمي للقراءة فقط).');
     }
 
     if (!db[tableName]) {
@@ -490,7 +490,7 @@ export const dataManagementRepo = {
       await db.audit_log.add({
         id: `aud-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         user_id: user.id || 'usr-owner',
-        user_name: user.full_name || 'الرئيس التنفيذي (CEO)',
+        user_name: user.full_name || 'الإدارة العامة',
         action: 'delete',
         operation: 'delete',
         entity_type: tableName,

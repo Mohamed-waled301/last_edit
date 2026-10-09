@@ -284,14 +284,14 @@ export default function Sidebar({
             );
           })}
 
-          {/* Section 4: Data Management (إدارة البيانات) - CEO Only */}
+          {/* إدارة البيانات الشاملة */}
           {isCeo && (
             <>
               <div className="my-2 border-t border-gray-200" />
               <button
                 type="button"
                 onClick={() => handleItemClick('data')}
-                title="إدارة البيانات (CEO)"
+                title="إدارة البيانات الشاملة"
                 aria-label="إدارة البيانات"
                 className={`w-full h-11 flex items-center rounded-md text-[15px] font-semibold transition-colors cursor-pointer text-right group relative px-2 ${
                   currentScreen === 'data'
@@ -323,7 +323,7 @@ export default function Sidebar({
                     role="tooltip"
                     className="fixed right-[80px] bg-gray-900 text-white text-xs font-semibold px-2.5 py-1.5 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap hidden lg:block"
                   >
-                    إدارة البيانات (CEO)
+                    إدارة البيانات الشاملة
                   </span>
                 )}
               </button>
