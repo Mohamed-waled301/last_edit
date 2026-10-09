@@ -2,21 +2,24 @@ import mysql from 'mysql2/promise';
 import fs from 'fs';
 import path from 'path';
 
-// Automatically load local .env if running in Node.js locally
+// Automatically load local .env or env if running in Node.js locally
 try {
   if (!process.env.MYSQL_HOST) {
-    if (typeof process.loadEnvFile === 'function' && fs.existsSync('.env')) {
-      process.loadEnvFile('.env');
-    } else if (fs.existsSync('.env')) {
-      const content = fs.readFileSync('.env', 'utf8');
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const idx = trimmed.indexOf('=');
-        if (idx !== -1) {
-          const key = trimmed.slice(0, idx).trim();
-          const val = trimmed.slice(idx + 1).trim();
-          if (!process.env[key]) process.env[key] = val;
+    const envPath = fs.existsSync('.env') ? '.env' : (fs.existsSync('env') ? 'env' : null);
+    if (envPath) {
+      if (typeof process.loadEnvFile === 'function') {
+        process.loadEnvFile(envPath);
+      } else {
+        const content = fs.readFileSync(envPath, 'utf8');
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const idx = trimmed.indexOf('=');
+          if (idx !== -1) {
+            const key = trimmed.slice(0, idx).trim();
+            const val = trimmed.slice(idx + 1).trim();
+            if (!process.env[key]) process.env[key] = val;
+          }
         }
       }
     }

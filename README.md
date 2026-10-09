@@ -1,11 +1,12 @@
 # نظام إدارة وتخطيط موارد مصانع الملابس الجاهزة المتكامل (Apex Apparel ERP v4.0) 🏢🧵👗
-### الحل السحابي/المحلي المستقل بالكامل لأنشطة مصانع ومتاجر الملابس الجاهزة (100% Client-Side Offline-First Apparel ERP)
+### الحل السحابي المركزي والمحلي المتكامل لمصانع ومتاجر الملابس الجاهزة (Cloud MySQL & Offline-Ready Apparel ERP)
 
 [![Vite](https://img.shields.io/badge/Vite-8.x-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![MySQL](https://img.shields.io/badge/MySQL-8.x-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Dexie.js](https://img.shields.io/badge/Dexie.js-IndexedDB%20v4-blue)](https://dexie.com/)
-[![Vitest](https://img.shields.io/badge/Vitest-45%20Passed-green?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-60%20Passed-green?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![License](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE)
 
 نظام ERP متكامل واحترافي موجه خصيصاً لـ **مصانع ومشاغل وتوكيلات الملابس الجاهزة (Clothing Factory & Retail)**. صُمم النظام بالكامل بواجهة عربية تفاعلية حديثة من اليمين إلى اليسار (RTL) وتصميم احترافي متجاوب، ليدير دورة تصنيع وتجارة الملابس المتكاملة: من توريد الأقمشة والإكسسوارات، تتبع مراحل التشغيل (قص $\leftarrow$ خياطة $\leftarrow$ كوي وتعبئة)، والتصنيع لدى الغير (تطريز، طباعة، غسيل جينز)، وصولاً إلى معارض ومنافذ التوزيع، فواتير المبيعات، مرتجعات الكاشير، تقفيل الورديات اليومية، وخزينة مجمعة مركزية.
@@ -14,9 +15,10 @@
 
 ## 🌟 المزايا المعمارية والتقنية (Architecture & Highlights)
 
-1. **معمارية خالية من الخوادم (Zero Backend / Serverless)**:
-   - يعمل النظام كلياً داخل متصفح المستخدم عبر تقنية `IndexedDB` ومكتبة `Dexie.js` بمخطط بيانات محدث الإصدار الرابع (`ApexEnterpriseERP_DB_v4`).
-   - لا حاجة لاستئجار خوادم سحابية أو قواعد بيانات شهرية مدفوعة (Zero Infrastructure Cost).
+1. **معمارية هجينة مركزية ومحلية (Hybrid Cloud MySQL & Offline Resilience)**:
+   - ربط مركزي كامل بقاعدة بيانات **Hostinger MySQL** السحابية عبر طبقة API خفيفة (Node.js / Vercel Serverless Functions) تضمن مزامنة وحفظ البيانات بين كافة أجهزة المصنع والمعارض ومنافذ البيع.
+   - دعم كامل للتشغيل المحلي السريع والتخزين الاحتياطي عبر `IndexedDB` ومكتبة `Dexie.js` بمخطط بيانات حديث (`ApexEnterpriseERP_DB_v4`).
+   - ملف بيئة مرن (`.env` أو `env`) لإدارة بيانات الاتصال بأمان وسهولة.
 
 2. **شاشات كاملة بدلاً من النوافذ المنبثقة (Full-Page SPA Routing Architecture)**:
    - تم التخلي عن النوافذ المنبثقة (Modals) في عمليات الإضافة والتعديل، واستبدالها بشاشات كاملة ذات مسار مستقل (مثل `#/items/new` و `#/purchases/new` و `#/sales/new` و `#/sales/:id/print`).
@@ -47,7 +49,7 @@
    - دعم التبديل بين نموذج الفاتورة الرسمية قياس **A4** ونموذج **الإيصال الحراري للكاشير 80mm**، مع إمكانية تصدير كافة الجداول والتقارير إلى ملفات Microsoft Excel حقيقية (`.xlsx`).
 
 10. **محرك احتساب تكاليف هندسي ومحاسبي نقي (Pure TypeScript Engine)**:
-    - مختبر بـ Vitest بـ **45 اختباراً ناجحاً بنسبة 100%** يغطي الحسابات، الأرصدة، الصلاحيات، وحالات قاعدة البيانات الفارغة والمملوءة.
+    - مختبر بـ Vitest بـ **60 اختباراً ناجحاً بنسبة 100%** يغطي الحسابات، الأرصدة، الصلاحيات، وحالات قاعدة البيانات الفارغة والمملوءة.
 
 ---
 
@@ -137,11 +139,41 @@
 
 - **Frontend Core**: React 19, JavaScript / TypeScript, HTML5 Semantic RTL.
 - **Styling**: Tailwind CSS v4, Lucide React Icons.
-- **Data Layer**: Dexie.js (IndexedDB ORM Wrapper v4).
+- **Backend & Serverless API**: Node.js, Vercel Serverless Functions (`/api/*`), Vite API Dev Server Middleware.
+- **Cloud Database**: Hostinger Cloud MySQL (`mysql2/promise` with Connection Pool), 41 Relational Tables.
+- **Local Storage / Cache**: Dexie.js (IndexedDB ORM Wrapper v4).
 - **Canvas Compression**: HTML5 Canvas API للضغط المحلي الفوري للصور.
 - **Exporting & Reporting**: SheetJS (`xlsx`) للتقارير المجدولة والطباعة (A4 & 80mm Thermal).
 - **Security**: Web Crypto API (SHA-256 with Salt).
-- **Tooling & Testing**: Vite 8, Vitest (45 Unit & Integration Tests بنسبة نجاح 100%).
+- **Tooling & Testing**: Vite 8, Vitest (60 Unit & Integration Tests بنسبة نجاح 100%), Playwright E2E.
+
+---
+
+## 🗄️ إعداد قاعدة البيانات السحابية (Hostinger MySQL Setup)
+
+النظام يدعم الربط المباشر بقاعدة بيانات **Hostinger MySQL** أو أي خادم MySQL سحابي:
+
+### 1. تكوين ملف البيئة (`.env` أو `env`)
+قم بنسخ ملف `.env.example` إلى `.env` واملأ بيانات الاتصال:
+
+```env
+# Hostinger MySQL Database Credentials
+MYSQL_HOST=srv000.hstgr.io # أو عنوان IP الخاص بالخادم
+MYSQL_PORT=3306
+MYSQL_USER=u123456789_erp_user
+MYSQL_PASSWORD=YourDatabasePassword
+MYSQL_DATABASE=u123456789_erp_db
+MYSQL_SSL=false
+```
+
+> **ملاحظة أمنية**: ملفات `.env` و `env` مدرجة في `.gitignore` لمنع تسريب بيانات الاعتماد وكلمات المرور السرية إلى المستودع العام.
+
+### 2. تنفيذ هجرة المخطط وتغذية البيانات (Migration & Seeding)
+لتنفيذ مخطط قاعدة البيانات (`schema.sql`) وإنشاء كافة الجداول الـ 41 والتغذية الأولية النظيفة (`seed.sql`):
+
+```bash
+npm run migrate
+```
 
 ---
 
@@ -152,16 +184,20 @@
 git clone https://github.com/Mohamed-waled301/ERP-system.git
 cd ERP-system
 
-# 2. تثبيت الحزم
+# 2. تثبيت الحزم البرمجية
 npm install
 
-# 3. تشغيل خادم التطوير المحلي
+# 3. إعداد ملف البيئة وترحيل قاعدة البيانات
+# قم بإنشاء ملف .env ببيانات MySQL الخاصة بك ثم نفّذ:
+npm run migrate
+
+# 4. تشغيل خادم التطوير مع الـ API المحلي
 npm run dev
 
-# 4. تشغيل اختبارات النظام الشاملة (Vitest)
+# 5. تشغيل اختبارات النظام الشاملة (Vitest)
 npm test
 
-# 5. بناء حزمة الإنتاج
+# 6. بناء حزمة الإنتاج
 npm run build
 ```
 
@@ -169,10 +205,22 @@ npm run build
 
 ## 🌐 النشر على منصات الاستضافة (Deployment)
 
-التطبيق جاهز 100% كـ **Static Single Page Application (SPA)** للنشر المباشر والمجاني على منصات مثل **Vercel** أو **Netlify** أو **GitHub Pages**:
+النظام مجهز للنشر المباشر على منصة **Vercel**:
+
+1. **متغيرات البيئة على Vercel (Environment Variables)**:
+   أضف المتغيرات التالية داخل إعدادات المشروع في لوحة تحكم Vercel (`Project Settings -> Environment Variables`):
+   - `MYSQL_HOST`
+   - `MYSQL_PORT`
+   - `MYSQL_USER`
+   - `MYSQL_PASSWORD`
+   - `MYSQL_DATABASE`
+   - `MYSQL_SSL` (القيمة: `false` أو `true`)
+
+2. **ملف `vercel.json`**:
+   مدمج في المشروع لإعادة توجيه مسارات الـ API إلى الدالة السحابية `/api/index.js` وباقي المسارات إلى الـ Frontend SPA.
 
 ```bash
-# ملف vercel.json مدمج ومجهز لإعادة توجيه كافة مسارات SPA
+# البناء والتحقق
 npm run build
 ```
 
