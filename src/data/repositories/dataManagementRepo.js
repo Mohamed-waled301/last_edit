@@ -1,5 +1,6 @@
 import db, { SCHEMA_V1 } from '../db';
 import { getActiveUser } from '../../services/api';
+import { syncPush } from '../../services/apiSync';
 import BalanceCalculator from '../../logic/balances';
 
 /**
@@ -372,6 +373,7 @@ export const dataManagementRepo = {
       await recalculateBalancesInTransaction(tableName);
     });
 
+    syncPush(tableName, 'insert', finalData);
     return finalData;
   },
 
@@ -446,6 +448,7 @@ export const dataManagementRepo = {
       await recalculateBalancesInTransaction(tableName);
     });
 
+    syncPush(tableName, 'update', finalData, id);
     return finalData;
   },
 
@@ -507,6 +510,7 @@ export const dataManagementRepo = {
       await recalculateBalancesInTransaction(tableName);
     });
 
+    syncPush(tableName, 'delete', null, id);
     return true;
   },
 

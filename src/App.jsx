@@ -44,6 +44,7 @@ import DataManagementPage from './modules/data/DataManagementPage';
 import DataRecordFormPage from './modules/data/DataRecordFormPage';
 
 import { getActiveUser, setActiveUser } from './services/api';
+import { syncHydrateAll } from './services/apiSync';
 import { usersRepo, backupRepo } from './data';
 import { ensureDatabaseIntegrity, DB_NAME } from './data/db';
 import Dexie from 'dexie';
@@ -105,6 +106,7 @@ export default function App() {
     async function checkSystemState() {
       try {
         await ensureDatabaseIntegrity();
+        await syncHydrateAll().catch(() => {});
 
         const ownerExists = await usersRepo.hasOwner();
         if (!ownerExists) {

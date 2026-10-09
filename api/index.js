@@ -85,6 +85,39 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
+const columnsCache = new Map();
+async function getTableColumns(tableName) {
+  if (columnsCache.has(tableName)) return columnsCache.get(tableName);
+  try {
+    const rows = await query(`SHOW COLUMNS FROM \`${tableName}\``);
+    const set = new Set(rows.map((r) => r.Field));
+    columnsCache.set(tableName, set);
+    return set;
+  } catch (e) {
+    return null;
+  }
+}
+
+function sanitizeRow(row, validCols, tableName = '') {
+  const sanitized = {};
+  const effectiveRow = { ...row };
+  if (tableName === 'parties' && !effectiveRow.deal_type && effectiveRow.customer_deal_type) {
+    effectiveRow.deal_type = effectiveRow.customer_deal_type;
+  }
+  for (const [k, v] of Object.entries(effectiveRow)) {
+    if (v !== undefined && (!validCols || validCols.has(k))) {
+      if (typeof v === 'boolean') {
+        sanitized[k] = v ? 1 : 0;
+      } else if (typeof v === 'object' && v !== null && !(v instanceof Date)) {
+        sanitized[k] = JSON.stringify(v);
+      } else {
+        sanitized[k] = v;
+      }
+    }
+  }
+  return sanitized;
+}
+
 export default async function handler(req, res) {
   setCorsHeaders(res);
 
@@ -187,6 +220,8 @@ export default async function handler(req, res) {
         return sendJson(res, 400, { success: false, error: `الجدول المطلوب غير صالح: ${tableName}` });
       }
 
+      const validCols = await getTableColumns(tableName);
+
       // GET Records
       if (req.method === 'GET') {
         if (recordId) {
@@ -202,6 +237,7 @@ export default async function handler(req, res) {
         const params = [];
         for (const [key, value] of url.searchParams.entries()) {
           if (['limit', 'offset', 'order_by', 'order'].includes(key)) continue;
+          if (validCols && !validCols.has(key)) continue;
           conditions.push(`\`${key}\` = ?`);
           params.push(value);
         }
@@ -213,10 +249,9 @@ export default async function handler(req, res) {
 
         const orderBy = url.searchParams.get('order_by');
         const orderDir = url.searchParams.get('order')?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-        if (orderBy) {
+        if (orderBy && (!validCols || validCols.has(orderBy))) {
           sql += ` ORDER BY \`${orderBy}\` ${orderDir}`;
         } else {
-          // Default sorting if created_at exists
           sql += ` ORDER BY id ASC`;
         }
 
@@ -245,15 +280,17 @@ export default async function handler(req, res) {
           }
 
           let insertedCount = 0;
-          for (const item of body) {
-            const keys = Object.keys(item).filter((k) => item[k] !== undefined);
+          for (const rawItem of body) {
+            const item = sanitizeRow(rawItem, validCols, tableName);
+            const keys = Object.keys(item);
             if (keys.length === 0) continue;
             const cols = keys.map((k) => `\`${k}\``).join(', ');
             const placeholders = keys.map(() => '?').join(', ');
+            const updates = keys.map((k) => `\`${k}\`=VALUES(\`${k}\`)`).join(', ');
             const values = keys.map((k) => item[k]);
 
             await query(
-              `INSERT INTO \`${tableName}\` (${cols}) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE id=id`,
+              `INSERT INTO \`${tableName}\` (${cols}) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updates}`,
               values
             );
             insertedCount++;
@@ -263,7 +300,8 @@ export default async function handler(req, res) {
         }
 
         // Single Insert
-        const keys = Object.keys(body).filter((k) => body[k] !== undefined);
+        const item = sanitizeRow(body, validCols, tableName);
+        const keys = Object.keys(item);
         if (keys.length === 0) {
           return sendJson(res, 400, { success: false, error: 'البيانات المرسلة فارغة' });
         }
@@ -271,7 +309,7 @@ export default async function handler(req, res) {
         const cols = keys.map((k) => `\`${k}\``).join(', ');
         const placeholders = keys.map(() => '?').join(', ');
         const updates = keys.map((k) => `\`${k}\`=VALUES(\`${k}\`)`).join(', ');
-        const values = keys.map((k) => body[k]);
+        const values = keys.map((k) => item[k]);
 
         await query(
           `INSERT INTO \`${tableName}\` (${cols}) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updates}`,
@@ -280,8 +318,8 @@ export default async function handler(req, res) {
 
         return sendJson(res, 201, {
           success: true,
-          data: body,
-          record: body,
+          data: item,
+          record: item,
           message: 'تم حفظ السجل بنجاح في قاعدة البيانات',
         });
       }
@@ -295,17 +333,18 @@ export default async function handler(req, res) {
           return sendJson(res, 400, { success: false, error: 'معرف السجل (id) مطلوب للتحديث' });
         }
 
-        const keys = Object.keys(body).filter((k) => k !== 'id' && body[k] !== undefined);
+        const item = sanitizeRow(body, validCols, tableName);
+        const keys = Object.keys(item).filter((k) => k !== 'id');
         if (keys.length === 0) {
           return sendJson(res, 200, { success: true, message: 'لا توجد حقول للتحديث' });
         }
 
         const setClause = keys.map((k) => `\`${k}\` = ?`).join(', ');
-        const values = keys.map((k) => body[k]);
+        const values = keys.map((k) => item[k]);
         values.push(targetId);
 
         await query(`UPDATE \`${tableName}\` SET ${setClause} WHERE id = ?`, values);
-        return sendJson(res, 200, { success: true, data: body, message: 'تم تحديث السجل بنجاح' });
+        return sendJson(res, 200, { success: true, data: item, message: 'تم تحديث السجل بنجاح' });
       }
 
       // DELETE Record

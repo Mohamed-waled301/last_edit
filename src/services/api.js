@@ -25,6 +25,7 @@ import {
   expenseCodesRepo,
   dataManagementRepo,
 } from '../data';
+import { syncPush, syncFetch, syncHydrateAll } from './apiSync';
 
 let currentUserId = 'usr-owner';
 let currentUserRole = 'owner';
@@ -94,10 +95,12 @@ export const api = {
   },
   createItem: async (data) => {
     const res = await itemsRepo.create(data, currentUserId);
+    syncPush('items', 'insert', res);
     return { success: true, data: res, item: res, message: 'تم إضافة الصنف بنجاح' };
   },
   updateItem: async (id, data) => {
     const res = await itemsRepo.update(id, data, currentUserId);
+    syncPush('items', 'update', res, id);
     return { success: true, data: res, item: res, message: 'تم تحديث بيانات الصنف' };
   },
   getNextItemCode: async (prefix = '') => {
@@ -110,6 +113,7 @@ export const api = {
   },
   createItemSize: async (data) => {
     const res = await itemsRepo.createSize(data);
+    syncPush('item_sizes', 'insert', res);
     return { success: true, data: res, size: res, message: 'تم إضافة المقاس بنجاح' };
   },
   getItemColors: async () => {
@@ -118,6 +122,7 @@ export const api = {
   },
   createItemColor: async (data) => {
     const res = await itemsRepo.createColor(data);
+    syncPush('item_colors', 'insert', res);
     return { success: true, data: res, color: res, message: 'تم إضافة اللون بنجاح' };
   },
 
@@ -132,10 +137,43 @@ export const api = {
   },
   createParty: async (data) => {
     const res = await partiesRepo.create(data, currentUserId);
+    syncPush('parties', 'insert', res);
+    if (res.is_supplier) {
+      syncPush('suppliers', 'insert', {
+        id: res.id,
+        party_id: res.id,
+        name: res.name,
+        phone: res.phone,
+        supplier_type: res.supplier_type,
+        payment_terms: res.payment_terms,
+        notes: res.notes,
+        is_active: 1,
+      });
+    }
+    if (res.is_customer) {
+      syncPush('customers', 'insert', {
+        id: res.id,
+        party_id: res.id,
+        name: res.name,
+        phone: res.phone,
+        customer_type: res.customer_deal_type || 'cash',
+        payment_terms: res.payment_terms,
+        credit_limit: res.credit_limit || 0,
+        notes: res.notes,
+        is_active: 1,
+      });
+    }
     return { success: true, data: res, party: res, message: 'تم إضافة جهة التعامل بنجاح' };
   },
   updateParty: async (id, data) => {
     const res = await partiesRepo.update(id, data, currentUserId);
+    syncPush('parties', 'update', res, id);
+    if (res.is_supplier) {
+      syncPush('suppliers', 'update', { id, party_id: id, name: res.name, phone: res.phone, notes: res.notes }, id);
+    }
+    if (res.is_customer) {
+      syncPush('customers', 'update', { id, party_id: id, name: res.name, phone: res.phone, notes: res.notes }, id);
+    }
     return { success: true, data: res, party: res, message: 'تم تحديث بيانات جهة التعامل' };
   },
   executePartyOffset: async (partyId, amount, notes = '') => {
@@ -150,10 +188,12 @@ export const api = {
   },
   createStorageLocation: async (data) => {
     const res = await storageRepo.createLocation(data, currentUserId);
+    syncPush('storage_locations', 'insert', res);
     return { success: true, data: res, location: res, message: 'تم إضافة موقع التخزين بنجاح' };
   },
   updateStorageLocation: async (id, data) => {
     const res = await storageRepo.updateLocation(id, data, currentUserId);
+    syncPush('storage_locations', 'update', res, id);
     return { success: true, data: res, location: res, message: 'تم تحديث موقع التخزين' };
   },
   getStockTransfers: async () => {
@@ -162,6 +202,7 @@ export const api = {
   },
   createStockTransfer: async (data) => {
     const res = await storageRepo.createStockTransfer(data, currentUserId);
+    syncPush('stock_transfers', 'insert', res);
     return { success: true, data: res, ...res, message: 'تم تنفيذ التحويل المخزني بنجاح' };
   },
   getStockAdjustments: async () => {
@@ -170,6 +211,7 @@ export const api = {
   },
   createStockAdjustment: async (data) => {
     const res = await storageRepo.createAdjustment(data, currentUserId);
+    syncPush('stock_adjustments', 'insert', res);
     return { success: true, data: res, ...res, message: 'تم حفظ محضر التسوية الجردية وتحديث الرصيد' };
   },
 
@@ -193,6 +235,7 @@ export const api = {
   },
   createOutletTreasury: async (outletId, name, initialBalance = 0) => {
     const res = await treasuriesRepo.createOutletTreasury(outletId, name, initialBalance, currentUserId);
+    syncPush('treasury_accounts', 'insert', res);
     return { success: true, data: res, treasury: res, message: 'تم إنشاء خزينة المنفذ' };
   },
   transferOutletToMain: async (data) => {
@@ -205,10 +248,12 @@ export const api = {
   },
   performDailyClosing: async (data) => {
     const res = await treasuriesRepo.performDailyClosing(data, currentUserId);
+    syncPush('daily_closings', 'insert', res);
     return { success: true, data: res, ...res, message: 'تم اعتماد تقفيل الوردية اليومية بنجاح' };
   },
   createDailyClosing: async (data) => {
     const res = await treasuriesRepo.performDailyClosing(data, currentUserId);
+    syncPush('daily_closings', 'insert', res);
     return { success: true, data: res, ...res, message: 'تم اعتماد تقفيل الوردية اليومية بنجاح' };
   },
 
@@ -219,10 +264,12 @@ export const api = {
   },
   createExpenseCode: async (data) => {
     const res = await expenseCodesRepo.create(data, currentUserId);
+    syncPush('expense_codes', 'insert', res);
     return { success: true, data: res, expense_code: res, message: 'تم إضافة كود المصروف بنجاح' };
   },
   updateExpenseCode: async (id, data) => {
     const res = await expenseCodesRepo.update(id, data, currentUserId);
+    syncPush('expense_codes', 'update', res, id);
     return { success: true, data: res, expense_code: res, message: 'تم تحديث كود المصروف' };
   },
   getPaymentMethods: async () => {
@@ -231,10 +278,12 @@ export const api = {
   },
   createPaymentMethod: async (data) => {
     const res = await expenseCodesRepo.createPaymentMethod(data, currentUserId);
+    syncPush('payment_methods', 'insert', res);
     return { success: true, data: res, payment_method: res, message: 'تم إضافة طريقة الدفع' };
   },
   disburseExpense: async (data) => {
     const res = await cashRepo.disburseExpense(data, currentUserId);
+    if (res.transaction) syncPush('cash_transactions', 'insert', res.transaction);
     return { success: true, data: res, ...res, message: 'تم صرف النقدية وقيد المعاملة بنجاح' };
   },
 
@@ -249,14 +298,17 @@ export const api = {
   },
   createSupplier: async (data) => {
     const sup = await suppliersRepo.create(data, currentUserId);
+    syncPush('suppliers', 'insert', sup);
     return { success: true, data: sup, supplier: sup, message: 'تم إضافة المورد بنجاح' };
   },
   updateSupplier: async (id, data) => {
     const sup = await suppliersRepo.update(id, data, currentUserId);
+    syncPush('suppliers', 'update', sup, id);
     return { success: true, data: sup, supplier: sup, message: 'تم تحديث بيانات المورد' };
   },
   deleteSupplier: async (id) => {
     await suppliersRepo.update(id, { is_active: 0 }, currentUserId);
+    syncPush('suppliers', 'update', { id, is_active: 0 }, id);
     return { success: true, message: 'تم إلغاء تفعيل المورد' };
   },
 
@@ -266,6 +318,10 @@ export const api = {
   },
   createPurchaseOrder: async (data) => {
     const res = await suppliersRepo.createPurchaseOrder(data, currentUserId);
+    syncPush('purchase_orders', 'insert', res);
+    if (Array.isArray(res.items)) {
+      syncPush('purchase_order_items', 'insert', res.items);
+    }
     return { success: true, data: res, ...res, message: 'تم إصدار أمر التوريد بنجاح' };
   },
   getGoodsReceipts: async () => {
@@ -274,6 +330,10 @@ export const api = {
   },
   createGoodsReceipt: async (data) => {
     const res = await suppliersRepo.createGoodsReceipt(data, currentUserId);
+    syncPush('goods_receipts', 'insert', res);
+    if (Array.isArray(res.items)) {
+      syncPush('goods_receipt_items', 'insert', res.items);
+    }
     return { success: true, data: res, ...res, message: 'تم إنشاء إذن الاستلام المخزني بنجاح' };
   },
   getSupplierInvoices: async () => {
@@ -282,14 +342,17 @@ export const api = {
   },
   createSupplierInvoice: async (data) => {
     const res = await suppliersRepo.createSupplierInvoice(data, currentUserId);
+    syncPush('supplier_invoices', 'insert', res);
     return { success: true, data: res, ...res, message: 'تم تسجيل فاتورة المورد بنجاح' };
   },
   paySupplier: async (data) => {
     const res = await suppliersRepo.paySupplier(data, currentUserId);
+    if (res.payment) syncPush('payments', 'insert', res.payment);
     return { success: true, data: res, ...res, message: 'تم تسجيل سند سداد المورد بنجاح' };
   },
   createSupplierReturn: async (data) => {
     const res = await suppliersRepo.createSupplierReturn(data, currentUserId);
+    syncPush('supplier_returns', 'insert', res);
     return { success: true, data: res, ...res, message: 'تم تسجيل مرتجع الخامات بنجاح' };
   },
 
@@ -300,10 +363,12 @@ export const api = {
   },
   createRawMaterial: async (data) => {
     const m = await materialsRepo.create(data, currentUserId);
+    syncPush('materials', 'insert', m);
     return { success: true, data: m, material: m, message: 'تم إضافة الخامة بنجاح' };
   },
   updateRawMaterial: async (id, data) => {
     const m = await materialsRepo.update(id, data, currentUserId);
+    syncPush('materials', 'update', m, id);
     return { success: true, data: m, material: m, message: 'تم تحديث بيانات الخامة' };
   },
   getMaterialMovements: async (id) => {
@@ -312,6 +377,7 @@ export const api = {
   },
   saveStockCount: async (data) => {
     const res = await materialsRepo.saveStockCount(data, currentUserId);
+    syncPush('stock_counts', 'insert', res);
     return { success: true, data: res, ...res, message: 'تم اعتماد محضر الجرد وتحديث الأرصدة بنجاح' };
   },
   getLowStockAlerts: async () => {
@@ -330,10 +396,15 @@ export const api = {
   },
   createProduct: async (data) => {
     const p = await productsRepo.create(data, currentUserId);
+    syncPush('products', 'insert', p);
+    if (Array.isArray(p.bom)) {
+      syncPush('bom_items', 'insert', p.bom);
+    }
     return { success: true, data: p, product: p, message: 'تم إنشاء المنتج وشجرة التكاليف' };
   },
   updateProduct: async (id, data) => {
     const p = await productsRepo.update(id, data, currentUserId);
+    syncPush('products', 'update', p, id);
     return { success: true, data: p, product: p, message: 'تم تحديث بيانات المنتج' };
   },
 
@@ -344,10 +415,12 @@ export const api = {
   },
   createProductionOrder: async (data) => {
     const res = await manufacturingRepo.createProductionOrder(data, currentUserId);
+    syncPush('production_orders', 'insert', res);
     return { success: true, data: res, order: res, message: 'تم إصدار أمر التصنيع بنجاح' };
   },
   completeStage1: async (id) => {
     const res = await manufacturingRepo.completeStage1(id, currentUserId);
+    syncPush('production_orders', 'update', res, id);
     return { success: true, data: res, order: res, message: 'تم إتمام مرحلة التصنيع والتجميع الأولى بنجاح' };
   },
   getOverheads: async () => {
@@ -356,6 +429,7 @@ export const api = {
   },
   saveOverhead: async (data) => {
     const res = await manufacturingRepo.saveOverhead(data, currentUserId);
+    syncPush('overheads', 'insert', res);
     return { success: true, data: res, overhead: res, message: 'تم حفظ مصاريف التشغيل الشهرية' };
   },
 
@@ -366,10 +440,12 @@ export const api = {
   },
   createFinishingOrder: async (data) => {
     const res = await finishingRepo.createFinishingOrder(data, currentUserId);
+    syncPush('finishing_orders', 'insert', res);
     return { success: true, data: res, order: res, message: 'تم إصدار أمر التشغيل لدى الغير بنجاح' };
   },
   markReadyForSale: async (id) => {
     const res = await finishingRepo.markReadyForSale(id, currentUserId);
+    syncPush('finishing_orders', 'update', res, id);
     return { success: true, data: res, order: res, message: 'تم استلام المنتج واعتماد الجاهزية للبيع' };
   },
 
@@ -380,6 +456,7 @@ export const api = {
   },
   createCustomer: async (data) => {
     const c = await salesRepo.createCustomer(data, currentUserId);
+    syncPush('customers', 'insert', c);
     return { success: true, data: c, customer: c, message: 'تم إضافة العميل بنجاح' };
   },
   getCustomerStatement: async (id) => {
@@ -392,6 +469,7 @@ export const api = {
   },
   createOutlet: async (data) => {
     const o = await salesRepo.createOutlet(data, currentUserId);
+    syncPush('sales_outlets', 'insert', o);
     return { success: true, data: o, outlet: o, message: 'تم إضافة المعرض أو المنفذ' };
   },
   getSalesInvoices: async (outletId = null) => {
@@ -402,14 +480,20 @@ export const api = {
   },
   createSalesInvoice: async (data) => {
     const res = await salesRepo.createSalesInvoice(data, currentUserId);
+    syncPush('sales_invoices', 'insert', res);
+    if (Array.isArray(res.items)) {
+      syncPush('sales_invoice_items', 'insert', res.items);
+    }
     return { success: true, data: res, invoice: res, message: 'تم إصدار فاتورة المبيعات بنجاح' };
   },
   collectCustomerPayment: async (data) => {
     const res = await salesRepo.collectPayment(data, currentUserId);
+    if (res.payment) syncPush('customer_payments', 'insert', res.payment);
     return { success: true, data: res, ...res, message: 'تم تسجيل سند التحصيل بنجاح' };
   },
   createCustomerReturn: async (data) => {
     const res = await salesRepo.createCustomerReturn(data, currentUserId);
+    syncPush('customer_returns', 'insert', res);
     return { success: true, data: res, ...res, message: 'تم تسجيل مرتجع المبيعات بنجاح' };
   },
 
@@ -440,6 +524,7 @@ export const api = {
   },
   createAccount: async (data) => {
     const a = await cashRepo.createAccount(data, currentUserId);
+    syncPush('treasury_accounts', 'insert', a);
     return { success: true, data: a, account: a, message: 'تم إضافة الحساب المالي' };
   },
   getTransactions: async (params = '') => {
@@ -448,10 +533,13 @@ export const api = {
   },
   recordCashTransaction: async (data) => {
     const res = await cashRepo.recordTransaction(data, currentUserId);
+    syncPush('cash_transactions', 'insert', res);
     return { success: true, data: res, ...res, message: 'تم تسجيل الحركة المالية بنجاح' };
   },
   transferCash: async (data) => {
     const res = await cashRepo.transfer(data, currentUserId);
+    if (res.outTx) syncPush('cash_transactions', 'insert', res.outTx);
+    if (res.inTx) syncPush('cash_transactions', 'insert', res.inTx);
     return { success: true, data: res, ...res, message: 'تم تحويل النقدية بنجاح' };
   },
 
@@ -492,6 +580,7 @@ export const api = {
   },
   updateSettings: async (data) => {
     const s = await settingsRepo.updateSettings(data, currentUserId);
+    syncPush('settings', 'update', s, 1);
     return { success: true, data: s, settings: s, message: 'تم تحديث الإعدادات بنجاح' };
   },
 
@@ -517,14 +606,17 @@ export const api = {
   },
   createDataRecord: async (tableName, data, reason = '') => {
     const rec = await dataManagementRepo.createRecord(tableName, data, reason);
+    syncPush(tableName, 'insert', rec);
     return { success: true, data: rec, record: rec, message: 'تم حفظ السجل بنجاح' };
   },
   updateDataRecord: async (tableName, id, data, reason = '') => {
     const rec = await dataManagementRepo.updateRecord(tableName, id, data, reason);
+    syncPush(tableName, 'update', rec, id);
     return { success: true, data: rec, record: rec, message: 'تم تحديث بيانات السجل بنجاح' };
   },
   deleteDataRecord: async (tableName, id, reason = '') => {
     await dataManagementRepo.deleteRecord(tableName, id, reason);
+    syncPush(tableName, 'delete', null, id);
     return { success: true, message: 'تم حذف السجل بنجاح' };
   },
   checkRecordReferences: async (tableName, id) => {
@@ -535,7 +627,14 @@ export const api = {
     const logs = await dataManagementRepo.getAuditLogs(filters);
     return { success: true, data: logs, audit_logs: logs };
   },
+
+  // Real-Time Hostinger Database Sync
+  syncPush,
+  syncFetch,
+  syncHydrateAll,
 };
 
+export { syncPush, syncFetch, syncHydrateAll };
 export default api;
+
 
