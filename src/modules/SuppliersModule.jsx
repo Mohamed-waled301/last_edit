@@ -23,7 +23,13 @@ import BackButton from '../components/BackButton';
 import { api } from '../services/api';
 import { formatCurrency, formatNumber, formatDate, getTodayDateString, isPastDate } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
-import { FieldError, validators } from '../utils/validation';
+import { FieldError, validators, Validators } from '../utils/validation';
+import {
+  DEFAULT_PHONE_VALUE,
+  sanitizeEgyptianPhoneInput,
+  normalizePhoneForSave,
+  validateEgyptianMobile,
+} from '../utils/phone';
 
 export default function SuppliersModule({ onBack, onNotify }) {
   const [tab, setTab] = useState('suppliers'); // 'suppliers' | 'orders' | 'grn' | 'invoices'
@@ -49,12 +55,15 @@ export default function SuppliersModule({ onBack, onNotify }) {
   // Forms state
   const [newSupplier, setNewSupplier] = useState({
     name: '',
-    phone: '',
+    phone: DEFAULT_PHONE_VALUE,
     address: '',
     tax_number: '',
     payment_terms: 'credit',
+    opening_balance: '0',
+    opening_balance_type: 'credit', // المورد دائن افتراضياً
     notes: ''
   });
+  const [supplierFormErrors, setSupplierFormErrors] = useState({});
 
   const [newQuickMaterial, setNewQuickMaterial] = useState({
     name: '',
@@ -271,12 +280,29 @@ export default function SuppliersModule({ onBack, onNotify }) {
   // Handle Save Quick Supplier
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
-    if (!validators.required(newSupplier.name)) return;
+    const errs = {};
+    const nameErr = Validators.required(newSupplier.name, 'اسم المورد');
+    if (nameErr) errs.name = nameErr;
+    const phoneErr = validateEgyptianMobile(newSupplier.phone, { required: false });
+    if (phoneErr) errs.phone = phoneErr;
+    const openNum = Number(newSupplier.opening_balance);
+    if (newSupplier.opening_balance === '' || isNaN(openNum) || openNum < 0) {
+      errs.opening_balance = 'رصيد أول المدة يجب أن يكون رقماً لا يقل عن صفر';
+    }
+    setSupplierFormErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     try {
-      const res = await api.createSupplier ? await api.createSupplier(newSupplier) : await api.createUnifiedParty({ ...newSupplier, is_supplier: true, is_customer: false });
+      const payload = {
+        ...newSupplier,
+        phone: normalizePhoneForSave(newSupplier.phone),
+        opening_balance: Math.max(0, Number(newSupplier.opening_balance) || 0),
+        opening_balance_type: newSupplier.opening_balance_type === 'debit' ? 'debit' : 'credit',
+      };
+      const res = await api.createSupplier ? await api.createSupplier(payload) : await api.createUnifiedParty({ ...payload, is_supplier: true, is_customer: false });
       onNotify(res.message || 'تمت إضافة المورد بنجاح');
       setShowAddSupplierModal(false);
-      setNewSupplier({ name: '', phone: '', address: '', tax_number: '', payment_terms: 'credit', notes: '' });
+      setNewSupplier({ name: '', phone: DEFAULT_PHONE_VALUE, address: '', tax_number: '', payment_terms: 'credit', opening_balance: '0', opening_balance_type: 'credit', notes: '' });
+      setSupplierFormErrors({});
       loadData();
     } catch (err) {
       alert(err.message);
@@ -930,7 +956,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   onChange={e => setNewSupplier({ ...newSupplier, name: e.target.value })}
                   className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                 />
-                {!validators.required(newSupplier.name) && <FieldError error="اسم المورد حقل إجباري" />}
+                <FieldError error={supplierFormErrors.name} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -938,11 +964,18 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">رقم الهاتف</label>
                   <input
                     type="tel"
-                    placeholder="01012345678"
+                    inputMode="numeric"
+                    dir="ltr"
+                    maxLength={11}
+                    placeholder="01xxxxxxxxx"
                     value={newSupplier.phone}
-                    onChange={e => setNewSupplier({ ...newSupplier, phone: e.target.value })}
-                    className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-mono focus:border-[#1F3A5F] focus:outline-none"
+                    onChange={e => {
+                      const digits = sanitizeEgyptianPhoneInput(e.target.value);
+                      setNewSupplier({ ...newSupplier, phone: digits === '' ? DEFAULT_PHONE_VALUE : digits });
+                    }}
+                    className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-mono text-left focus:border-[#1F3A5F] focus:outline-none"
                   />
+                  <FieldError error={supplierFormErrors.phone} />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">السجل الضريبي</label>
@@ -979,6 +1012,37 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 </select>
               </div>
 
+              <div className="grid grid-cols-2 gap-4 p-3 bg-blue-50/50 border border-blue-200 rounded-md">
+                <div>
+                  <label className="block text-sm font-semibold text-blue-900 mb-1">رصيد أول المدة (ج.م)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    dir="ltr"
+                    value={newSupplier.opening_balance}
+                    onChange={e => setNewSupplier({ ...newSupplier, opening_balance: e.target.value })}
+                    placeholder="0"
+                    className="w-full h-11 rounded-md border border-blue-300 px-3 text-sm font-mono font-bold text-left bg-white focus:border-[#1F3A5F] focus:outline-none"
+                  />
+                  <FieldError error={supplierFormErrors.opening_balance} />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-blue-900 mb-1">طبيعة الحساب</label>
+                  <select
+                    value={newSupplier.opening_balance_type}
+                    onChange={e => setNewSupplier({ ...newSupplier, opening_balance_type: e.target.value })}
+                    className="w-full h-11 rounded-md border border-blue-300 px-3 text-sm font-medium bg-white focus:border-[#1F3A5F] focus:outline-none"
+                  >
+                    <option value="credit">دائن (مستحق له)</option>
+                    <option value="debit">مدين (دفعة مقدمة له)</option>
+                  </select>
+                </div>
+                <p className="col-span-2 text-[11px] text-blue-700 font-medium">
+                  الرصيد الحالي = رصيد أول المدة + فواتير الشراء الآجلة − سندات الصرف النقدية.
+                </p>
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
@@ -989,7 +1053,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={!validators.required(newSupplier.name)}
+                  disabled={!newSupplier.name.trim()}
                   className="h-11 px-6 bg-[#1F3A5F] hover:bg-[#172c48] disabled:opacity-50 text-white rounded-md font-bold text-sm cursor-pointer"
                 >
                   حفظ المورد
@@ -1922,7 +1986,13 @@ export default function SuppliersModule({ onBack, onNotify }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 my-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
+              <div className="bg-blue-50 p-3 rounded-md border border-blue-200 text-center">
+                <span className="text-xs font-semibold text-blue-700">رصيد أول المدة ({statementData.summary?.opening_balance_type === 'debit' ? 'مدين' : 'دائن'})</span>
+                <div className="text-xl font-bold text-blue-900 mt-0.5">
+                  {formatCurrency(statementData.summary?.opening_balance || statementData.supplier?.opening_balance || 0)}
+                </div>
+              </div>
               <div className="bg-gray-50 p-3 rounded-md border border-gray-200 text-center">
                 <span className="text-xs font-semibold text-gray-500">إجمالي المشتريات</span>
                 <div className="text-xl font-bold text-gray-900 mt-0.5">
@@ -1942,6 +2012,39 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 </div>
               </div>
             </div>
+
+            {/* Combined ledger (كشف الحساب التفصيلي) with running balance */}
+            {Array.isArray(statementData.statement) && statementData.statement.length > 0 && (
+              <>
+                <h4 className="text-sm font-bold text-gray-800 mb-2">كشف الحساب التفصيلي (رصيد أول المدة + الحركات)</h4>
+                <div className="border border-gray-200 rounded-md overflow-hidden mb-5">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-gray-100 border-b border-gray-200 font-bold text-gray-700">
+                      <tr>
+                        <th className="py-2 px-3">التاريخ</th>
+                        <th className="py-2 px-3">البيان</th>
+                        <th className="py-2 px-3">المرجع</th>
+                        <th className="py-2 px-3 text-left">مدين (مسدد)</th>
+                        <th className="py-2 px-3 text-left">دائن (مشتريات)</th>
+                        <th className="py-2 px-3 text-left">الرصيد بعد الحركة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {statementData.statement.map((tx, idx) => (
+                        <tr key={idx} className={tx.is_opening ? 'bg-blue-50/60 font-bold' : ''}>
+                          <td className="py-2 px-3 text-gray-600">{tx.is_opening ? '-' : formatDate(tx.date)}</td>
+                          <td className="py-2 px-3 text-gray-800">{tx.type}{tx.description ? ` - ${tx.description}` : ''}</td>
+                          <td className="py-2 px-3 font-mono text-gray-600">{tx.reference || '-'}</td>
+                          <td className="py-2 px-3 text-left font-semibold text-green-700">{tx.debit ? formatCurrency(tx.debit) : '-'}</td>
+                          <td className="py-2 px-3 text-left font-semibold text-gray-900">{tx.credit ? formatCurrency(tx.credit) : '-'}</td>
+                          <td className="py-2 px-3 text-left font-bold text-red-600">{formatCurrency(tx.balance_after)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
 
             {/* Invoices */}
             <h4 className="text-sm font-bold text-gray-800 mb-2">سجل الفواتير</h4>

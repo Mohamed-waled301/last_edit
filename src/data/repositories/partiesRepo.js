@@ -1,6 +1,104 @@
 import db from '../db';
-import BalanceCalculator from '../../logic/balances';
+import BalanceCalculator, {
+  resolveOpeningBalance,
+  resolveOpeningType,
+  normalizeOpeningBalance,
+  normalizeAccountNature,
+  DEFAULT_SUPPLIER_OPENING_TYPE,
+  DEFAULT_CUSTOMER_OPENING_TYPE,
+} from '../../logic/balances';
 import auditRepo from './auditRepo';
+
+/**
+ * Normalize opening-balance payload into canonical side-specific fields.
+ * Accepts both the new side-specific keys and the legacy generic keys so that
+ * existing records / older clients gracefully fall back to 0.
+ */
+function normalizePartyOpenings(data = {}, current = null) {
+  const get = (key, fallback) => (data[key] !== undefined ? data[key] : fallback);
+  const curSup = current ? resolveOpeningBalance(current, 'supplier') : 0;
+  const curCust = current ? resolveOpeningBalance(current, 'customer') : 0;
+  const curSupType = current ? resolveOpeningType(current, 'supplier') : DEFAULT_SUPPLIER_OPENING_TYPE;
+  const curCustType = current ? resolveOpeningType(current, 'customer') : DEFAULT_CUSTOMER_OPENING_TYPE;
+
+  // Generic single-value form (used by quick supplier/customer modals)
+  const genericBalance = data.opening_balance !== undefined ? normalizeOpeningBalance(data.opening_balance) : null;
+  const genericType = data.opening_balance_type ?? data.openingBalanceType ?? null;
+
+  let supplierOpening = data.supplier_opening_balance !== undefined
+    ? normalizeOpeningBalance(data.supplier_opening_balance)
+    : (genericBalance !== null ? genericBalance : curSup);
+  let customerOpening = data.customer_opening_balance !== undefined
+    ? normalizeOpeningBalance(data.customer_opening_balance)
+    : (genericBalance !== null ? genericBalance : curCust);
+
+  // Legacy aliases
+  if (data.supplier_balance !== undefined && data.supplier_opening_balance === undefined && genericBalance === null && !current) {
+    supplierOpening = normalizeOpeningBalance(data.supplier_balance);
+  }
+  if (data.customer_balance !== undefined && data.customer_opening_balance === undefined && genericBalance === null && !current) {
+    customerOpening = normalizeOpeningBalance(data.customer_balance);
+  }
+  if (data.initial_supplier_balance !== undefined && data.supplier_opening_balance === undefined) {
+    supplierOpening = normalizeOpeningBalance(data.initial_supplier_balance);
+  }
+  if (data.initial_customer_balance !== undefined && data.customer_opening_balance === undefined) {
+    customerOpening = normalizeOpeningBalance(data.initial_customer_balance);
+  }
+
+  const supplierType = normalizeAccountNature(
+    get('supplier_opening_type', get('supplierOpeningType', genericType ?? curSupType)),
+    DEFAULT_SUPPLIER_OPENING_TYPE
+  );
+  const customerType = normalizeAccountNature(
+    get('customer_opening_type', get('customerOpeningType', genericType ?? curCustType)),
+    DEFAULT_CUSTOMER_OPENING_TYPE
+  );
+  const genericResolvedType = normalizeAccountNature(
+    genericType ?? (data.is_supplier && !data.is_customer ? supplierType : customerType),
+    curSupType
+  );
+
+  return {
+    supplierOpening,
+    customerOpening,
+    supplierType,
+    customerType,
+    genericBalance: genericBalance !== null ? genericBalance : null,
+    genericType: genericResolvedType,
+  };
+}
+
+/**
+ * Compute final ledger balances for a party:
+ * Supplier Current = Opening + Credit Purchases - Cash Out (payments)
+ * Customer Current = Opening + Credit Sales - Cash In (receipts)
+ */
+function withComputedBalances(party, bal) {
+  const supplierOpening = resolveOpeningBalance(party, 'supplier');
+  const customerOpening = resolveOpeningBalance(party, 'customer');
+  const finalSup = normalizeOpeningBalance(supplierOpening + bal.supplierBalance);
+  const finalCust = normalizeOpeningBalance(customerOpening + bal.customerBalance);
+  const finalNet = Number((finalCust - finalSup).toFixed(2));
+  const finalMaxOffset = Math.max(0, Number(Math.min(finalSup, finalCust).toFixed(2)));
+
+  return {
+    ...party,
+    supplier_opening_balance: supplierOpening,
+    customer_opening_balance: customerOpening,
+    supplier_opening_type: resolveOpeningType(party, 'supplier'),
+    customer_opening_type: resolveOpeningType(party, 'customer'),
+    opening_balance: Number(party.opening_balance) || 0,
+    opening_balance_type: party.opening_balance_type || (party.is_supplier && !party.is_customer
+      ? resolveOpeningType(party, 'supplier')
+      : resolveOpeningType(party, 'customer')),
+    supplier_balance: finalSup,
+    customer_balance: finalCust,
+    net_balance: finalNet,
+    max_offset_amount: finalMaxOffset,
+    is_both: party.is_supplier === 1 && party.is_customer === 1
+  };
+}
 
 export const partiesRepo = {
   /**
@@ -20,6 +118,8 @@ export const partiesRepo = {
       const pCustInvoices = custInvoices.filter(i => i.customer_id === party.id);
       const pCustReturns = custReturns.filter(r => r.customer_id === party.id);
 
+      // Transactional balances only (invoices/payments/returns); the opening
+      // itself is added once inside withComputedBalances.
       const bal = BalanceCalculator.calculateUnifiedPartyBalance(
         pSupInvoices,
         pSupReturns,
@@ -27,21 +127,7 @@ export const partiesRepo = {
         pCustReturns
       );
 
-      const initialSup = Number(party.initial_supplier_balance ?? party.supplier_balance) || 0;
-      const initialCust = Number(party.initial_customer_balance ?? party.customer_balance) || 0;
-      const finalSup = initialSup + bal.supplierBalance;
-      const finalCust = initialCust + bal.customerBalance;
-      const finalNet = Number((finalCust - finalSup).toFixed(2));
-      const finalMaxOffset = Math.max(0, Number(Math.min(finalSup, finalCust).toFixed(2)));
-
-      return {
-        ...party,
-        supplier_balance: finalSup,
-        customer_balance: finalCust,
-        net_balance: finalNet,
-        max_offset_amount: finalMaxOffset,
-        is_both: party.is_supplier === 1 && party.is_customer === 1
-      };
+      return withComputedBalances(party, bal);
     });
   },
 
@@ -64,6 +150,7 @@ export const partiesRepo = {
     const custInvoices = await db.sales_invoices.where('customer_id').equals(id).toArray();
     const custReturns = await db.customer_returns.where('customer_id').equals(id).toArray();
 
+    // Transactional balances only; the opening is added once in withComputedBalances.
     const bal = BalanceCalculator.calculateUnifiedPartyBalance(
       supInvoices,
       supReturns,
@@ -71,21 +158,7 @@ export const partiesRepo = {
       custReturns
     );
 
-    const initialSup = Number(party.initial_supplier_balance ?? party.supplier_balance) || 0;
-    const initialCust = Number(party.initial_customer_balance ?? party.customer_balance) || 0;
-    const finalSup = initialSup + bal.supplierBalance;
-    const finalCust = initialCust + bal.customerBalance;
-    const finalNet = Number((finalCust - finalSup).toFixed(2));
-    const finalMaxOffset = Math.max(0, Number(Math.min(finalSup, finalCust).toFixed(2)));
-
-    return {
-      ...party,
-      supplier_balance: finalSup,
-      customer_balance: finalCust,
-      net_balance: finalNet,
-      max_offset_amount: finalMaxOffset,
-      is_both: party.is_supplier === 1 && party.is_customer === 1
-    };
+    return withComputedBalances(party, bal);
   },
 
   /**
@@ -100,6 +173,7 @@ export const partiesRepo = {
     const isCustomer = data.is_customer ? 1 : 0;
     const customerDealType = isCustomer ? (data.customer_deal_type || 'cash') : 'cash';
     const creditLimit = (isCustomer && customerDealType === 'credit') ? (Math.max(0, Number(data.credit_limit) || 0)) : 0; // Credit customers only!
+    const openings = normalizePartyOpenings(data, null);
 
     const party = {
       id,
@@ -114,8 +188,18 @@ export const partiesRepo = {
       customer_deal_type: customerDealType,
       payment_terms: data.payment_terms || 'cash',
       credit_limit: creditLimit, // Exists on customer side only; no supplier ceiling
-      supplier_balance: Number(data.supplier_balance) || 0,
-      customer_balance: Number(data.customer_balance) || 0,
+      // Opening balances (رصيد أول المدة) + account nature (دائن/مدين)
+      opening_balance: openings.genericBalance !== null
+        ? openings.genericBalance
+        : (isSupplier && !isCustomer ? openings.supplierOpening : openings.customerOpening),
+      opening_balance_type: data.opening_balance_type
+        || (isCustomer && !isSupplier ? openings.customerType : openings.supplierType),
+      supplier_opening_balance: isSupplier ? openings.supplierOpening : 0,
+      supplier_opening_type: openings.supplierType,
+      customer_opening_balance: isCustomer ? openings.customerOpening : 0,
+      customer_opening_type: openings.customerType,
+      supplier_balance: isSupplier ? openings.supplierOpening : 0,
+      customer_balance: isCustomer ? openings.customerOpening : 0,
       notes: data.notes || '',
       is_active: 1,
       created_at: now
@@ -135,6 +219,8 @@ export const partiesRepo = {
           supplier_type: party.supplier_type,
           payment_terms: party.payment_terms,
           credit_limit: 0, // No supplier ceiling
+          opening_balance: party.supplier_opening_balance,
+          opening_balance_type: party.supplier_opening_type,
           notes: party.notes,
           is_active: 1,
           created_at: now
@@ -153,6 +239,8 @@ export const partiesRepo = {
           customer_deal_type: customerDealType,
           payment_terms: customerDealType === 'credit' ? 'credit' : (party.payment_terms || 'cash'),
           credit_limit: creditLimit,
+          opening_balance: party.customer_opening_balance,
+          opening_balance_type: party.customer_opening_type,
           notes: party.notes,
           is_active: 1,
           created_at: now
@@ -176,6 +264,7 @@ export const partiesRepo = {
     const creditLimit = (isCustomer && customerDealType === 'credit')
       ? (data.credit_limit !== undefined ? Math.max(0, Number(data.credit_limit) || 0) : (current.credit_limit || 0))
       : 0;
+    const openings = normalizePartyOpenings(data, current);
 
     const updated = {
       ...current,
@@ -189,9 +278,41 @@ export const partiesRepo = {
       customer_deal_type: customerDealType,
       payment_terms: data.payment_terms ?? current.payment_terms,
       credit_limit: creditLimit,
+      opening_balance: data.opening_balance !== undefined
+        ? normalizeOpeningBalance(data.opening_balance)
+        : (current.opening_balance ?? 0),
+      opening_balance_type: normalizeAccountNature(
+        data.opening_balance_type ?? current.opening_balance_type ?? openings.genericType,
+        isCustomer && !isSupplier ? openings.customerType : openings.supplierType
+      ),
+      supplier_opening_balance: isSupplier
+        ? (data.supplier_opening_balance !== undefined || data.opening_balance !== undefined
+          ? openings.supplierOpening
+          : resolveOpeningBalance(current, 'supplier'))
+        : 0,
+      supplier_opening_type: openings.supplierType,
+      customer_opening_balance: isCustomer
+        ? (data.customer_opening_balance !== undefined || data.opening_balance !== undefined
+          ? openings.customerOpening
+          : resolveOpeningBalance(current, 'customer'))
+        : 0,
+      customer_opening_type: openings.customerType,
       notes: data.notes ?? current.notes,
       is_active: data.is_active !== undefined ? Number(data.is_active) : current.is_active
     };
+    // Keep legacy snapshot fields in sync so older statements still resolve the opening.
+    if (isSupplier) {
+      updated.supplier_balance = updated.supplier_opening_balance;
+      updated.initial_supplier_balance = updated.supplier_opening_balance;
+    } else {
+      updated.supplier_balance = 0;
+    }
+    if (isCustomer) {
+      updated.customer_balance = updated.customer_opening_balance;
+      updated.initial_customer_balance = updated.customer_opening_balance;
+    } else {
+      updated.customer_balance = 0;
+    }
 
     await db.transaction('rw', [db.parties, db.suppliers, db.customers], async () => {
       await db.parties.put(updated);
@@ -206,6 +327,8 @@ export const partiesRepo = {
           supplier_type: updated.supplier_type,
           payment_terms: updated.payment_terms,
           credit_limit: 0,
+          opening_balance: updated.supplier_opening_balance,
+          opening_balance_type: updated.supplier_opening_type,
           notes: updated.notes,
           is_active: updated.is_active,
           created_at: current.created_at
@@ -225,6 +348,8 @@ export const partiesRepo = {
           customer_deal_type: customerDealType,
           payment_terms: customerDealType === 'credit' ? 'credit' : (updated.payment_terms || 'cash'),
           credit_limit: creditLimit,
+          opening_balance: updated.customer_opening_balance,
+          opening_balance_type: updated.customer_opening_type,
           notes: updated.notes,
           is_active: updated.is_active,
           created_at: current.created_at
@@ -288,14 +413,13 @@ export const partiesRepo = {
         created_at: now
       });
 
-      // 3. Deduct from stored party balance if present
+      // 3. Deduct from stored party opening balances if present
       const rawParty = await db.parties.get(partyId);
       if (rawParty) {
-        if (rawParty.supplier_balance != null) {
-          rawParty.supplier_balance = Math.max(0, rawParty.supplier_balance - numAmount);
-        }
-        if (rawParty.customer_balance != null) {
-          rawParty.customer_balance = Math.max(0, rawParty.customer_balance - numAmount);
+        for (const key of ['supplier_opening_balance', 'customer_opening_balance', 'supplier_balance', 'customer_balance', 'initial_supplier_balance', 'initial_customer_balance', 'opening_balance']) {
+          if (rawParty[key] != null) {
+            rawParty[key] = Math.max(0, Number(rawParty[key] || 0) - numAmount);
+          }
         }
         await db.parties.put(rawParty);
       }

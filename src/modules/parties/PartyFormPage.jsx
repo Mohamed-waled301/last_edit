@@ -12,6 +12,12 @@ import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import {
+  DEFAULT_PHONE_VALUE,
+  sanitizeEgyptianPhoneInput,
+  normalizePhoneForSave,
+  validateEgyptianMobile,
+} from '../../utils/phone';
 
 /**
  * Format string/number with thousand separators using Western digits (0-9)
@@ -30,7 +36,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
   const [form, setForm] = useState({
     code: '',
     name: '',
-    phone: '',
+    phone: DEFAULT_PHONE_VALUE,
     address: '',
     tax_number: '',
     is_supplier: effectiveRole === 'supplier' || (effectiveRole !== 'customer' && effectiveRole === null),
@@ -39,6 +45,11 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
     customer_deal_type: 'cash', // 'cash' (نقدي) | 'credit' (آجل) - default: نقدي
     credit_limit: '50000', // Stored in form state so switching back restores it
     payment_terms: 'cash',
+    // Opening balances (رصيد أول المدة): suppliers default credit (دائن), customers default debit (مدين)
+    supplier_opening_balance: '0',
+    supplier_opening_type: 'credit',
+    customer_opening_balance: '0',
+    customer_opening_type: 'debit',
     notes: ''
   });
 
@@ -63,7 +74,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
             setForm({
               code: p.code || '',
               name: p.name || '',
-              phone: p.phone || '',
+              phone: p.phone || DEFAULT_PHONE_VALUE,
               address: p.address || '',
               tax_number: p.tax_number || '',
               is_supplier: Boolean(p.is_supplier),
@@ -72,6 +83,10 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
               customer_deal_type: dealType,
               credit_limit: p.credit_limit && Number(p.credit_limit) > 0 ? String(p.credit_limit) : '50000',
               payment_terms: p.payment_terms || 'cash',
+              supplier_opening_balance: String(p.supplier_opening_balance ?? p.opening_balance ?? p.supplier_balance ?? 0),
+              supplier_opening_type: p.supplier_opening_type || p.opening_balance_type || 'credit',
+              customer_opening_balance: String(p.customer_opening_balance ?? p.opening_balance ?? p.customer_balance ?? 0),
+              customer_opening_type: p.customer_opening_type || p.opening_balance_type || 'debit',
               notes: p.notes || ''
             });
           }
@@ -97,6 +112,9 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
       errs.role = 'يرجى تحديد صفة جهة التعامل على الأقل (مورد أو عميل أو كلاهما)';
     }
 
+    const phoneErr = validateEgyptianMobile(form.phone, { required: false });
+    if (phoneErr) errs.phone = phoneErr;
+
     // Validation: credit limit is required and must be greater than 0 ONLY when "آجل" is selected
     if (form.is_customer && form.customer_deal_type === 'credit') {
       const num = Number(form.credit_limit);
@@ -105,8 +123,30 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
       }
     }
 
+    // Opening balances must be non-negative numbers
+    if (form.is_supplier) {
+      const supOpen = Number(form.supplier_opening_balance);
+      if (form.supplier_opening_balance === '' || isNaN(supOpen) || supOpen < 0) {
+        errs.supplier_opening_balance = 'رصيد أول المدة للمورد يجب أن يكون رقماً لا يقل عن صفر';
+      }
+    }
+    if (form.is_customer) {
+      const custOpen = Number(form.customer_opening_balance);
+      if (form.customer_opening_balance === '' || isNaN(custOpen) || custOpen < 0) {
+        errs.customer_opening_balance = 'رصيد أول المدة للعميل يجب أن يكون رقماً لا يقل عن صفر';
+      }
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
+  };
+
+  const handlePhoneChange = (e) => {
+    const digits = sanitizeEgyptianPhoneInput(e.target.value);
+    setForm(prev => ({ ...prev, phone: digits === '' ? DEFAULT_PHONE_VALUE : digits }));
+    if (errors.phone) {
+      setErrors(prev => ({ ...prev, phone: null }));
+    }
   };
 
   const handleCreditLimitChange = (e) => {
@@ -127,7 +167,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
       const payload = {
         code: form.code.trim(),
         name: form.name.trim(),
-        phone: form.phone.trim(),
+        phone: normalizePhoneForSave(form.phone),
         address: form.address.trim(),
         tax_number: form.tax_number.trim(),
         is_supplier: form.is_supplier ? 1 : 0,
@@ -136,6 +176,10 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
         customer_deal_type: form.is_customer ? form.customer_deal_type : 'cash',
         credit_limit: isCreditCustomer ? (Number(form.credit_limit) || 0) : 0, // Stored only when type is 'credit', otherwise 0
         payment_terms: form.payment_terms,
+        supplier_opening_balance: form.is_supplier ? Math.max(0, Number(form.supplier_opening_balance) || 0) : 0,
+        supplier_opening_type: form.supplier_opening_type === 'debit' ? 'debit' : 'credit',
+        customer_opening_balance: form.is_customer ? Math.max(0, Number(form.customer_opening_balance) || 0) : 0,
+        customer_opening_type: form.customer_opening_type === 'credit' ? 'credit' : 'debit',
         notes: form.notes
       };
 
@@ -163,11 +207,17 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
   };
 
   const isCreditValid = !form.is_customer || form.customer_deal_type !== 'credit' || (Number(form.credit_limit) > 0);
+  const isPhoneValid = !validateEgyptianMobile(form.phone, { required: false });
+  const isSupplierOpeningValid = !form.is_supplier || (form.supplier_opening_balance !== '' && Number(form.supplier_opening_balance) >= 0);
+  const isCustomerOpeningValid = !form.is_customer || (form.customer_opening_balance !== '' && Number(form.customer_opening_balance) >= 0);
   const isFormValid = Boolean(
     form.name.trim() && 
     form.code.trim() && 
     (form.is_supplier || form.is_customer) &&
-    isCreditValid
+    isCreditValid &&
+    isPhoneValid &&
+    isSupplierOpeningValid &&
+    isCustomerOpeningValid
   );
 
   return (
@@ -267,11 +317,18 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
               </label>
               <input
                 type="tel"
+                inputMode="numeric"
+                dir="ltr"
+                maxLength={11}
                 value={form.phone}
-                onChange={(e) => setForm(prev => ({ ...prev, phone: e.target.value }))}
-                placeholder="01012345678"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                onChange={handlePhoneChange}
+                placeholder="01xxxxxxxxx"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono text-left focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
+              <span className="text-[11px] text-gray-500 mt-1 block">
+                رقم موبايل مصري يبدأ بـ 01 (010 / 011 / 012 / 015) ومكوّن من 11 رقماً
+              </span>
+              <FieldError error={errors.phone} />
             </div>
 
             <div>
@@ -405,6 +462,87 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
             )}
           </div>
         </div>
+
+        {/* Section 4: Opening Balances (رصيد أول المدة) */}
+        {(form.is_supplier || form.is_customer) && (
+          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
+            <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2">
+              رصيد أول المدة وطبيعة الحساب
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {form.is_supplier && (
+                <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-md space-y-3">
+                  <div className="text-xs font-bold text-blue-900">رصيد أول المدة للمورد (ج.م)</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">المبلغ</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        dir="ltr"
+                        value={form.supplier_opening_balance}
+                        onChange={(e) => setForm(prev => ({ ...prev, supplier_opening_balance: e.target.value }))}
+                        placeholder="0"
+                        className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm font-mono font-bold text-left bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                      />
+                      <FieldError error={errors.supplier_opening_balance} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">طبيعة الحساب</label>
+                      <select
+                        value={form.supplier_opening_type}
+                        onChange={(e) => setForm(prev => ({ ...prev, supplier_opening_type: e.target.value }))}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                      >
+                        <option value="credit">دائن (مستحق له)</option>
+                        <option value="debit">مدين (دفعة مقدمة له)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-blue-700 block">
+                    الرصيد الحالي للمورد = رصيد أول المدة + فواتير الشراء الآجلة − سندات الصرف النقدية.
+                  </span>
+                </div>
+              )}
+              {form.is_customer && (
+                <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-md space-y-3">
+                  <div className="text-xs font-bold text-emerald-900">رصيد أول المدة للعميل (ج.م)</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">المبلغ</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        dir="ltr"
+                        value={form.customer_opening_balance}
+                        onChange={(e) => setForm(prev => ({ ...prev, customer_opening_balance: e.target.value }))}
+                        placeholder="0"
+                        className="w-full px-3 py-2 border border-emerald-300 rounded-md text-sm font-mono font-bold text-left bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                      />
+                      <FieldError error={errors.customer_opening_balance} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">طبيعة الحساب</label>
+                      <select
+                        value={form.customer_opening_type}
+                        onChange={(e) => setForm(prev => ({ ...prev, customer_opening_type: e.target.value }))}
+                        className="w-full px-3 py-2 border border-emerald-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                      >
+                        <option value="debit">مدين (مستحق عليه)</option>
+                        <option value="credit">دائن (دفعة مقدمة منه)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-emerald-700 block">
+                    الرصيد الحالي للعميل = رصيد أول المدة + فواتير البيع الآجلة − سندات القبض النقدية.
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </form>
     </PageContainer>
   );

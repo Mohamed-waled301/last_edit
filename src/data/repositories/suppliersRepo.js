@@ -1,6 +1,12 @@
 import db from '../db';
 import CostCalculator from '../../logic/costCalculator';
-import BalanceCalculator from '../../logic/balances';
+import BalanceCalculator, {
+  resolveOpeningBalance,
+  resolveOpeningType,
+  normalizeOpeningBalance,
+  normalizeAccountNature,
+  DEFAULT_SUPPLIER_OPENING_TYPE,
+} from '../../logic/balances';
 import auditRepo from './auditRepo';
 import { validateNotPastDate } from '../../utils/formatters';
 
@@ -13,13 +19,19 @@ export const suppliersRepo = {
     return list.map(s => {
       const supInvoices = invoices.filter(i => i.supplier_id === s.id);
       const supReturns = returns.filter(r => r.supplier_id === s.id);
-      const bal = BalanceCalculator.calculateSupplierBalance(supInvoices, supReturns);
+      // Current Balance = Opening Balance + Credit Purchases - Cash Out / Payments
+      const opening = resolveOpeningBalance(s, 'supplier');
+      const bal = BalanceCalculator.calculateSupplierBalance(supInvoices, supReturns, opening);
 
       return {
         ...s,
+        opening_balance: opening,
+        opening_balance_type: resolveOpeningType(s, 'supplier'),
         total_invoiced: bal.totalInvoiced,
         total_paid: bal.totalPaid,
         balance_due: bal.balanceDue,
+        outstanding_balance: bal.balanceDue,
+        current_balance: bal.balanceDue,
       };
     });
   },
@@ -29,12 +41,22 @@ export const suppliersRepo = {
     if (!s) return null;
     const invoices = await db.supplier_invoices.where('supplier_id').equals(id).toArray();
     const returns = await db.supplier_returns.where('supplier_id').equals(id).toArray();
-    const bal = BalanceCalculator.calculateSupplierBalance(invoices, returns);
-    return { ...s, ...bal };
+    const opening = resolveOpeningBalance(s, 'supplier');
+    const bal = BalanceCalculator.calculateSupplierBalance(invoices, returns, opening);
+    return {
+      ...s,
+      opening_balance: opening,
+      opening_balance_type: resolveOpeningType(s, 'supplier'),
+      ...bal,
+      balance_due: bal.balanceDue,
+      outstanding_balance: bal.balanceDue,
+      current_balance: bal.balanceDue,
+    };
   },
 
   async create(data, userId = 'usr-purchasing') {
     const id = `sup-${Date.now()}`;
+    const opening = normalizeOpeningBalance(data.opening_balance ?? data.supplier_opening_balance ?? 0);
     const supplier = {
       id,
       name: data.name,
@@ -43,6 +65,11 @@ export const suppliersRepo = {
       tax_number: data.tax_number || '',
       payment_terms: data.payment_terms || 'cash',
       credit_limit: Number(data.credit_limit) || 0,
+      opening_balance: opening,
+      opening_balance_type: normalizeAccountNature(
+        data.opening_balance_type ?? data.supplier_opening_type,
+        DEFAULT_SUPPLIER_OPENING_TYPE
+      ),
       notes: data.notes || '',
       is_active: 1,
       created_at: new Date().toISOString(),
@@ -65,6 +92,13 @@ export const suppliersRepo = {
       tax_number: data.tax_number ?? current.tax_number,
       payment_terms: data.payment_terms ?? current.payment_terms,
       credit_limit: data.credit_limit !== undefined ? Number(data.credit_limit) : current.credit_limit,
+      opening_balance: data.opening_balance !== undefined || data.supplier_opening_balance !== undefined
+        ? normalizeOpeningBalance(data.opening_balance ?? data.supplier_opening_balance)
+        : normalizeOpeningBalance(current.opening_balance ?? 0),
+      opening_balance_type: normalizeAccountNature(
+        data.opening_balance_type ?? data.supplier_opening_type ?? current.opening_balance_type,
+        DEFAULT_SUPPLIER_OPENING_TYPE
+      ),
       notes: data.notes ?? current.notes,
       is_active: data.is_active !== undefined ? Number(data.is_active) : current.is_active,
     };
@@ -82,7 +116,23 @@ export const suppliersRepo = {
     const payments = await db.payments.where('supplier_id').equals(id).toArray();
     const returns = await db.supplier_returns.where('supplier_id').equals(id).toArray();
 
+    const opening = normalizeOpeningBalance(supplier.opening_balance);
+    const openingType = supplier.opening_balance_type || DEFAULT_SUPPLIER_OPENING_TYPE;
     const transactions = [];
+
+    // Opening balance row (رصيد أول المدة) comes first chronologically
+    if (opening > 0) {
+      transactions.push({
+        date: supplier.created_at ? String(supplier.created_at).split('T')[0] : '',
+        type: 'رصيد أول المدة',
+        reference: 'OPENING',
+        description: `رصيد افتتاحي (${openingType === 'credit' ? 'دائن' : 'مدين'})`,
+        debit: 0,
+        credit: opening,
+        raw_date: '0000-00-00T00:00:00.000Z',
+        is_opening: true,
+      });
+    }
 
     for (const inv of invoices) {
       transactions.push({
@@ -120,10 +170,10 @@ export const suppliersRepo = {
       });
     }
 
-    // Sort chronologically
+    // Sort chronologically (opening row keeps its earliest sentinel date)
     transactions.sort((a, b) => new Date(a.raw_date).getTime() - new Date(b.raw_date).getTime());
 
-    let runningBalance = 0;
+    let runningBalance = opening;
     const ledger = transactions.map(tx => {
       runningBalance = runningBalance + tx.credit - tx.debit;
       return {
@@ -138,6 +188,8 @@ export const suppliersRepo = {
       invoices,
       payments,
       summary: {
+        opening_balance: opening,
+        opening_balance_type: openingType,
         total_purchases: supplier.total_purchases ?? supplier.total_invoiced ?? 0,
         total_paid: supplier.total_paid ?? 0,
         remaining_balance: supplier.outstanding_balance ?? supplier.balance_due ?? 0,

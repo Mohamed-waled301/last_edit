@@ -88,6 +88,12 @@ export const COLUMN_LABELS = {
   user_id: 'المستخدم',
   user_name: 'اسم المستخدم',
   reason: 'السبب',
+  opening_balance: 'رصيد أول المدة',
+  opening_balance_type: 'طبيعة الحساب (دائن/مدين)',
+  supplier_opening_balance: 'رصيد أول المدة (مورد)',
+  supplier_opening_type: 'طبيعة حساب المورد',
+  customer_opening_balance: 'رصيد أول المدة (عميل)',
+  customer_opening_type: 'طبيعة حساب العميل',
 };
 
 /**

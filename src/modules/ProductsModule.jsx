@@ -23,6 +23,12 @@ import { formatCurrency, formatNumber } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
 import { compressImageToBase64 } from '../utils/imageCompressor';
 import { Validators, FieldError } from '../utils/validation';
+import {
+  DEFAULT_PHONE_VALUE,
+  sanitizeEgyptianPhoneInput,
+  normalizePhoneForSave,
+  validateEgyptianMobile,
+} from '../utils/phone';
 
 export default function ProductsModule({ onBack, onNotify }) {
   const [activeTab, setActiveTab] = useState('items'); // 'items' | 'parties' | 'sizes_colors' | 'locations' | 'expenses' | 'payment_methods' | 'bom'
@@ -68,7 +74,7 @@ export default function ProductsModule({ onBack, onNotify }) {
   const [partyForm, setPartyForm] = useState({
     code: '',
     name: '',
-    phone: '',
+    phone: DEFAULT_PHONE_VALUE,
     address: '',
     tax_number: '',
     is_supplier: true,
@@ -76,6 +82,8 @@ export default function ProductsModule({ onBack, onNotify }) {
     supplier_type: 'goods', // 'goods' | 'service'
     payment_terms: 'credit',
     credit_limit: '',
+    opening_balance: '0',
+    opening_balance_type: 'credit', // المورد دائن افتراضياً
     notes: ''
   });
 
@@ -276,9 +284,17 @@ export default function ProductsModule({ onBack, onNotify }) {
       errors.type = 'يجب تحديد نوع الجهة كـ (مورد) أو (عميل) أو كلاهما';
     }
 
+    const phoneErr = validateEgyptianMobile(partyForm.phone, { required: false });
+    if (phoneErr) errors.phone = phoneErr;
+
     if (partyForm.is_customer && partyForm.credit_limit) {
       const posLimit = Validators.nonNegativeNumber(partyForm.credit_limit, 'الحد الائتماني');
       if (posLimit) errors.credit_limit = posLimit;
+    }
+
+    const openNum = Number(partyForm.opening_balance);
+    if (partyForm.opening_balance === '' || isNaN(openNum) || openNum < 0) {
+      errors.opening_balance = 'رصيد أول المدة يجب أن يكون رقماً لا يقل عن صفر';
     }
 
     setPartyErrors(errors);
@@ -291,13 +307,25 @@ export default function ProductsModule({ onBack, onNotify }) {
     if (!validatePartyForm()) return;
 
     try {
-      const res = await api.createParty(partyForm);
+      const roleDefaultType = partyForm.is_customer && !partyForm.is_supplier ? 'debit' : 'credit';
+      const openingType = partyForm.opening_balance_type === 'debit' ? 'debit' : (partyForm.opening_balance_type === 'credit' ? 'credit' : roleDefaultType);
+      const payload = {
+        ...partyForm,
+        phone: normalizePhoneForSave(partyForm.phone),
+        opening_balance: Math.max(0, Number(partyForm.opening_balance) || 0),
+        opening_balance_type: openingType,
+        supplier_opening_balance: partyForm.is_supplier ? Math.max(0, Number(partyForm.opening_balance) || 0) : 0,
+        supplier_opening_type: partyForm.is_supplier ? openingType : 'credit',
+        customer_opening_balance: partyForm.is_customer ? Math.max(0, Number(partyForm.opening_balance) || 0) : 0,
+        customer_opening_type: partyForm.is_customer ? openingType : 'debit',
+      };
+      const res = await api.createParty(payload);
       onNotify(res.message);
       setShowAddPartyModal(false);
       setPartyForm({
         code: '',
         name: '',
-        phone: '',
+        phone: DEFAULT_PHONE_VALUE,
         address: '',
         tax_number: '',
         is_supplier: true,
@@ -305,6 +333,8 @@ export default function ProductsModule({ onBack, onNotify }) {
         supplier_type: 'goods',
         payment_terms: 'credit',
         credit_limit: '',
+        opening_balance: '0',
+        opening_balance_type: 'credit',
         notes: ''
       });
       loadData();
@@ -482,7 +512,7 @@ export default function ProductsModule({ onBack, onNotify }) {
                 setPartyForm({
                   code: `PRT-${Date.now().toString().slice(-4)}`,
                   name: '',
-                  phone: '',
+                  phone: DEFAULT_PHONE_VALUE,
                   address: '',
                   tax_number: '',
                   is_supplier: true,
@@ -490,6 +520,8 @@ export default function ProductsModule({ onBack, onNotify }) {
                   supplier_type: 'goods',
                   payment_terms: 'credit',
                   credit_limit: '',
+                  opening_balance: '0',
+                  opening_balance_type: 'credit',
                   notes: ''
                 });
                 setPartyErrors({});
@@ -1318,11 +1350,19 @@ export default function ProductsModule({ onBack, onNotify }) {
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">رقم التليفون</label>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="numeric"
+                    dir="ltr"
+                    maxLength={11}
+                    placeholder="01xxxxxxxxx"
                     value={partyForm.phone}
-                    onChange={e => setPartyForm({ ...partyForm, phone: e.target.value })}
-                    className="w-full h-10 border border-gray-300 rounded px-3 text-sm"
+                    onChange={e => {
+                      const digits = sanitizeEgyptianPhoneInput(e.target.value);
+                      setPartyForm({ ...partyForm, phone: digits === '' ? DEFAULT_PHONE_VALUE : digits });
+                    }}
+                    className="w-full h-10 border border-gray-300 rounded px-3 text-sm font-mono text-left"
                   />
+                  <FieldError error={partyErrors.phone} />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">الرقم الضريبي</label>
@@ -1363,6 +1403,43 @@ export default function ProductsModule({ onBack, onNotify }) {
                   <FieldError error={partyErrors.credit_limit} />
                 </div>
               )}
+
+              <div className="grid grid-cols-2 gap-4 p-3 bg-gray-50 border border-gray-200 rounded">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">رصيد أول المدة (ج.م)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    dir="ltr"
+                    value={partyForm.opening_balance}
+                    onChange={e => setPartyForm({ ...partyForm, opening_balance: e.target.value })}
+                    placeholder="0"
+                    className="w-full h-10 border border-gray-300 rounded px-3 text-sm font-mono font-bold text-left bg-white"
+                  />
+                  <FieldError error={partyErrors.opening_balance} />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">طبيعة الحساب</label>
+                  <select
+                    value={partyForm.opening_balance_type}
+                    onChange={e => setPartyForm({ ...partyForm, opening_balance_type: e.target.value })}
+                    className="w-full h-10 border border-gray-300 rounded px-3 text-sm bg-white font-semibold"
+                  >
+                    {partyForm.is_customer && !partyForm.is_supplier ? (
+                      <>
+                        <option value="debit">مدين (مستحق عليه)</option>
+                        <option value="credit">دائن (دفعة مقدمة منه)</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="credit">دائن (مستحق له)</option>
+                        <option value="debit">مدين (دفعة مقدمة له)</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t">
                 <button

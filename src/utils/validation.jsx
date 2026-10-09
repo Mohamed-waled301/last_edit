@@ -1,4 +1,5 @@
 import React from 'react';
+import { validateEgyptianMobile as validateEGMobile } from './phone.js';
 
 /**
  * Form Validation Utility with Arabic Error Messages
@@ -78,6 +79,14 @@ export const Validators = {
     if (d < 0) return 'قيمة الخصم لا يمكن أن تكون سالبة';
     if (d > sub) return 'قيمة الخصم لا يمكن أن تتجاوز إجمالي المبلغ';
     return null;
+  },
+
+  /**
+   * Egyptian mobile validation (010 / 011 / 012 / 015, 11 digits).
+   * "" / "01" (untouched prefix) passes when not required.
+   */
+  egyptianMobile(value, options = {}) {
+    return validateEGMobile(value, options);
   },
 
   /**

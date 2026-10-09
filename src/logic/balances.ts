@@ -31,14 +31,83 @@ export interface PartyBalanceSummary {
   maxOffsetAmount: number; // أقصى مبلغ ممكن إجراء مقاصة به = min(supplierBalance, customerBalance)
 }
 
+/** Account nature for opening balances (طبيعة الحساب): دائن = credit, مدين = debit. */
+export type AccountNature = 'credit' | 'debit';
+
+export const DEFAULT_SUPPLIER_OPENING_TYPE: AccountNature = 'credit'; // المورد دائن افتراضياً
+export const DEFAULT_CUSTOMER_OPENING_TYPE: AccountNature = 'debit'; // العميل مدين افتراضياً
+
+const VALID_NATURES: AccountNature[] = ['credit', 'debit'];
+
+/** Normalize an account nature value with a role-based fallback. */
+export function normalizeAccountNature(value: unknown, fallback: AccountNature): AccountNature {
+  return (VALID_NATURES as string[]).includes(String(value)) ? (value as AccountNature) : fallback;
+}
+
+/** Normalize an opening balance magnitude (>= 0, defaults to 0 for legacy records). */
+export function normalizeOpeningBalance(value: unknown): number {
+  const num = Number(value);
+  return Number.isFinite(num) ? Math.max(0, num) : 0;
+}
+
+/**
+ * Resolve the effective opening balance for one ledger side with graceful
+ * fallbacks for legacy records (missing fields -> 0).
+ *
+ * Priority: side-specific field > generic opening_balance > legacy initial_* >
+ * legacy *_balance snapshot > 0.
+ */
+export function resolveOpeningBalance(
+  record: Record<string, unknown> | null | undefined,
+  side: 'supplier' | 'customer'
+): number {
+  if (!record) return 0;
+  if (side === 'supplier') {
+    const v =
+      record.supplier_opening_balance ??
+      record.opening_balance ??
+      record.initial_supplier_balance ??
+      record.supplier_balance ??
+      0;
+    return normalizeOpeningBalance(v);
+  }
+  const v =
+    record.customer_opening_balance ??
+    record.opening_balance ??
+    record.initial_customer_balance ??
+    record.customer_balance ??
+    0;
+  return normalizeOpeningBalance(v);
+}
+
+/** Resolve the stored account nature for one ledger side (with role defaults). */
+export function resolveOpeningType(
+  record: Record<string, unknown> | null | undefined,
+  side: 'supplier' | 'customer'
+): AccountNature {
+  if (!record) return side === 'supplier' ? DEFAULT_SUPPLIER_OPENING_TYPE : DEFAULT_CUSTOMER_OPENING_TYPE;
+  if (side === 'supplier') {
+    return normalizeAccountNature(
+      record.supplier_opening_type ?? record.opening_balance_type,
+      DEFAULT_SUPPLIER_OPENING_TYPE
+    );
+  }
+  return normalizeAccountNature(
+    record.customer_opening_type ?? record.opening_balance_type,
+    DEFAULT_CUSTOMER_OPENING_TYPE
+  );
+}
+
 export class BalanceCalculator {
   /**
    * 1. Calculate Supplier Balance (حساب رصيد المورد المستحق - فلوس علينا)
-   * Balance = (Sum of Valid Invoices) - (Sum of Paid Amounts) - (Sum of Balance Deducted Returns)
+   * Current Balance = Opening Balance + Credit Purchases (فواتير آجل) - Cash Out / Payments (سندات صرف نقدية)
+   * In invoice terms: Balance = Opening + (Sum of Valid Invoices) - (Sum of Paid Amounts) - (Sum of Balance Deducted Returns)
    */
   static calculateSupplierBalance(
     invoices: InvoiceRecord[] = [],
-    returns: ReturnRecord[] = []
+    returns: ReturnRecord[] = [],
+    openingBalance: number = 0
   ): BalanceSummary {
     let totalInvoiced = 0;
     let totalPaid = 0;
@@ -59,7 +128,8 @@ export class BalanceCalculator {
       }
     }
 
-    const balanceDue = Math.max(0, Number((totalInvoiced - totalPaid - totalReturns).toFixed(2)));
+    const opening = normalizeOpeningBalance(openingBalance);
+    const balanceDue = Math.max(0, Number((opening + totalInvoiced - totalPaid - totalReturns).toFixed(2)));
 
     return {
       totalInvoiced: Number(totalInvoiced.toFixed(2)),
@@ -71,11 +141,13 @@ export class BalanceCalculator {
 
   /**
    * 2. Calculate Customer Balance (حساب رصيد العميل المستحق - فلوس لينا بره)
-   * Balance = (Sum of Valid Invoices) - (Sum of Collected Amounts) - (Sum of Balance Deducted Returns)
+   * Current Balance = Opening Balance + Credit Sales (سحب فواتير آجل) - Cash In / Receipts (سندات قبض نقدية)
+   * In invoice terms: Balance = Opening + (Sum of Valid Invoices) - (Sum of Collected Amounts) - (Sum of Balance Deducted Returns)
    */
   static calculateCustomerBalance(
     invoices: InvoiceRecord[] = [],
-    returns: ReturnRecord[] = []
+    returns: ReturnRecord[] = [],
+    openingBalance: number = 0
   ): BalanceSummary {
     let totalInvoiced = 0;
     let totalPaid = 0;
@@ -96,7 +168,8 @@ export class BalanceCalculator {
       }
     }
 
-    const balanceDue = Math.max(0, Number((totalInvoiced - totalPaid - totalReturns).toFixed(2)));
+    const opening = normalizeOpeningBalance(openingBalance);
+    const balanceDue = Math.max(0, Number((opening + totalInvoiced - totalPaid - totalReturns).toFixed(2)));
 
     return {
       totalInvoiced: Number(totalInvoiced.toFixed(2)),
@@ -108,15 +181,18 @@ export class BalanceCalculator {
 
   /**
    * 3. Calculate Unified Party Balances, Net Balance & Offset (حساب رصيد الجهة الموحدة والمقاصة)
+   * Each side includes its own opening balance (رصيد أول المدة).
    */
   static calculateUnifiedPartyBalance(
     supplierInvoices: InvoiceRecord[] = [],
     supplierReturns: ReturnRecord[] = [],
     customerInvoices: InvoiceRecord[] = [],
-    customerReturns: ReturnRecord[] = []
+    customerReturns: ReturnRecord[] = [],
+    supplierOpening: number = 0,
+    customerOpening: number = 0
   ): PartyBalanceSummary {
-    const supBal = this.calculateSupplierBalance(supplierInvoices, supplierReturns);
-    const custBal = this.calculateCustomerBalance(customerInvoices, customerReturns);
+    const supBal = this.calculateSupplierBalance(supplierInvoices, supplierReturns, supplierOpening);
+    const custBal = this.calculateCustomerBalance(customerInvoices, customerReturns, customerOpening);
 
     const supplierBalance = supBal.balanceDue;
     const customerBalance = custBal.balanceDue;

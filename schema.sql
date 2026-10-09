@@ -137,6 +137,12 @@ CREATE TABLE IF NOT EXISTS `parties` (
   `payment_terms` VARCHAR(50) NOT NULL DEFAULT 'cash',
   `credit_limit` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
   `current_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `opening_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `opening_balance_type` VARCHAR(10) NOT NULL DEFAULT 'credit',
+  `supplier_opening_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `supplier_opening_type` VARCHAR(10) NOT NULL DEFAULT 'credit',
+  `customer_opening_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `customer_opening_type` VARCHAR(10) NOT NULL DEFAULT 'debit',
   `notes` TEXT DEFAULT NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -144,6 +150,19 @@ CREATE TABLE IF NOT EXISTS `parties` (
   INDEX `idx_parties_supplier` (`is_supplier`),
   INDEX `idx_parties_customer` (`is_customer`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 9b. Opening balances for existing deployments: run these manually once
+-- (fresh installs already include the columns above via CREATE TABLE):
+-- ALTER TABLE `parties` ADD COLUMN `opening_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00;
+-- ALTER TABLE `parties` ADD COLUMN `opening_balance_type` VARCHAR(10) NOT NULL DEFAULT 'credit';
+-- ALTER TABLE `parties` ADD COLUMN `supplier_opening_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00;
+-- ALTER TABLE `parties` ADD COLUMN `supplier_opening_type` VARCHAR(10) NOT NULL DEFAULT 'credit';
+-- ALTER TABLE `parties` ADD COLUMN `customer_opening_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00;
+-- ALTER TABLE `parties` ADD COLUMN `customer_opening_type` VARCHAR(10) NOT NULL DEFAULT 'debit';
+-- ALTER TABLE `suppliers` ADD COLUMN `opening_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00;
+-- ALTER TABLE `suppliers` ADD COLUMN `opening_balance_type` VARCHAR(10) NOT NULL DEFAULT 'credit';
+-- ALTER TABLE `customers` ADD COLUMN `opening_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00;
+-- ALTER TABLE `customers` ADD COLUMN `opening_balance_type` VARCHAR(10) NOT NULL DEFAULT 'debit';
 
 -- 10. Legacy Suppliers Compatibility Table
 CREATE TABLE IF NOT EXISTS `suppliers` (
@@ -154,6 +173,8 @@ CREATE TABLE IF NOT EXISTS `suppliers` (
   `supplier_type` VARCHAR(50) DEFAULT 'materials',
   `payment_terms` VARCHAR(50) DEFAULT 'cash',
   `credit_limit` DECIMAL(15,2) DEFAULT 0.00,
+  `opening_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `opening_balance_type` VARCHAR(10) NOT NULL DEFAULT 'credit',
   `notes` TEXT DEFAULT NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -168,6 +189,8 @@ CREATE TABLE IF NOT EXISTS `customers` (
   `customer_type` VARCHAR(50) DEFAULT 'retail',
   `payment_terms` VARCHAR(50) DEFAULT 'cash',
   `credit_limit` DECIMAL(15,2) DEFAULT 0.00,
+  `opening_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `opening_balance_type` VARCHAR(10) NOT NULL DEFAULT 'debit',
   `notes` TEXT DEFAULT NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

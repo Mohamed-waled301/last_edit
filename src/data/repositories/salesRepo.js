@@ -1,6 +1,12 @@
 import db from '../db';
 import CostCalculator from '../../logic/costCalculator';
-import BalanceCalculator from '../../logic/balances';
+import BalanceCalculator, {
+  resolveOpeningBalance,
+  resolveOpeningType,
+  normalizeOpeningBalance,
+  normalizeAccountNature,
+  DEFAULT_CUSTOMER_OPENING_TYPE,
+} from '../../logic/balances';
 import auditRepo from './auditRepo';
 import { validateNotPastDate } from '../../utils/formatters';
 
@@ -13,19 +19,27 @@ export const salesRepo = {
     return list.map(c => {
       const custInvoices = invoices.filter(i => i.customer_id === c.id);
       const custReturns = returns.filter(r => r.customer_id === c.id);
-      const bal = BalanceCalculator.calculateCustomerBalance(custInvoices, custReturns);
+      // Current Balance = Opening Balance + Credit Sales - Cash In / Receipts
+      const opening = resolveOpeningBalance(c, 'customer');
+      const bal = BalanceCalculator.calculateCustomerBalance(custInvoices, custReturns, opening);
 
       return {
         ...c,
+        opening_balance: opening,
+        opening_balance_type: resolveOpeningType(c, 'customer'),
         total_invoiced: bal.totalInvoiced,
         total_paid: bal.totalPaid,
         balance_due: bal.balanceDue,
+        outstanding_balance: bal.balanceDue,
+        current_balance: bal.balanceDue,
+        customer_balance: bal.balanceDue,
       };
     });
   },
 
   async createCustomer(data, userId = 'usr-accountant') {
     const id = `cust-${Date.now()}`;
+    const opening = normalizeOpeningBalance(data.opening_balance ?? data.customer_opening_balance ?? 0);
     const customer = {
       id,
       name: data.name,
@@ -35,6 +49,11 @@ export const salesRepo = {
       customer_type: data.customer_type || 'local',
       payment_terms: data.payment_terms || 'cash',
       credit_limit: Number(data.credit_limit) || 0,
+      opening_balance: opening,
+      opening_balance_type: normalizeAccountNature(
+        data.opening_balance_type ?? data.customer_opening_type,
+        DEFAULT_CUSTOMER_OPENING_TYPE
+      ),
       notes: data.notes || '',
       is_active: 1,
       created_at: new Date().toISOString(),
@@ -53,7 +72,23 @@ export const salesRepo = {
     const payments = await db.customer_payments.where('customer_id').equals(id).toArray();
     const returns = await db.customer_returns.where('customer_id').equals(id).toArray();
 
+    const opening = resolveOpeningBalance(customer, 'customer');
+    const openingType = resolveOpeningType(customer, 'customer');
     const transactions = [];
+
+    // Opening balance row (رصيد أول المدة) comes first chronologically
+    if (opening > 0) {
+      transactions.push({
+        date: customer.created_at ? String(customer.created_at).split('T')[0] : '',
+        type: 'رصيد أول المدة',
+        reference: 'OPENING',
+        description: `رصيد افتتاحي (${openingType === 'credit' ? 'دائن' : 'مدين'})`,
+        debit: opening,
+        credit: 0,
+        raw_date: '0000-00-00T00:00:00.000Z',
+        is_opening: true,
+      });
+    }
 
     for (const inv of invoices) {
       if (inv.status !== 'cancelled') {
@@ -95,7 +130,7 @@ export const salesRepo = {
 
     transactions.sort((a, b) => new Date(a.raw_date).getTime() - new Date(b.raw_date).getTime());
 
-    let runningBalance = 0;
+    let runningBalance = opening;
     const ledger = transactions.map(tx => {
       runningBalance = runningBalance + tx.debit - tx.credit;
       return {
@@ -104,14 +139,16 @@ export const salesRepo = {
       };
     });
 
-    const bal = BalanceCalculator.calculateCustomerBalance(invoices, returns);
+    const bal = BalanceCalculator.calculateCustomerBalance(invoices, returns, opening);
 
     return {
-      customer: { ...customer, ...bal },
+      customer: { ...customer, opening_balance: opening, opening_balance_type: openingType, ...bal },
       statement: ledger,
       invoices,
       payments,
       summary: {
+        opening_balance: opening,
+        opening_balance_type: openingType,
         total_sales: bal.totalInvoiced || 0,
         total_collected: bal.totalPaid || 0,
         remaining_balance: bal.balanceDue || 0,

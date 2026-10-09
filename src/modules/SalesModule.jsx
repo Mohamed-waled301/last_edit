@@ -22,7 +22,13 @@ import BackButton from '../components/BackButton';
 import { api } from '../services/api';
 import { formatCurrency, formatNumber, formatDate, getTodayDateString } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
-import { FieldError, validators } from '../utils/validation';
+import { FieldError, validators, Validators } from '../utils/validation';
+import {
+  DEFAULT_PHONE_VALUE,
+  sanitizeEgyptianPhoneInput,
+  normalizePhoneForSave,
+  validateEgyptianMobile,
+} from '../utils/phone';
 
 export default function SalesModule({ onBack, onNotify }) {
   const [tab, setTab] = useState('invoices'); // 'invoices' | 'customers' | 'returns' | 'outlets'
@@ -67,12 +73,15 @@ export default function SalesModule({ onBack, onNotify }) {
 
   const [newCustomer, setNewCustomer] = useState({
     name: '',
-    phone: '',
+    phone: DEFAULT_PHONE_VALUE,
     address: '',
     tax_number: '',
     credit_limit: '15000',
+    opening_balance: '0',
+    opening_balance_type: 'debit', // العميل مدين افتراضياً
     notes: ''
   });
+  const [customerFormErrors, setCustomerFormErrors] = useState({});
 
   const [newQuickProduct, setNewQuickProduct] = useState({
     name: '',
@@ -227,12 +236,29 @@ export default function SalesModule({ onBack, onNotify }) {
   // Quick Customer Save
   const handleSaveCustomer = async (e) => {
     e.preventDefault();
-    if (!validators.required(newCustomer.name)) return;
+    const errs = {};
+    const nameErr = Validators.required(newCustomer.name, 'اسم العميل');
+    if (nameErr) errs.name = nameErr;
+    const phoneErr = validateEgyptianMobile(newCustomer.phone, { required: false });
+    if (phoneErr) errs.phone = phoneErr;
+    const openNum = Number(newCustomer.opening_balance);
+    if (newCustomer.opening_balance === '' || isNaN(openNum) || openNum < 0) {
+      errs.opening_balance = 'رصيد أول المدة يجب أن يكون رقماً لا يقل عن صفر';
+    }
+    setCustomerFormErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     try {
-      const res = await api.createUnifiedParty ? await api.createUnifiedParty({ ...newCustomer, is_customer: true, is_supplier: false }) : await api.createCustomer(newCustomer);
+      const payload = {
+        ...newCustomer,
+        phone: normalizePhoneForSave(newCustomer.phone),
+        opening_balance: Math.max(0, Number(newCustomer.opening_balance) || 0),
+        opening_balance_type: newCustomer.opening_balance_type === 'credit' ? 'credit' : 'debit',
+      };
+      const res = await api.createUnifiedParty ? await api.createUnifiedParty({ ...payload, is_customer: true, is_supplier: false }) : await api.createCustomer(payload);
       onNotify(res.message || 'تمت إضافة العميل بنجاح');
       setShowAddCustomerModal(false);
-      setNewCustomer({ name: '', phone: '', address: '', tax_number: '', credit_limit: '15000', notes: '' });
+      setNewCustomer({ name: '', phone: DEFAULT_PHONE_VALUE, address: '', tax_number: '', credit_limit: '15000', opening_balance: '0', opening_balance_type: 'debit', notes: '' });
+      setCustomerFormErrors({});
       loadData();
     } catch (err) {
       alert(err.message);
@@ -883,16 +909,25 @@ export default function SalesModule({ onBack, onNotify }) {
                   onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
+                <FieldError error={customerFormErrors.name} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">الهاتف</label>
                   <input
                     type="tel"
+                    inputMode="numeric"
+                    dir="ltr"
+                    maxLength={11}
+                    placeholder="01xxxxxxxxx"
                     value={newCustomer.phone}
-                    onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                    className="w-full h-10 rounded border border-gray-300 px-3 font-mono"
+                    onChange={e => {
+                      const digits = sanitizeEgyptianPhoneInput(e.target.value);
+                      setNewCustomer({ ...newCustomer, phone: digits === '' ? DEFAULT_PHONE_VALUE : digits });
+                    }}
+                    className="w-full h-10 rounded border border-gray-300 px-3 font-mono text-left"
                   />
+                  <FieldError error={customerFormErrors.phone} />
                 </div>
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">الحد الائتماني (جنيه)</label>
@@ -905,6 +940,36 @@ export default function SalesModule({ onBack, onNotify }) {
                     className="w-full h-10 rounded border border-gray-300 px-3 font-bold text-blue-900"
                   />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 p-3 bg-emerald-50/60 border border-emerald-200 rounded">
+                <div>
+                  <label className="block font-bold text-emerald-900 mb-1">رصيد أول المدة (ج.م)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    dir="ltr"
+                    value={newCustomer.opening_balance}
+                    onChange={e => setNewCustomer({ ...newCustomer, opening_balance: e.target.value })}
+                    placeholder="0"
+                    className="w-full h-10 rounded border border-emerald-300 px-3 font-bold text-left bg-white"
+                  />
+                  <FieldError error={customerFormErrors.opening_balance} />
+                </div>
+                <div>
+                  <label className="block font-bold text-emerald-900 mb-1">طبيعة الحساب</label>
+                  <select
+                    value={newCustomer.opening_balance_type}
+                    onChange={e => setNewCustomer({ ...newCustomer, opening_balance_type: e.target.value })}
+                    className="w-full h-10 rounded border border-emerald-300 px-2 bg-white font-bold"
+                  >
+                    <option value="debit">مدين (مستحق عليه)</option>
+                    <option value="credit">دائن (دفعة مقدمة منه)</option>
+                  </select>
+                </div>
+                <p className="col-span-2 text-[11px] text-emerald-700 font-medium">
+                  الرصيد الحالي = رصيد أول المدة + فواتير البيع الآجلة − سندات القبض النقدية.
+                </p>
               </div>
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
                 <button
