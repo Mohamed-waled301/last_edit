@@ -8,7 +8,7 @@ export const SetupScreen = ({ onComplete }) => {
   const [ownerName, setOwnerName] = useState('م. خالد المنشاوي');
   const [pin, setPin] = useState('1234');
   const [confirmPin, setConfirmPin] = useState('1234');
-  const [loadDemo, setLoadDemo] = useState(true);
+  const [loadDemo, setLoadDemo] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -37,12 +37,25 @@ export const SetupScreen = ({ onComplete }) => {
     try {
       if (loadDemo) {
         await backupRepo.loadDemoData('usr-owner');
-        // Update owner name and factory name
-        const user = await usersRepo.createOwner(factoryName.trim(), ownerName.trim(), pin);
-        setActiveUser(user.id, user.role, user.full_name);
-      } else {
-        const user = await usersRepo.createOwner(factoryName.trim(), ownerName.trim(), pin);
-        setActiveUser(user.id, user.role, user.full_name);
+      }
+      
+      const user = await usersRepo.createOwner(factoryName.trim(), ownerName.trim(), pin);
+      setActiveUser(user.id, user.role, user.full_name);
+
+      // Attempt to sync clean setup to MySQL backend if online
+      try {
+        await fetch('/api/setup/init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            factoryName: factoryName.trim(),
+            ownerName: ownerName.trim(),
+            pinHash: user.pin_hash,
+            pinSalt: user.pin_salt,
+          }),
+        });
+      } catch (backendErr) {
+        // Backend sync failure is non-blocking for local setup
       }
 
       onComplete();
@@ -62,15 +75,7 @@ export const SetupScreen = ({ onComplete }) => {
             <Factory className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-bold text-[#1F2937]">مرحباً بك في نظام تخطيط موارد المؤسسات المتكامل</h1>
-          <p className="text-gray-600 text-sm mt-1">Enterprise Resource Planning (ERP) - جاهز للتشغيل الفوري أوفلاين</p>
-        </div>
-
-        {/* Notice Badge */}
-        <div className="my-5 p-3.5 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-900 flex items-start gap-3">
-          <ShieldCheck className="w-5 h-5 text-blue-800 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold">أمان وتخزين محلي فائق السرعة:</span> جميع بيانات المؤسسة تُحفظ محلياً داخل المتصفح بأعلى معايير الأمان وبدون الحاجة لخوادم سحابية خارجية.
-          </div>
+          <p className="text-gray-600 text-sm mt-1">Enterprise Resource Planning (ERP) - نظام الإدارة السحابي المتكامل</p>
         </div>
 
         {error && (

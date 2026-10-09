@@ -148,20 +148,20 @@ export const BackupModule = ({ onBack, onNotify }) => {
               <span>النسخ الاحتياطي وأمان البيانات</span>
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              إدارة النسخ الاحتياطية، التصدير والاسترجاع، وحماية بيانات المؤسسة المحلية
+              إدارة النسخ الاحتياطية، التصدير والاسترجاع، وحماية بيانات المؤسسة
             </p>
           </div>
         </div>
       </div>
 
-      {/* Security Advisory Card */}
+      {/* Database & Backup Information Card */}
       <div className="p-4 bg-white border border-gray-200 rounded-md">
         <div className="flex items-start gap-3">
           <ShieldCheck className="w-6 h-6 text-[#1F3A5F] shrink-0 mt-0.5" />
           <div className="text-sm">
-            <h3 className="font-bold text-[#1F2937] mb-1">كيف يعمل نظام الحفظ والتخزين على هذا الجهاز؟</h3>
+            <h3 className="font-bold text-[#1F2937] mb-1">الربط المركزي بقاعدة بيانات MySQL السحابية</h3>
             <p className="text-gray-600 leading-relaxed">
-              يعمل النظام بنسبة <span className="font-bold text-[#1F3A5F]">100% داخل متصفح جهازك</span> عبر تقنية قاعدة البيانات المحلية (IndexedDB). لا توجد خوادم خارجية تحتفظ ببياناتك المالية أو صور عملك. لذلك، يُعد تنزيل نسخة احتياطية أسبوعياً على فلاش ميموري (USB) أو قرص صلب خارجي هو الضمان الأكيد لحماية بياناتك من أي عطل يصيب الجهاز أو المتصفح.
+              بيانات النظام مربوطة مركزياً ومحفوظة على خادم قاعدة بيانات MySQL السحابية. يمكنك في أي وقت تنزيل نسخة احتياطية إضافية كاملة من بياناتك بصيغة JSON كأرشيف محلي إضافي أو استرجاعها عند الحاجة.
             </p>
           </div>
         </div>

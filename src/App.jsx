@@ -472,9 +472,6 @@ export default function App() {
 
         {/* Dynamic Screen View wrapped with ErrorBoundary */}
         <main className="flex-1 p-3 sm:p-5 lg:p-6 w-full max-w-[1700px] mx-auto min-w-0 overflow-y-auto overflow-x-hidden">
-          {/* Backup Reminder Banner */}
-          <BackupReminderBanner onOpenBackup={() => navigateTo('backup')} />
-
           <ErrorBoundary>
             {renderScreen()}
           </ErrorBoundary>
