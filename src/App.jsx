@@ -26,6 +26,7 @@ import OutsourcedOrderFormPage from './modules/outsourced/OutsourcedOrderFormPag
 import SalesInvoicesListPage from './modules/sales/SalesInvoicesListPage';
 import SalesInvoiceFormPage from './modules/sales/SalesInvoiceFormPage';
 import SalesInvoicePrintPage from './modules/sales/SalesInvoicePrintPage';
+import OutletsListPage from './modules/outlets/OutletsListPage';
 import SalesReturnsListPage from './modules/returns/SalesReturnsListPage';
 import SalesReturnFormPage from './modules/returns/SalesReturnFormPage';
 import TreasuriesListPage from './modules/treasuries/TreasuriesListPage';
@@ -186,6 +187,7 @@ export default function App() {
     if (r === 'manufacturing') return 'manufacturing';
     if (['outsourced', 'finishing'].includes(r)) return 'outsourced';
     if (r === 'sales') return 'sales';
+    if (['outlets', 'branches'].includes(r)) return 'outlets';
     if (r === 'returns') return 'returns';
     if (['treasuries', 'cash'].includes(r)) return 'treasuries';
     if (['disbursements', 'expense-codes', 'payment-methods'].includes(r)) return 'disbursements';
@@ -328,6 +330,11 @@ export default function App() {
         }
         return <SalesInvoicesListPage onNavigate={navigateTo} onNotify={showNotification} />;
 
+      // Outlets & Showrooms (معارض ومنافذ البيع)
+      case 'outlets':
+      case 'branches':
+        return <OutletsListPage onNavigate={navigateTo} onNotify={showNotification} />;
+
       // Returns (مرتجع حر / مرتجع بفاتورة)
       case 'returns':
         if (action === 'new') {
@@ -387,18 +394,8 @@ export default function App() {
           />
         );
 
-      // Section 4: Data Management (CEO Only)
+      // Section 4: Universal Data Management (CRUD on all system tables)
       case 'data': {
-        // Strict Route Guard: Reject non-CEO with message and redirect
-        if (activeUserRole !== 'owner') {
-          return (
-            <DataManagementPage
-              onNavigate={navigateTo}
-              onNotify={showNotification}
-            />
-          );
-        }
-
         // Full-page form for Add / Edit record
         if (parts[1] && parts[2]) {
           return (

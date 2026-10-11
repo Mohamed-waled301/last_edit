@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle2, AlertTriangle, Store, DollarSign } from 'lucide-react';
+import { Clock, CheckCircle2, AlertTriangle, Store, DollarSign, Plus } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api, getActiveUser } from '../../services/api';
 import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import QuickOutletModal from '../outlets/QuickOutletModal';
 
 export default function DailyClosingFormPage({ onSaved, onNotify }) {
   const activeUser = getActiveUser();
   const [outlets, setOutlets] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [showQuickOutletModal, setShowQuickOutletModal] = useState(false);
 
   const [form, setForm] = useState({
     outlet_id: activeUser.outlet_id || '',
@@ -38,6 +40,19 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
     }
     loadData();
   }, []);
+
+  const handleOutletCreated = async (newOutlet) => {
+    try {
+      const outRes = await api.getOutlets();
+      const list = Array.isArray(outRes.data) ? outRes.data : [];
+      setOutlets(list);
+      if (newOutlet?.id) {
+        setForm(p => ({ ...p, outlet_id: newOutlet.id }));
+      }
+    } catch (err) {
+      console.error('Failed to reload outlets:', err);
+    }
+  };
 
   const openCash = Number(form.opening_cash) || 0;
   const sales = Number(form.cash_sales) || 0;
@@ -122,10 +137,24 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                المنفذ / المعرض <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="daily-closing-outlet-select" className="block text-xs font-bold text-gray-700">
+                  المنفذ / المعرض <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickOutletModal(true)}
+                  className="text-[11px] font-bold text-[#1F3A5F] hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+                  title="إضافة فرع أو معرض جديد سريعاً"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>+ فرع جديد</span>
+                </button>
+              </div>
               <select
+                id="daily-closing-outlet-select"
+                aria-required="true"
+                aria-invalid={Boolean(errors.outlet_id)}
                 value={form.outlet_id}
                 onChange={(e) => setForm(p => ({ ...p, outlet_id: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white font-bold text-[#1F3A5F] focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
@@ -137,6 +166,18 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
                 ))}
               </select>
               <FieldError error={errors.outlet_id} />
+              {outlets.length === 0 && (
+                <div className="mt-1 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800 flex items-center justify-between">
+                  <span>لا توجد فروع مسجلة.</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickOutletModal(true)}
+                    className="font-bold underline text-[#1F3A5F] cursor-pointer"
+                  >
+                    إضافة فرع
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>
@@ -234,6 +275,14 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
           </div>
         </div>
       </form>
+
+      {/* Quick Outlet Modal */}
+      <QuickOutletModal
+        isOpen={showQuickOutletModal}
+        onClose={() => setShowQuickOutletModal(false)}
+        onCreated={handleOutletCreated}
+        onNotify={onNotify}
+      />
     </PageContainer>
   );
 }

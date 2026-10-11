@@ -160,24 +160,160 @@ export const salesRepo = {
   },
 
   async getOutlets() {
-    return await db.sales_outlets.toArray();
+    const outlets = await db.sales_outlets.toArray();
+    const treasuries = await db.treasury_accounts.toArray();
+    const trMap = new Map(treasuries.filter(t => t.outlet_id).map(t => [t.outlet_id, t]));
+    return outlets.map(o => {
+      const tr = trMap.get(o.id);
+      return {
+        ...o,
+        treasury_id: tr?.id || null,
+        treasury_name: tr?.name || null,
+        current_balance: Number(tr?.current_balance) || 0,
+      };
+    });
+  },
+
+  async getOutlet(id) {
+    const outlet = await db.sales_outlets.get(id);
+    if (!outlet) return null;
+    const treasury = await db.treasury_accounts.where('outlet_id').equals(id).first();
+    const invoicesCount = await db.sales_invoices.where('outlet_id').equals(id).count();
+    const closingsCount = await db.daily_closings.where('outlet_id').equals(id).count();
+    return {
+      ...outlet,
+      treasury_id: treasury?.id || null,
+      treasury_name: treasury?.name || null,
+      current_balance: Number(treasury?.current_balance) || 0,
+      invoices_count: invoicesCount,
+      closings_count: closingsCount,
+    };
   },
 
   async createOutlet(data, userId = 'usr-owner') {
-    const id = `out-${Date.now()}`;
+    const id = data.id || `out-${Date.now()}`;
+    const code = data.code || `OUT-${Date.now().toString().slice(-4)}`;
+    const now = new Date().toISOString();
     const outlet = {
       id,
-      name: data.name,
+      code,
+      name: data.name.trim(),
       location: data.location || '',
       contact_phone: data.contact_phone || '',
       price_markup_percent: Number(data.price_markup_percent) || 0,
       notes: data.notes || '',
-      is_active: 1,
-      created_at: new Date().toISOString(),
+      is_active: data.is_active !== undefined ? (data.is_active ? 1 : 0) : 1,
+      created_at: now,
     };
     await db.sales_outlets.add(outlet);
+
+    // Automatically create a linked treasury for this outlet
+    const treasuryId = `acc-${id}`;
+    const initialBalance = Math.max(0, Number(data.initial_balance) || 0);
+    const treasury = {
+      id: treasuryId,
+      name: `خزينة ${outlet.name}`,
+      account_type: 'treasury',
+      outlet_id: id,
+      is_main: 0,
+      current_balance: initialBalance,
+      is_active: 1,
+      created_at: now,
+    };
+    await db.treasury_accounts.put(treasury);
+
+    if (initialBalance > 0) {
+      await db.cash_transactions.add({
+        id: `tx-out-init-${Date.now()}`,
+        tx_number: `TX-INIT-${Date.now().toString().slice(-4)}`,
+        account_id: treasuryId,
+        tx_type: 'deposit',
+        category: 'opening_balance',
+        amount: initialBalance,
+        reference_type: 'OUTLET_OPENING',
+        reference_id: id,
+        notes: `رصيد افتتاحي لخزينة منفذ ${outlet.name}`,
+        created_by: userId,
+        created_at: now,
+      });
+    }
+
     await auditRepo.log(userId, 'CREATE_OUTLET', 'sales_outlets', id, null, outlet);
-    return outlet;
+    return {
+      ...outlet,
+      treasury_id: treasuryId,
+      current_balance: initialBalance,
+    };
+  },
+
+  async updateOutlet(id, data, userId = 'usr-owner') {
+    const current = await db.sales_outlets.get(id);
+    if (!current) throw new Error('المنفذ / المعرض غير موجود');
+
+    const updated = {
+      ...current,
+      name: data.name !== undefined ? data.name.trim() : current.name,
+      location: data.location !== undefined ? data.location : current.location,
+      contact_phone: data.contact_phone !== undefined ? data.contact_phone : current.contact_phone,
+      price_markup_percent: data.price_markup_percent !== undefined ? (Number(data.price_markup_percent) || 0) : current.price_markup_percent,
+      notes: data.notes !== undefined ? data.notes : current.notes,
+      is_active: data.is_active !== undefined ? (data.is_active ? 1 : 0) : current.is_active,
+      updated_at: new Date().toISOString(),
+    };
+    await db.sales_outlets.put(updated);
+
+    // Update treasury account name if outlet name changed
+    if (data.name && data.name.trim() !== current.name) {
+      const treasury = await db.treasury_accounts.where('outlet_id').equals(id).first();
+      if (treasury) {
+        await db.treasury_accounts.update(treasury.id, {
+          name: `خزينة ${updated.name}`,
+        });
+      }
+    }
+
+    await auditRepo.log(userId, 'UPDATE_OUTLET', 'sales_outlets', id, current, updated);
+    return updated;
+  },
+
+  async deleteOutlet(id, userId = 'usr-owner') {
+    const current = await db.sales_outlets.get(id);
+    if (!current) throw new Error('المنفذ / المعرض غير موجود');
+
+    // Check if sales invoices exist for this outlet
+    const invoiceCount = await db.sales_invoices.where('outlet_id').equals(id).count();
+    if (invoiceCount > 0) {
+      throw new Error(`لا يمكن حذف المنفذ "${current.name}" لوجود (${invoiceCount}) فاتورة مبيعات مرتبطة به. يمكنك تعطيل المنفذ بدلاً من حذفه.`);
+    }
+
+    // Check if daily closings exist
+    const closingCount = await db.daily_closings.where('outlet_id').equals(id).count();
+    if (closingCount > 0) {
+      throw new Error(`لا يمكن حذف المنفذ "${current.name}" لوجود (${closingCount}) تقفيل وردية مسجل له.`);
+    }
+
+    // Check if users are assigned
+    const userCount = await db.users.where('outlet_id').equals(id).count();
+    if (userCount > 0) {
+      throw new Error(`لا يمكن حذف المنفذ "${current.name}" لوجود مستخدمين / كاشير معينين عليه.`);
+    }
+
+    // Safe to delete
+    await db.sales_outlets.delete(id);
+
+    // Delete or deactivate associated treasury
+    const treasury = await db.treasury_accounts.where('outlet_id').equals(id).first();
+    if (treasury) {
+      const txCount = await db.cash_transactions.where('account_id').equals(treasury.id).count();
+      if (txCount === 0 || (txCount === 1 && treasury.current_balance === 0)) {
+        await db.treasury_accounts.delete(treasury.id);
+      } else {
+        await db.treasury_accounts.update(treasury.id, { is_active: 0 });
+      }
+    }
+
+    await auditRepo.log(userId, 'DELETE_OUTLET', 'sales_outlets', id, current, null);
+    return { success: true, message: `تم حذف المنفذ "${current.name}" بنجاح` };
   },
 
   async getSalesInvoices(outletId = null) {

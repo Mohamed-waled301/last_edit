@@ -432,6 +432,50 @@ export const partiesRepo = {
     });
 
     return { success: true, offsetNumber, amount: numAmount };
+  },
+
+  async delete(id, userId = 'usr-accountant') {
+    const current = await db.parties.get(id);
+    if (!current) throw new Error('جهة التعامل غير موجودة');
+
+    // Check sales invoices
+    const salesCount = await db.sales_invoices.where('customer_id').equals(id).count();
+    if (salesCount > 0) {
+      throw new Error(`لا يمكن حذف جهة التعامل "${current.name}" لوجود (${salesCount}) فاتورة مبيعات مرتبطة بها. يمكنك تعطيل الحساب بدلاً من حذفه.`);
+    }
+
+    // Check supplier invoices
+    const supInvCount = await db.supplier_invoices.where('supplier_id').equals(id).count();
+    if (supInvCount > 0) {
+      throw new Error(`لا يمكن حذف جهة التعامل "${current.name}" لوجود (${supInvCount}) فاتورة مشتريات مرتبطة بها.`);
+    }
+
+    // Check payments
+    const payCount = await db.payments.where('supplier_id').equals(id).count();
+    if (payCount > 0) {
+      throw new Error(`لا يمكن حذف جهة التعامل "${current.name}" لوجود (${payCount}) سند صرف مسجل لها.`);
+    }
+
+    // Check customer payments
+    const custPayCount = await db.customer_payments.where('customer_id').equals(id).count();
+    if (custPayCount > 0) {
+      throw new Error(`لا يمكن حذف جهة التعامل "${current.name}" لوجود (${custPayCount}) سند تحصيل مسجل لها.`);
+    }
+
+    // Check purchase orders
+    const poCount = await db.purchase_orders.where('supplier_id').equals(id).count();
+    if (poCount > 0) {
+      throw new Error(`لا يمكن حذف جهة التعامل "${current.name}" لوجود (${poCount}) أمر شراء مسجل باسمها.`);
+    }
+
+    await db.transaction('rw', [db.parties, db.suppliers, db.customers], async () => {
+      await db.parties.delete(id);
+      await db.suppliers.delete(id);
+      await db.customers.delete(id);
+    });
+
+    await auditRepo.log(userId, 'DELETE_PARTY', 'parties', id, current, null);
+    return { success: true, message: `تم حذف جهة التعامل "${current.name}" بنجاح` };
   }
 };
 

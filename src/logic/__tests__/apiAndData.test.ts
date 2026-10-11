@@ -189,3 +189,77 @@ describe('Customer Credit Limit Enforcement (Requirement B2, F3)', () => {
     expect(isBlocked).toBe(false);
   });
 });
+
+describe('Full Outlets (معارض ومنافذ البيع) & Entity CRUD Coverage', () => {
+  it('supports complete CRUD on sales_outlets with auto treasury generation', async () => {
+    // 1. Create Outlet
+    const created = await api.createOutlet({
+      name: 'معرض الإسكندرية - سموحة',
+      code: 'OUT-ALX-01',
+      location: 'سموحة، الإسكندرية',
+      contact_phone: '01012345678',
+      price_markup_percent: 5,
+      initial_balance: 1500,
+    });
+    expect(created.success).toBe(true);
+    expect(created.data.name).toBe('معرض الإسكندرية - سموحة');
+    expect(created.data.id).toBeDefined();
+
+    // 2. Read Outlets & Single Outlet
+    const allOutlets = await api.getOutlets();
+    expect(allOutlets.data.some(o => o.id === created.data.id)).toBe(true);
+
+    const single = await api.getOutlet(created.data.id);
+    expect(single.data.name).toBe('معرض الإسكندرية - سموحة');
+    expect(single.data.current_balance).toBe(1500);
+
+    // 3. Update Outlet
+    const updated = await api.updateOutlet(created.data.id, {
+      name: 'معرض الإسكندرية - سيدي جابر',
+      price_markup_percent: 8,
+    });
+    expect(updated.success).toBe(true);
+    expect(updated.data.name).toBe('معرض الإسكندرية - سيدي جابر');
+    expect(updated.data.price_markup_percent).toBe(8);
+
+    // 4. Delete Outlet (Safe when no transactions)
+    const delRes = await api.deleteOutlet(created.data.id);
+    expect(delRes.success).toBe(true);
+
+    const afterDelete = await api.getOutlets();
+    expect(afterDelete.data.some(o => o.id === created.data.id)).toBe(false);
+  });
+
+  it('supports item deletion with dependency checking', async () => {
+    // Create an item
+    const created = await api.createItem({
+      name: 'قماش صوف تيست للحذف',
+      code: `ITM-DEL-${Date.now()}`,
+      cost_price: 50,
+      item_type: 'raw_material',
+      unit: 'متر',
+    });
+    expect(created.success).toBe(true);
+
+    // Delete item safely
+    const delRes = await api.deleteItem(created.data.id);
+    expect(delRes.success).toBe(true);
+  });
+
+  it('supports party deletion with dependency checking', async () => {
+    // Create a customer
+    const created = await api.createParty({
+      name: 'عميل تيست للحذف',
+      code: `PTY-DEL-${Date.now()}`,
+      is_customer: 1,
+      is_supplier: 0,
+      phone: '01099998888',
+    });
+    expect(created.success).toBe(true);
+
+    // Delete customer safely
+    const delRes = await api.deleteParty(created.data.id);
+    expect(delRes.success).toBe(true);
+  });
+});
+

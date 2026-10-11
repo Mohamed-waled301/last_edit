@@ -16,6 +16,7 @@ import PageContainer from '../../components/PageContainer';
 import { api, getActiveUser } from '../../services/api';
 import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import QuickOutletModal from '../outlets/QuickOutletModal';
 
 export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
   const activeUser = getActiveUser();
@@ -27,6 +28,7 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [creditLimitExceeded, setCreditLimitExceeded] = useState(null);
+  const [showQuickOutletModal, setShowQuickOutletModal] = useState(false);
 
   const [form, setForm] = useState({
     invoice_number: '',
@@ -86,6 +88,19 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
     }
     loadDependencies();
   }, []);
+
+  const handleOutletCreated = async (newOutlet) => {
+    try {
+      const outRes = await api.getOutlets();
+      const outs = Array.isArray(outRes.data) ? outRes.data : (Array.isArray(outRes.outlets) ? outRes.outlets : []);
+      setOutlets(outs);
+      if (newOutlet?.id) {
+        setForm(prev => ({ ...prev, outlet_id: newOutlet.id }));
+      }
+    } catch (err) {
+      console.error('Failed to reload outlets:', err);
+    }
+  };
 
   // When customer is selected: immediately show their balance & credit limit
   const handleCustomerChange = async (customerId) => {
@@ -476,12 +491,37 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
               <FieldError error={errors.customer_id} />
             </div>
 
-            {/* Outlet Selector */}
+            {/* Outlet Selector + Quick Add & Management */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                الفرع / المعرض <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="sales-invoice-outlet-select" className="block text-xs font-bold text-gray-700">
+                  الفرع / المعرض <span className="text-red-500">*</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickOutletModal(true)}
+                    className="text-[11px] font-bold text-[#1F3A5F] hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+                    title="إضافة فرع أو معرض جديد سريعاً"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>+ فرع جديد</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { window.location.hash = '#/outlets'; }}
+                    className="text-[11px] text-gray-500 hover:text-[#1F3A5F] inline-flex items-center gap-0.5 cursor-pointer"
+                    title="إدارة وتعديل وحذف كافة الفروع"
+                  >
+                    <Store className="w-3 h-3" />
+                    <span>إدارة</span>
+                  </button>
+                </div>
+              </div>
               <select
+                id="sales-invoice-outlet-select"
+                aria-required="true"
+                aria-invalid={Boolean(errors.outlet_id)}
                 value={form.outlet_id}
                 onChange={(e) => setForm(prev => ({ ...prev, outlet_id: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
@@ -493,6 +533,18 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
                 ))}
               </select>
               <FieldError error={errors.outlet_id} />
+              {outlets.length === 0 && (
+                <div className="mt-1 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800 flex items-center justify-between">
+                  <span>لا توجد فروع مسجلة بالنظام بعد.</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickOutletModal(true)}
+                    className="font-bold underline text-[#1F3A5F] cursor-pointer"
+                  >
+                    اضغط هنا لإضافة أول فرع
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Invoice Date */}
@@ -766,6 +818,14 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
           </div>
         </div>
       </form>
+
+      {/* Quick Outlet Modal */}
+      <QuickOutletModal
+        isOpen={showQuickOutletModal}
+        onClose={() => setShowQuickOutletModal(false)}
+        onCreated={handleOutletCreated}
+        onNotify={onNotify}
+      />
     </PageContainer>
   );
 }

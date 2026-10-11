@@ -103,6 +103,11 @@ export const api = {
     syncPush('items', 'update', res, id);
     return { success: true, data: res, item: res, message: 'تم تحديث بيانات الصنف' };
   },
+  deleteItem: async (id) => {
+    const res = await itemsRepo.delete(id, currentUserId);
+    syncPush('items', 'delete', { id });
+    return { success: true, ...res };
+  },
   getNextItemCode: async (prefix = '') => {
     const code = await itemsRepo.getNextCode(prefix);
     return { success: true, data: code, code };
@@ -175,6 +180,13 @@ export const api = {
       syncPush('customers', 'update', { id, party_id: id, name: res.name, phone: res.phone, notes: res.notes }, id);
     }
     return { success: true, data: res, party: res, message: 'تم تحديث بيانات جهة التعامل' };
+  },
+  deleteParty: async (id) => {
+    const res = await partiesRepo.delete(id, currentUserId);
+    syncPush('parties', 'delete', { id });
+    syncPush('suppliers', 'delete', { id });
+    syncPush('customers', 'delete', { id });
+    return { success: true, ...res };
   },
   executePartyOffset: async (partyId, amount, notes = '') => {
     const res = await partiesRepo.executeOffset(partyId, amount, notes, currentUserId);
@@ -467,10 +479,24 @@ export const api = {
     const list = await salesRepo.getOutlets();
     return { success: true, data: list, outlets: list };
   },
+  getOutlet: async (id) => {
+    const o = await salesRepo.getOutlet(id);
+    return { success: true, data: o, outlet: o };
+  },
   createOutlet: async (data) => {
     const o = await salesRepo.createOutlet(data, currentUserId);
     syncPush('sales_outlets', 'insert', o);
-    return { success: true, data: o, outlet: o, message: 'تم إضافة المعرض أو المنفذ' };
+    return { success: true, data: o, outlet: o, message: 'تم إضافة المعرض أو المنفذ بنجاح' };
+  },
+  updateOutlet: async (id, data) => {
+    const o = await salesRepo.updateOutlet(id, data, currentUserId);
+    syncPush('sales_outlets', 'update', o);
+    return { success: true, data: o, outlet: o, message: 'تم تحديث بيانات المنفذ بنجاح' };
+  },
+  deleteOutlet: async (id) => {
+    const res = await salesRepo.deleteOutlet(id, currentUserId);
+    syncPush('sales_outlets', 'delete', { id });
+    return { success: true, ...res };
   },
   getSalesInvoices: async (outletId = null) => {
     // Check if current user is cashier restricted to specific outlet

@@ -16,6 +16,7 @@ import {
   HardDrive,
   Settings,
   Database,
+  Store,
   Pin,
   X,
 } from 'lucide-react';
@@ -99,6 +100,12 @@ export default function Sidebar({
       label: 'المبيعات',
       icon: Receipt,
       allowedRoles: ['owner', 'accountant', 'storekeeper', 'cashier'],
+    },
+    {
+      id: 'outlets',
+      label: 'الفروع والمعارض',
+      icon: Store,
+      allowedRoles: ['owner', 'accountant', 'cashier', 'storekeeper'],
     },
     {
       id: 'returns',
@@ -285,7 +292,7 @@ export default function Sidebar({
           })}
 
           {/* إدارة البيانات الشاملة */}
-          {isCeo && (
+          {(isCeo || userRole === 'accountant' || userRole === 'owner') && (
             <>
               <div className="my-2 border-t border-gray-200" />
               <button

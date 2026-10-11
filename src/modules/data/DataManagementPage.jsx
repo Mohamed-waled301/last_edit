@@ -41,8 +41,8 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
     endDate: '',
   });
 
-  // Verify CEO Role at Component level
-  const isCeo = currentUser?.role === 'owner';
+  // Check Authorized User
+  const isAuthorized = Boolean(currentUser?.id);
 
   useEffect(() => {
     loadTables();
@@ -248,8 +248,8 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
     }
   };
 
-  // If non-CEO, reject and show access denied
-  if (!isCeo) {
+  // If not logged in, reject
+  if (!isAuthorized) {
     return (
       <PageContainer
         title="إدارة البيانات الشاملة"
@@ -261,14 +261,10 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
           <div className="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
             <Shield className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-bold text-red-900">غير مصرح لك بالوصول</h2>
+          <h2 className="text-xl font-bold text-red-900">يرجى تسجيل الدخول أولاً</h2>
           <p className="text-sm text-red-700 leading-relaxed">
-            قسم إدارة البيانات مخصص حصرياً للرئيس التنفيذي. تم تسجيل محاولة الدخول في سجل الرقابة
-            والتعديلات لضمان أمان النظام.
+            يجب تسجيل الدخول بحساب نشط للوصول إلى إدارة البيانات الشاملة للنظام.
           </p>
-          <div className="text-xs text-gray-500 font-mono">
-            ملاحظة: هذا قيد على مستوى واجهة التطبيق.
-          </div>
           <button
             type="button"
             onClick={() => onNavigate('home')}

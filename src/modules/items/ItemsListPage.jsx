@@ -4,6 +4,9 @@ import {
   Search, 
   Layers, 
   Edit, 
+  Trash2,
+  AlertTriangle,
+  X,
   Download, 
   Image as ImageIcon,
   CheckCircle2,
@@ -20,6 +23,26 @@ export default function ItemsListPage({ onNotify }) {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all'); // 'all' | 'finished' | 'raw_material'
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleConfirmDelete = async () => {
+    if (!deleteCandidate) return;
+    try {
+      setDeleting(true);
+      setDeleteError('');
+      const res = await api.deleteItem(deleteCandidate.id);
+      if (onNotify) onNotify(res.message || 'تم حذف الصنف بنجاح');
+      setDeleteCandidate(null);
+      loadItems();
+    } catch (err) {
+      console.error('Delete item error:', err);
+      setDeleteError(err.message || 'تعذر حذف الصنف لوجود ارتباطات بالعمليات');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const loadItems = async () => {
     try {
@@ -288,15 +311,29 @@ export default function ItemsListPage({ onNotify }) {
 
                       {/* Actions */}
                       <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => { window.location.hash = `#/items/${item.id}/edit`; }}
-                          className="px-2.5 py-1 text-xs text-[#1F3A5F] hover:bg-blue-50 rounded-md font-bold transition-colors inline-flex items-center gap-1 border border-gray-200 cursor-pointer"
-                          title="تعديل بيانات الصنف"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                          <span>تعديل</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => { window.location.hash = `#/items/${item.id}/edit`; }}
+                            className="px-2.5 py-1 text-xs text-[#1F3A5F] hover:bg-blue-50 rounded-md font-bold transition-colors inline-flex items-center gap-1 border border-gray-200 cursor-pointer"
+                            title="تعديل بيانات الصنف"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>تعديل</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteCandidate(item);
+                              setDeleteError('');
+                            }}
+                            className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded-md font-bold transition-colors inline-flex items-center gap-1 border border-gray-200 cursor-pointer"
+                            title="حذف الصنف"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -306,6 +343,63 @@ export default function ItemsListPage({ onNotify }) {
           </table>
         </div>
       </div>
+
+      {/* Delete Item Confirmation Modal */}
+      {deleteCandidate && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-item-title"
+        >
+          <div className="bg-white rounded-lg shadow-2xl border border-gray-200 max-w-md w-full p-5 text-right space-y-4" dir="rtl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 id="delete-item-title" className="font-bold text-base text-gray-900">
+                  تأكيد حذف الصنف
+                </h3>
+                <p className="text-xs text-gray-500">
+                  هل أنت متأكد من رغبتك في حذف الصنف "{deleteCandidate.name}"؟
+                </p>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-xs font-semibold flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded border border-gray-200">
+              تنبيه: سيتم فحص ارتباطات الصنف بفواتير المبيعات، أوامر الشراء، بطاقات المقادير، وحركات المخزون التشغيلية لمنع الإخلال بتكامل البيانات.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setDeleteCandidate(null)}
+                disabled={deleting}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-xs font-bold transition-colors cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deleting ? 'جاري الفحص والحذف...' : 'تأكيد الحذف نهائياً'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageContainer>
   );
 }

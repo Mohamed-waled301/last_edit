@@ -319,6 +319,49 @@ export const itemsRepo = {
     };
     await db.item_colors.add(color);
     return color;
+  },
+
+  async delete(id, userId = 'usr-storekeeper') {
+    const current = await db.items.get(id);
+    if (!current) throw new Error('الصنف غير موجود');
+
+    // Check references in sales_invoice_items
+    const invCount = await db.sales_invoice_items.where('product_id').equals(id).count();
+    if (invCount > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${invCount}) بند في فواتير مبيعات مرتبطة به.`);
+    }
+
+    // Check purchase_order_items
+    const poCount = await db.purchase_order_items.where('material_id').equals(id).count();
+    if (poCount > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${poCount}) بند في أوامر شراء مرتبطة به.`);
+    }
+
+    // Check bom_items
+    const bomRawCount = await db.bom_items.where('raw_material_id').equals(id).count();
+    const bomProdCount = await db.bom_items.where('product_id').equals(id).count();
+    if (bomRawCount > 0 || bomProdCount > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لدخوله في بطاقات مقادير خامات المنتجات (BOM).`);
+    }
+
+    // Check stock movements beyond opening balance
+    const movements = await db.stock_movements.where('material_id').equals(id).toArray();
+    const operationalMovements = movements.filter(m => m.movement_type !== 'opening_balance');
+    if (operationalMovements.length > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${operationalMovements.length}) حركة مخزنية تشغيلية مسجلة عليه.`);
+    }
+
+    await db.transaction('rw', [db.items, db.materials, db.products, db.stock_movements], async () => {
+      await db.items.delete(id);
+      await db.materials.delete(id);
+      await db.products.delete(id);
+      for (const m of movements) {
+        await db.stock_movements.delete(m.id);
+      }
+    });
+
+    await auditRepo.log(userId, 'DELETE_ITEM', 'items', id, current, null);
+    return { success: true, message: `تم حذف الصنف "${current.name}" بنجاح` };
   }
 };
 

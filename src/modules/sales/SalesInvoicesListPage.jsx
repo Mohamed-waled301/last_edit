@@ -72,6 +72,16 @@ export default function SalesInvoicesListPage({ onNotify }) {
 
           <button
             type="button"
+            onClick={() => { window.location.hash = '#/outlets'; }}
+            className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="إدارة وتعديل وحذف فروع ومعارض البيع"
+          >
+            <Store className="w-4 h-4 text-[#1F3A5F]" />
+            <span>الفروع والمعارض</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => { window.location.hash = '#/sales/new'; }}
             className="px-4 py-2 bg-[#1F3A5F] hover:bg-[#162a45] text-white rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
           >

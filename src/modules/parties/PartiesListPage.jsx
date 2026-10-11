@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   CreditCard,
   ShieldCheck,
+  Trash2,
   X
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
@@ -28,6 +29,26 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
   const [offsetAmount, setOffsetAmount] = useState('');
   const [offsetNotes, setOffsetNotes] = useState('');
   const [offsetExecuting, setOffsetExecuting] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleConfirmDelete = async () => {
+    if (!deleteCandidate) return;
+    try {
+      setDeleting(true);
+      setDeleteError('');
+      const res = await api.deleteParty(deleteCandidate.id);
+      if (onNotify) onNotify(res.message || 'تم حذف جهة التعامل بنجاح');
+      setDeleteCandidate(null);
+      loadParties();
+    } catch (err) {
+      console.error('Delete party error:', err);
+      setDeleteError(err.message || 'تعذر حذف جهة التعامل لوجود ارتباطات بالعمليات');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const loadParties = async () => {
     try {
@@ -332,16 +353,32 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
 
                       {/* Actions */}
                       <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            window.location.hash = `#/suppliers/${p.id}/edit`;
-                          }}
-                          className="px-2.5 py-1 text-xs text-[#1F3A5F] hover:bg-blue-50 rounded-md font-bold transition-colors inline-flex items-center gap-1 border border-gray-200 cursor-pointer"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                          <span>تعديل</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const targetRoot = p.is_customer && !p.is_supplier ? 'customers' : 'suppliers';
+                              window.location.hash = `#/${targetRoot}/${p.id}/edit`;
+                            }}
+                            className="px-2.5 py-1 text-xs text-[#1F3A5F] hover:bg-blue-50 rounded-md font-bold transition-colors inline-flex items-center gap-1 border border-gray-200 cursor-pointer"
+                            title="تعديل بيانات جهة التعامل"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>تعديل</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteCandidate(p);
+                              setDeleteError('');
+                            }}
+                            className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded-md font-bold transition-colors inline-flex items-center gap-1 border border-gray-200 cursor-pointer"
+                            title="حذف جهة التعامل"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -429,6 +466,63 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                 className="px-5 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-md cursor-pointer disabled:opacity-50"
               >
                 {offsetExecuting ? 'جاري التنفيذ...' : 'اعتماد المقاصة الآن'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Party Confirmation Modal */}
+      {deleteCandidate && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-party-title"
+        >
+          <div className="bg-white rounded-lg shadow-2xl border border-gray-200 max-w-md w-full p-5 text-right space-y-4" dir="rtl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 id="delete-party-title" className="font-bold text-base text-gray-900">
+                  تأكيد حذف جهة التعامل
+                </h3>
+                <p className="text-xs text-gray-500">
+                  هل أنت متأكد من رغبتك في حذف جهة التعامل "{deleteCandidate.name}"؟
+                </p>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-xs font-semibold flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded border border-gray-200">
+              تنبيه: سيتم فحص ارتباطات الحساب بفواتير المبيعات والمشتريات وسندات الصرف والتحصيل لمنع حدوث أي خلل في موازين المراجعة والأرصدة.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setDeleteCandidate(null)}
+                disabled={deleting}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-xs font-bold transition-colors cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deleting ? 'جاري الفحص والحذف...' : 'تأكيد الحذف نهائياً'}</span>
               </button>
             </div>
           </div>

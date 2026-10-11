@@ -56,6 +56,16 @@ export default function TreasuriesListPage({ onNotify }) {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => { window.location.hash = '#/outlets'; }}
+            className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="إدارة وتعديل وحذف فروع ومعارض البيع"
+          >
+            <Store className="w-4 h-4 text-[#1F3A5F]" />
+            <span>الفروع والمعارض</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => { window.location.hash = '#/treasuries/closing'; }}
             className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
           >
