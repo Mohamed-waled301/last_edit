@@ -153,7 +153,6 @@ const FOREIGN_KEY_REFERENCES = {
     { table: 'stock_transfers', field: 'to_location_id', label: 'تحويلات مخزنية واردة' },
   ],
   purchase_orders: [
-    { table: 'purchase_order_items', field: 'po_id', label: 'بنود أمر الشراء' },
     { table: 'goods_receipts', field: 'po_id', label: 'أذون الاستلام' },
     { table: 'supplier_invoices', field: 'po_id', label: 'فواتير المورد' },
   ],
@@ -208,6 +207,7 @@ function getRequiredTransactionStores(tableName) {
     'parties',
     'suppliers',
     'customers',
+    'purchase_order_items',
     'supplier_invoices',
     'supplier_returns',
     'sales_invoices',
@@ -493,6 +493,11 @@ export const dataManagementRepo = {
     // Delete in transaction with audit log and balance recalculation
     const stores = getRequiredTransactionStores(tableName);
     await db.transaction('rw', stores, async () => {
+      // Deleting an order must NOT delete its items master records:
+      // Remove only the order and its order-line links (purchase_order_items), never db.items or db.materials
+      if (tableName === 'purchase_orders' && db.purchase_order_items) {
+        await db.purchase_order_items.where('po_id').equals(id).delete();
+      }
       await db[tableName].delete(id);
 
       // Audit Log entry

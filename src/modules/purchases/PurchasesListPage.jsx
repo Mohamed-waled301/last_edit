@@ -11,7 +11,8 @@ import {
   Ban,
   AlertTriangle,
   X,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
@@ -32,6 +33,10 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
   const [cancelCandidate, setCancelCandidate] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+
+  // Delete order modal state
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadOrders = async () => {
     try {
@@ -80,6 +85,22 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
       alert(err.message || 'تعذر إلغاء أمر التوريد');
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!deleteCandidate) return;
+    try {
+      setDeleting(true);
+      const res = await api.deletePurchaseOrder(deleteCandidate.id);
+      if (onNotify) onNotify(res.message || 'تم حذف أمر التوريد بنجاح');
+      setDeleteCandidate(null);
+      loadOrders();
+    } catch (err) {
+      console.error('Delete order error:', err);
+      alert(err.message || 'تعذر حذف أمر التوريد');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -393,6 +414,18 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                                 <span>إلغاء</span>
                               </button>
                             )}
+
+                            {o.status !== 'received' && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteCandidate(o)}
+                                className="px-2 py-1 text-xs text-rose-700 hover:bg-rose-50 rounded-md font-semibold transition-colors inline-flex items-center gap-1 border border-slate-200"
+                                title="حذف أمر التوريد وبنوده دون حذف الأصناف"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>حذف</span>
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -520,6 +553,60 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
               >
                 <Ban className="w-3.5 h-3.5" />
                 <span>{cancelling ? 'جاري الإلغاء...' : 'تأكيد إلغاء الأمر'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Order Confirmation Modal */}
+      {deleteCandidate && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-6 text-right space-y-4" dir="rtl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">
+                  تأكيد حذف أمر التوريد
+                </h3>
+                <p className="text-xs text-slate-500">
+                  أمر الشراء رقم {deleteCandidate.po_number} - المورد: {deleteCandidate.supplier_name}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 rounded-lg text-xs space-y-1.5 border border-amber-200 text-amber-900">
+              <p className="font-semibold">
+                تنبيه هام حول سلامة البيانات:
+              </p>
+              <p>
+                سيتم حذف أمر التوريد وبنود ربطه فقط. الأصناف المسجلة في هذا الأمر والمورد سيبقون مسجلين في النظام تماماً ولن يتم حذفهم أو تعديلهم.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteCandidate(null)}
+                disabled={deleting}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteOrder}
+                disabled={deleting}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deleting ? 'جاري الحذف...' : 'تأكيد الحذف نهائياً'}</span>
               </button>
             </div>
           </div>

@@ -683,6 +683,67 @@ export const itemsRepo = {
     };
     await db.item_colors.add(color);
     return color;
+  },
+
+  /**
+   * Units Master Management
+   */
+  async getUnits() {
+    if (!db.item_units) {
+      return [
+        { id: 'u-piece', name: 'قطعة', code: 'قطعة', is_active: 1 },
+        { id: 'u-dozen', name: 'دستة', code: 'دستة', is_active: 1 },
+        { id: 'u-meter', name: 'متر', code: 'متر', is_active: 1 },
+        { id: 'u-kg', name: 'كيلوجرام', code: 'كجم', is_active: 1 },
+        { id: 'u-set', name: 'طقم', code: 'طقم', is_active: 1 },
+        { id: 'u-roll', name: 'ثوب', code: 'ثوب', is_active: 1 },
+        { id: 'u-spool', name: 'بكرة', code: 'بكرة', is_active: 1 },
+        { id: 'u-bag', name: 'كيس', code: 'كيس', is_active: 1 },
+        { id: 'u-box', name: 'كرتونة', code: 'كرتونة', is_active: 1 }
+      ];
+    }
+    const units = await db.item_units.filter(u => u.is_active === 1).toArray().catch(() => []);
+    if (units.length === 0) {
+      const defaults = [
+        { id: 'u-piece', name: 'قطعة', code: 'قطعة', is_active: 1 },
+        { id: 'u-dozen', name: 'دستة', code: 'دستة', is_active: 1 },
+        { id: 'u-meter', name: 'متر', code: 'متر', is_active: 1 },
+        { id: 'u-kg', name: 'كيلوجرام', code: 'كجم', is_active: 1 },
+        { id: 'u-set', name: 'طقم', code: 'طقم', is_active: 1 },
+        { id: 'u-roll', name: 'ثوب', code: 'ثوب', is_active: 1 },
+        { id: 'u-spool', name: 'بكرة', code: 'بكرة', is_active: 1 },
+        { id: 'u-bag', name: 'كيس', code: 'كيس', is_active: 1 },
+        { id: 'u-box', name: 'كرتونة', code: 'كرتونة', is_active: 1 }
+      ];
+      try {
+        await db.item_units.bulkPut(defaults);
+      } catch (e) {}
+      return defaults;
+    }
+    return units;
+  },
+
+  async createUnit(data, userId = 'usr-storekeeper') {
+    const rawName = typeof data === 'string' ? data : (data?.name || '');
+    const name = rawName.trim();
+    if (!name) throw new Error('اسم وحدة القياس مطلوب');
+
+    if (db.item_units) {
+      const existing = await db.item_units.filter(u => u.name === name).first().catch(() => null);
+      if (existing) return existing;
+      const unit = {
+        id: `u-${Date.now()}`,
+        name,
+        code: (typeof data === 'object' && data.code ? data.code : name).trim(),
+        is_active: 1,
+        created_at: new Date().toISOString()
+      };
+      await db.item_units.add(unit);
+      await auditRepo.log(userId, 'CREATE_UNIT', 'item_units', unit.id, null, unit).catch(() => {});
+      return unit;
+    }
+
+    return { id: `u-${Date.now()}`, name, code: name, is_active: 1 };
   }
 };
 

@@ -13,13 +13,13 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
   const [selectedPO, setSelectedPO] = useState(null);
 
   const [form, setForm] = useState({
-    finishing_number: '',
+    finishing_number: `ORD-OUT-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`,
     production_order_id: '',
     supplier_id: '',
     external_factory_name: '',
-    finishing_quantity: '100',
-    service_fee: '25', // مصنعية القطعة لدى المصنع الخارجي
-    transport_cost: '300',
+    finishing_quantity: '',
+    service_fee: '',
+    transport_cost: '',
     transfer_date: getTodayDateString(),
     notes: ''
   });
@@ -40,26 +40,6 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
 
         setProductionOrders(pos);
         setServiceSuppliers(sups);
-
-        if (pos.length > 0) {
-          const firstPO = pos[0];
-          setSelectedPO(firstPO);
-          setForm(prev => ({
-            ...prev,
-            production_order_id: firstPO.id,
-            finishing_quantity: String(firstPO.batch_quantity || 100),
-            finishing_number: `ORD-OUT-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`
-          }));
-        }
-
-        const defaultServiceSup = sups.find(s => s.supplier_type === 'service') || sups[0];
-        if (defaultServiceSup) {
-          setForm(prev => ({
-            ...prev,
-            supplier_id: defaultServiceSup.id,
-            external_factory_name: defaultServiceSup.name
-          }));
-        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -107,7 +87,7 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
   const validate = () => {
     const errs = {};
     if (!form.production_order_id) errs.production_order_id = 'يرجى اختيار أمر الإنتاج الأصلي';
-    if (!form.external_factory_name.trim() && !form.supplier_id) {
+    if (!form.external_factory_name.trim()) {
       errs.external_factory_name = 'اسم مصنع التشغيل الخارجي مطلوب';
     }
     const qtyErr = Validators.positiveNumber(form.finishing_quantity, 'كمية التشغيل الخارجي');
@@ -151,7 +131,7 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
     }
   };
 
-  const isFormValid = Boolean(form.production_order_id && (form.external_factory_name || form.supplier_id) && qty > 0);
+  const isFormValid = Boolean(form.production_order_id && form.external_factory_name.trim() && qty > 0);
 
   return (
     <PageContainer
@@ -265,7 +245,6 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
                 required
               />
               <FieldError error={errors.external_factory_name} />
-              <p className="text-xs text-gray-500 mt-1">مثال: مصنع الفاخر للتطريز الآلي أو مغسلة الشروق</p>
             </div>
 
             {/* Transfer Date */}

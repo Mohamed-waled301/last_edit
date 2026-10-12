@@ -15,7 +15,7 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
     from_treasury_id: '',
     amount: '',
     transfer_date: getTodayDateString(),
-    notes: 'توريد إيراد المنفذ إلى الخزينة المركزية الرئيسية'
+    notes: ''
   });
 
   const [errors, setErrors] = useState({});

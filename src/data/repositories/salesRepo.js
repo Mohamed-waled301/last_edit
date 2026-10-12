@@ -522,39 +522,182 @@ export const salesRepo = {
       // If Cash invoice or paid amount > 0, record cash inflow in outlet treasury
       if (paidAmount > 0) {
         let treasury = null;
-        if (data.outlet_id) {
+        if (data.account_id) {
+          treasury = await db.treasury_accounts.get(data.account_id);
+        }
+        if (!treasury && data.outlet_id) {
           treasury = await db.treasury_accounts.where('outlet_id').equals(data.outlet_id).first();
         }
         if (!treasury) {
           treasury = (await db.treasury_accounts.where('is_main').equals(1).first()) ||
-                     (await db.treasury_accounts.where('account_type').equals('treasury').first());
+                     (await db.treasury_accounts.where('account_type').equals('treasury').first()) ||
+                     (await db.treasury_accounts.toCollection().first());
         }
-
-        if (treasury) {
-          const currentBal = Number(treasury.current_balance) || 0;
-          const newBal = Number((currentBal + paidAmount).toFixed(2));
-          await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
-
-          await db.cash_transactions.add({
-            id: `tx-${Date.now()}`,
-            tx_number: `TXN-${Date.now().toString().slice(-4)}`,
-            account_id: treasury.id,
-            tx_type: 'inflow',
-            category: 'sales',
-            amount: paidAmount,
-            balance_after: newBal,
-            reference_type: 'sales_invoices',
-            reference_id: id,
-            description: `تحصيل فاتورة مبيعات ${invoiceNumber}`,
-            created_by: userId,
+        if (!treasury) {
+          treasury = {
+            id: 'acc-main',
+            name: 'الخزينة الرئيسية',
+            account_type: 'treasury',
+            outlet_id: null,
+            is_main: 1,
+            current_balance: 0,
             created_at: now
-          });
+          };
+          await db.treasury_accounts.put(treasury);
         }
+
+        const currentBal = Number(treasury.current_balance) || 0;
+        const newBal = Number((currentBal + paidAmount).toFixed(2));
+        await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
+
+        await db.cash_transactions.add({
+          id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+          account_id: treasury.id,
+          tx_type: 'inflow',
+          category: 'sales',
+          amount: paidAmount,
+          balance_after: newBal,
+          reference_type: 'sales_invoices',
+          reference_id: id,
+          description: `تحصيل فاتورة مبيعات ${invoiceNumber}`,
+          created_by: userId,
+          created_at: now
+        });
       }
     });
 
     await auditRepo.log(userId, 'CREATE_SALES_INVOICE', 'sales_invoices', id, null, { invoiceNumber, subtotal, paymentTerms });
     return invoice;
+  },
+
+  /**
+   * Cancelling a sales invoice:
+   * - Reverses inventory quantities to finished goods (reverse stock effect).
+   * - If CREDIT: removes debt from customer's balance (treasury untouched).
+   * - If CASH: reverses effect on treasury by refunding cash (customer balance untouched).
+   * - Must NOT delete the customer, and must NOT delete/rename items.
+   * - Idempotent: already cancelled invoice changes nothing.
+   * - Uses a single database transaction.
+   */
+  async cancelSalesInvoice(invoiceId, reason = '', userId = 'usr-accountant') {
+    const inv = await db.sales_invoices.get(invoiceId);
+    if (!inv) throw new Error('فاتورة المبيعات غير موجودة');
+
+    // Prevent double cancellation (second attempt changes nothing)
+    if (inv.status === 'cancelled') {
+      return { success: true, message: 'فاتورة المبيعات ملغاة بالفعل', alreadyCancelled: true };
+    }
+
+    const now = new Date().toISOString();
+    const today = now.split('T')[0];
+
+    await db.transaction('rw', [
+      db.sales_invoices,
+      db.sales_invoice_items,
+      db.products,
+      db.items,
+      db.stock_movements,
+      db.treasury_accounts,
+      db.cash_transactions,
+      db.customers,
+      db.parties
+    ], async () => {
+      // 1. Gather line items and restore inventory
+      const items = await db.sales_invoice_items.where('invoice_id').equals(invoiceId).toArray();
+      for (let idx = 0; idx < items.length; idx++) {
+        const item = items[idx];
+        const qty = Number(item.quantity) || 0;
+        if (qty > 0 && item.product_id) {
+          const prod = await db.products.get(item.product_id);
+          if (prod) {
+            const newStock = Number(((Number(prod.current_finished_stock) || 0) + qty).toFixed(2));
+            await db.products.update(prod.id, { current_finished_stock: newStock });
+          }
+          const itm = await db.items.get(item.product_id);
+          if (itm) {
+            const newStock = Number(((Number(itm.current_stock) || 0) + qty).toFixed(2));
+            await db.items.update(itm.id, { current_stock: newStock });
+          }
+
+          // Inbound reversal stock movement
+          await db.stock_movements.add({
+            id: `sm-sls-rev-${Date.now()}-${idx}`,
+            item_id: item.product_id,
+            material_id: item.product_id,
+            location_id: 'loc-main',
+            movement_type: 'reversal',
+            direction: 'in',
+            quantity: qty,
+            quantity_change: qty,
+            unit_cost: item.unit_cost || 0,
+            document_id: invoiceId,
+            reference_type: 'SALES_INVOICE_CANCELLED',
+            reference_id: invoiceId,
+            date: today,
+            movement_date: today,
+            notes: `حركة عكسية لإلغاء فاتورة المبيعات ${inv.invoice_number}`,
+            created_by: userId,
+            created_at: now
+          });
+        }
+      }
+
+      // 2. Reverse debt according to payment terms
+      const isCredit = inv.payment_terms === 'credit';
+      const paidAmount = Number(inv.paid_amount) || 0;
+
+      if (isCredit) {
+        // CREDIT: Customer receivable is reversed automatically by status = 'cancelled'
+        // Treasury is untouched.
+      } else if (paidAmount > 0) {
+        // CASH: Refund paid amount to customer out of the outlet/main treasury
+        let treasury = null;
+        if (inv.outlet_id) {
+          treasury = await db.treasury_accounts.where('outlet_id').equals(inv.outlet_id).first();
+        }
+        if (!treasury) {
+          treasury = (await db.treasury_accounts.where('is_main').equals(1).first()) ||
+                     (await db.treasury_accounts.where('account_type').equals('treasury').first()) ||
+                     (await db.treasury_accounts.toCollection().first());
+        }
+        if (treasury) {
+          const currentBal = Number(treasury.current_balance) || 0;
+          const newBal = Number((currentBal - paidAmount).toFixed(2));
+          await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
+
+          await db.cash_transactions.add({
+            id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+            account_id: treasury.id,
+            tx_type: 'outflow',
+            category: 'sales_cancellation',
+            amount: paidAmount,
+            balance_after: newBal,
+            reference_type: 'sales_invoices',
+            reference_id: invoiceId,
+            description: `رد نقدية لإلغاء فاتورة مبيعات ${inv.invoice_number}`,
+            created_by: userId,
+            created_at: now
+          });
+        }
+      }
+
+      // 3. Mark invoice as cancelled
+      await db.sales_invoices.update(invoiceId, {
+        status: 'cancelled',
+        cancellation_reason: reason || 'إلغاء الفاتورة',
+        cancelled_at: now,
+        cancelled_by: userId
+      });
+    });
+
+    await auditRepo.log(userId, 'CANCEL_SALES_INVOICE', 'sales_invoices', invoiceId, inv, {
+      status: 'cancelled',
+      reason
+    });
+
+    return { success: true, message: 'تم إلغاء فاتورة المبيعات بنجاح' };
   },
 
   async collectPayment(data, userId = 'usr-accountant') {

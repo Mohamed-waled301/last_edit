@@ -502,7 +502,6 @@ export default function OutletsListPage({ onNavigate, onNotify }) {
                     onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md font-semibold text-xs focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                   />
-                  <p className="text-xs text-gray-500 mt-1">مثال: معرض النزهة، منفذ العاشر</p>
                   {formErrors.name && (
                     <span className="text-[10px] text-red-600 mt-0.5 block">{formErrors.name}</span>
                   )}
@@ -535,7 +534,6 @@ export default function OutletsListPage({ onNavigate, onNotify }) {
                     onChange={(e) => setFormData((p) => ({ ...p, location: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                   />
-                  <p className="text-xs text-gray-500 mt-1">مثال: القاهرة، مدينة نصر</p>
                 </div>
 
                 <div>

@@ -394,7 +394,6 @@ export default function ManufacturingModule({ onBack, onNotify }) {
                   onChange={e => setNewOrder({ ...newOrder, notes: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs focus:border-[#1F3A5F] focus:outline-none"
                 />
-                <p className="text-xs text-gray-500 mt-1">مثال: باترون رقم 102 - تسليم مستعجل لموسم العيد</p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">

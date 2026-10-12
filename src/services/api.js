@@ -25,6 +25,7 @@ import {
   expenseCodesRepo,
   dataManagementRepo,
 } from '../data';
+import db from '../data/db';
 import { syncPush, syncFetch, syncHydrateAll } from './apiSync';
 
 let currentUserId = 'usr-owner';
@@ -129,6 +130,17 @@ export const api = {
     const res = await itemsRepo.createColor(data);
     syncPush('item_colors', 'insert', res);
     return { success: true, data: res, color: res, message: 'تم إضافة اللون بنجاح' };
+  },
+
+  // Item Units
+  getItemUnits: async () => {
+    const list = await itemsRepo.getUnits();
+    return { success: true, data: list, units: list };
+  },
+  createItemUnit: async (data) => {
+    const res = await itemsRepo.createUnit(data, currentUserId);
+    syncPush('item_units', 'insert', res);
+    return { success: true, data: res, unit: res, message: 'تم إضافة وحدة القياس بنجاح' };
   },
 
   // Item Groups
@@ -402,6 +414,12 @@ export const api = {
     if (Array.isArray(res.items)) {
       syncPush('purchase_order_items', 'insert', res.items);
     }
+    const tx = await db.cash_transactions.where('reference_id').equals(res.id).first().catch(() => null);
+    if (tx) {
+      syncPush('cash_transactions', 'insert', tx);
+      const acc = await db.treasury_accounts.get(tx.account_id).catch(() => null);
+      if (acc) syncPush('treasury_accounts', 'update', acc, acc.id);
+    }
     return { success: true, data: res, ...res, message: 'تم إصدار أمر التوريد بنجاح' };
   },
   receivePurchaseOrderFull: async (poId) => {
@@ -410,7 +428,35 @@ export const api = {
   },
   cancelPurchaseOrder: async (poId, reason = '') => {
     const res = await suppliersRepo.cancelPurchaseOrder(poId, reason, currentUserId);
+    syncPush('purchase_orders', 'update', { id: poId, status: 'cancelled' }, poId);
+    const tx = await db.cash_transactions.where('reference_id').equals(poId).reverse().first().catch(() => null);
+    if (tx && tx.category === 'purchase_orders') {
+      syncPush('cash_transactions', 'insert', tx);
+      const acc = await db.treasury_accounts.get(tx.account_id).catch(() => null);
+      if (acc) syncPush('treasury_accounts', 'update', acc, acc.id);
+    }
     return { success: true, data: res, ...res, message: 'تم إلغاء أمر التوريد بنجاح' };
+  },
+  deletePurchaseOrder: async (poId) => {
+    const res = await suppliersRepo.deletePurchaseOrder(poId, currentUserId);
+    syncPush('purchase_orders', 'delete', null, poId);
+    return { success: true, ...res, message: 'تم حذف أمر التوريد بنجاح' };
+  },
+  deleteOrder: async (orderId) => {
+    const res = await suppliersRepo.deletePurchaseOrder(orderId, currentUserId);
+    syncPush('purchase_orders', 'delete', null, orderId);
+    return { success: true, ...res, message: 'تم حذف أمر التوريد بنجاح' };
+  },
+  cancelSupplierInvoice: async (invoiceId, reason = '') => {
+    const res = await suppliersRepo.cancelSupplierInvoice(invoiceId, reason, currentUserId);
+    syncPush('supplier_invoices', 'update', { id: invoiceId, status: 'cancelled' }, invoiceId);
+    const tx = await db.cash_transactions.where('reference_id').equals(invoiceId).first().catch(() => null);
+    if (tx) {
+      syncPush('cash_transactions', 'insert', tx);
+      const acc = await db.treasury_accounts.get(tx.account_id).catch(() => null);
+      if (acc) syncPush('treasury_accounts', 'update', acc, acc.id);
+    }
+    return { success: true, ...res, message: 'تم إلغاء فاتورة المورد بنجاح' };
   },
   getDueInstallments: async () => {
     const list = await suppliersRepo.getDueInstallments();
@@ -590,7 +636,31 @@ export const api = {
     if (Array.isArray(res.items)) {
       syncPush('sales_invoice_items', 'insert', res.items);
     }
+    const tx = await db.cash_transactions.where('reference_id').equals(res.id).first().catch(() => null);
+    if (tx) {
+      syncPush('cash_transactions', 'insert', tx);
+      const acc = await db.treasury_accounts.get(tx.account_id).catch(() => null);
+      if (acc) syncPush('treasury_accounts', 'update', acc, acc.id);
+    }
     return { success: true, data: res, invoice: res, message: 'تم إصدار فاتورة المبيعات بنجاح' };
+  },
+  cancelSalesInvoice: async (invoiceId, reason = '') => {
+    const res = await salesRepo.cancelSalesInvoice(invoiceId, reason, currentUserId);
+    syncPush('sales_invoices', 'update', { id: invoiceId, status: 'cancelled' }, invoiceId);
+    const tx = await db.cash_transactions.where('reference_id').equals(invoiceId).first().catch(() => null);
+    if (tx) {
+      syncPush('cash_transactions', 'insert', tx);
+      const acc = await db.treasury_accounts.get(tx.account_id).catch(() => null);
+      if (acc) syncPush('treasury_accounts', 'update', acc, acc.id);
+    }
+    return { success: true, ...res, message: 'تم إلغاء فاتورة المبيعات بنجاح' };
+  },
+  cancelInvoice: async (invoiceId, reason = '') => {
+    const supInv = await db.supplier_invoices.get(invoiceId).catch(() => null);
+    if (supInv) {
+      return api.cancelSupplierInvoice(invoiceId, reason);
+    }
+    return api.cancelSalesInvoice(invoiceId, reason);
   },
   collectCustomerPayment: async (data) => {
     const res = await salesRepo.collectPayment(data, currentUserId);

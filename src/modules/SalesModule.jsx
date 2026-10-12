@@ -86,11 +86,11 @@ export default function SalesModule({ onBack, onNotify }) {
   const [newQuickProduct, setNewQuickProduct] = useState({
     name: '',
     code: '',
-    group: 'ملابس جاهزة رجالي',
+    group: '',
     type: 'finished',
     unit: 'قطعة',
-    selling_price: 250,
-    cost_price: 130
+    selling_price: 0,
+    cost_price: 0
   });
 
   const [returnForm, setReturnForm] = useState({
@@ -273,7 +273,7 @@ export default function SalesModule({ onBack, onNotify }) {
       const res = await api.createItem ? await api.createItem(newQuickProduct) : await api.createProduct(newQuickProduct);
       onNotify(res.message || 'تمت إضافة الموديل بنجاح');
       setShowAddProductModal(false);
-      setNewQuickProduct({ name: '', code: '', group: 'ملابس جاهزة رجالي', type: 'finished', unit: 'قطعة', selling_price: 250, cost_price: 130 });
+      setNewQuickProduct({ name: '', code: '', group: '', type: 'finished', unit: 'قطعة', selling_price: 0, cost_price: 0 });
       loadData();
     } catch (err) {
       alert(err.message);
@@ -908,7 +908,6 @@ export default function SalesModule({ onBack, onNotify }) {
                   onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
-                <p className="text-xs text-gray-500 mt-1">مثال: محلات النجمة للملابس</p>
                 <FieldError error={customerFormErrors.name} />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1009,7 +1008,6 @@ export default function SalesModule({ onBack, onNotify }) {
                   onChange={e => setNewQuickProduct({ ...newQuickProduct, name: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
-                <p className="text-xs text-gray-500 mt-1">مثال: قميص أكسفورد كلاسيك أزرق</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1219,7 +1217,6 @@ export default function SalesModule({ onBack, onNotify }) {
                   onChange={e => setReturnForm({ ...returnForm, reason: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
-                <p className="text-xs text-gray-500 mt-1">مثال: مقاس غير مناسب / استبدال موديل</p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">

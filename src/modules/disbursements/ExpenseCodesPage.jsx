@@ -115,7 +115,6 @@ export default function ExpenseCodesPage({ onNotify }) {
                 onChange={(e) => setForm(p => ({ ...p, code: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
-              <p className="text-xs text-gray-500 mt-1">مثال: 01 أو كهرباء</p>
             </div>
 
             <div>
@@ -130,7 +129,6 @@ export default function ExpenseCodesPage({ onNotify }) {
                 required
               />
               <FieldError error={errors.name} />
-              <p className="text-xs text-gray-500 mt-1">مثال: كهرباء المصنع، شحن بضاعة، صيانة ماكينات</p>
             </div>
 
             <div>

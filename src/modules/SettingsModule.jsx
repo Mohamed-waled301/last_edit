@@ -23,7 +23,8 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
     address: '',
     vat_enabled: false,
     vat_rate_percent: 14.00,
-    currency_symbol: 'ج.م'
+    currency_symbol: 'ج.م',
+    default_profit_margin_percent: 0
   });
   const [auditLogs, setAuditLogs] = useState([]);
   const [lastBackup, setLastBackup] = useState(null);
@@ -162,6 +163,18 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
                 type="text"
                 value={settings.address || ''}
                 onChange={e => setSettings({ ...settings, address: e.target.value })}
+                className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">نسبة هامش الربح الافتراضية (%)</label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={settings.default_profit_margin_percent !== undefined ? settings.default_profit_margin_percent : 0}
+                onChange={e => setSettings({ ...settings, default_profit_margin_percent: Number(e.target.value) || 0 })}
                 className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
               />
             </div>

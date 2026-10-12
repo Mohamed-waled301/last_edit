@@ -23,6 +23,7 @@ import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, formatNumber, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import { calculatePurchaseOrderTotals } from '../../logic/purchaseOrderCalculations';
 
 export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCancel, onNotify, onBack }) {
   const isEdit = Boolean(orderId);
@@ -118,12 +119,11 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         setSectionsList(secs);
 
         const poNum = `PO-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
-        const initialSupId = sups.length > 0 ? sups[0].id : '';
 
         setForm((prev) => ({
           ...prev,
           po_number: poNum,
-          supplier_id: initialSupId,
+          supplier_id: '',
           order_date: today,
           expected_date: today,
           payment_terms: 'cash',
@@ -135,8 +135,8 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         setQuickItemForm({
           code: nextCodeRes?.code || '1001',
           name: '',
-          item_group: grps[0]?.name || 'خامات ومستلزمات',
-          item_department: secs[0]?.name || 'عام',
+          item_group: '',
+          item_department: '',
           item_type: 'raw_material',
           unit: 'متر',
           cost_price: ''
@@ -298,9 +298,15 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     }));
   };
 
-  const discountValue = Number(form.discount_value) || 0;
-  const additionalExpenses = Number(form.additional_expenses) || 0;
-  const grandTotal = Math.max(0, Number((subtotal - discountValue + additionalExpenses).toFixed(2)));
+  const totals = calculatePurchaseOrderTotals({
+    subtotal,
+    discountValue: form.discount_value,
+    additionalExpenses: form.additional_expenses
+  });
+  const discountValue = totals.discountValue;
+  const additionalExpenses = totals.additionalExpenses;
+  const grandTotal = totals.finalNet;
+  const isTotalsValid = totals.isValid;
 
   // Installments handling for Credit Orders
   const installmentsTotal = form.installments.reduce((sum, inst) => sum + (Number(inst.amount) || 0), 0);
@@ -438,13 +444,23 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       }
     }
 
+    if (!isTotalsValid) {
+      errs.totals = 'الصافي النهائي لا يمكن أن يكون أقل من صفر (المصاريف الإضافية والخصم أكبر من إجمالي البنود)';
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    if (!validate()) return;
+    if (!validate()) {
+      if (!isTotalsValid) {
+        if (onNotify) onNotify('الصافي النهائي لا يمكن أن يكون أقل من صفر (المصاريف الإضافية والخصم أكبر من إجمالي البنود)', 'error');
+        alert('الصافي النهائي لا يمكن أن يكون أقل من صفر');
+      }
+      return;
+    }
 
     try {
       setSaving(true);
@@ -565,6 +581,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                 className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
                 required
               >
+                <option value="">-- اختر المورد المطلوب --</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.code || s.id})
@@ -585,8 +602,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                 onChange={(e) => setForm((prev) => ({ ...prev, order_date: e.target.value }))}
                 className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
                 required
-              >
-              </input>
+              />
             </div>
 
             {/* Expected receipt date: defaults to today, editable */}
@@ -1178,7 +1194,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
 
             <div>
               <label htmlFor="additional-exp-input" className="block text-xs font-semibold text-slate-700 mb-1">
-                مصروفات إضافية ونولون
+                مصاريف إضافية (ج.م)
               </label>
               <input
                 id="additional-exp-input"
@@ -1192,8 +1208,14 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
             </div>
           </div>
 
+          {!isTotalsValid && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-bold text-red-700">
+              الصافي النهائي لا يمكن أن يكون أقل من صفر (المصاريف الإضافية والخصم أكبر من إجمالي البنود)
+            </div>
+          )}
+
           <div className="p-4 bg-slate-900 text-white rounded-xl flex items-center justify-between">
-            <span className="text-sm font-bold">صافي إجمالي أمر التوريد:</span>
+            <span className="text-sm font-bold">الصافي النهائي:</span>
             <span className="text-xl font-bold font-mono text-emerald-400">
               {formatCurrency(grandTotal)}
             </span>

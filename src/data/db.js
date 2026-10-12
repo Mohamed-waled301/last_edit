@@ -31,6 +31,7 @@ export const SCHEMA_V1 = {
   item_sections: 'id, code, name, group_id, is_active, created_at',
   item_sizes: 'id, name, code, is_active',
   item_colors: 'id, name, hex_code, is_active',
+  item_units: 'id, name, code, is_active',
   materials: 'id, code, name, unit, is_active, created_at',
   products: 'id, code, name, category, is_active, created_at',
   bom_items: 'id, product_id, raw_material_id',
@@ -78,6 +79,7 @@ export class WorkshopDatabase extends Dexie {
     this.version(4).stores(SCHEMA_V1);
     this.version(5).stores(SCHEMA_V1);
     this.version(6).stores(SCHEMA_V1);
+    this.version(7).stores(SCHEMA_V1);
   }
 }
 
@@ -116,6 +118,7 @@ export async function purgeAllMockData() {
     'item_sections',
     'item_sizes',
     'item_colors',
+    'item_units',
     'materials',
     'products',
     'bom_items',
@@ -231,12 +234,13 @@ export async function ensureDatabaseIntegrity() {
     if (settingsCount === 0) {
       await db.settings.put({
         id: 1,
-        factory_name: 'مؤسسة مصنع الملابس',
+        factory_name: '',
         phone: '',
         address: '',
         vat_enabled: 0,
         vat_rate_percent: 14.0,
         currency_symbol: 'ج.م',
+        default_profit_margin_percent: 0,
         last_backup_date: null,
         notice_dismissed: false,
       });
@@ -305,6 +309,22 @@ export async function ensureDatabaseIntegrity() {
         { id: 'sec-3', code: 'SEC-03', name: 'قسم السويت شيرت والهودي', group_id: 'grp-1', notes: 'ملابس شتوية وميلتون', is_active: 1, created_at: new Date().toISOString() },
         { id: 'sec-4', code: 'SEC-04', name: 'قسم أقمشة التريكو والقص', group_id: 'grp-2', notes: 'أثواب قماش صالة القص', is_active: 1, created_at: new Date().toISOString() },
         { id: 'sec-5', code: 'SEC-05', name: 'قسم الخيوط والأزرار والمستلزمات', group_id: 'grp-3', notes: 'مستلزمات ماكينات الحياكة', is_active: 1, created_at: new Date().toISOString() },
+      ]);
+    }
+
+    // Ensure baseline item units
+    const unitCount = await db.item_units?.count().catch(() => 0);
+    if (unitCount === 0 && db.item_units) {
+      await db.item_units.bulkPut([
+        { id: 'u-piece', name: 'قطعة', code: 'قطعة', is_active: 1 },
+        { id: 'u-dozen', name: 'دستة', code: 'دستة', is_active: 1 },
+        { id: 'u-meter', name: 'متر', code: 'متر', is_active: 1 },
+        { id: 'u-kg', name: 'كيلوجرام', code: 'كجم', is_active: 1 },
+        { id: 'u-set', name: 'طقم', code: 'طقم', is_active: 1 },
+        { id: 'u-roll', name: 'ثوب', code: 'ثوب', is_active: 1 },
+        { id: 'u-spool', name: 'بكرة', code: 'بكرة', is_active: 1 },
+        { id: 'u-bag', name: 'كيس', code: 'كيس', is_active: 1 },
+        { id: 'u-box', name: 'كرتونة', code: 'كرتونة', is_active: 1 }
       ]);
     }
   } catch (err) {

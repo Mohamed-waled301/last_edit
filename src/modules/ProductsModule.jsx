@@ -54,14 +54,14 @@ export default function ProductsModule({ onBack, onNotify }) {
   const [itemForm, setItemForm] = useState({
     code: '',
     name: '',
-    item_group: 'ملابس رجالي كاجوال',
-    item_department: 'قسم البولو والتيشيرت',
+    item_group: '',
+    item_department: '',
     item_type: 'finished', // 'finished' | 'raw_material'
     image: '',
     unit: 'قطعة',
     cost_price: '',
     selling_price: '',
-    min_issue_qty: '50',
+    min_issue_qty: '',
     opening_balance: '0',
     variants: [],
     notes: ''
@@ -161,14 +161,14 @@ export default function ProductsModule({ onBack, onNotify }) {
       setItemForm({
         code: codeRes.data || '',
         name: '',
-        item_group: 'ملابس رجالي كاجوال',
-        item_department: 'قسم البولو والتيشيرت',
+        item_group: '',
+        item_department: '',
         item_type: 'finished',
         image: '',
         unit: 'قطعة',
         cost_price: '',
         selling_price: '',
-        min_issue_qty: '50',
+        min_issue_qty: '',
         opening_balance: '0',
         variants: [],
         notes: ''
@@ -1061,7 +1061,6 @@ export default function ProductsModule({ onBack, onNotify }) {
                     onChange={e => setItemForm({ ...itemForm, name: e.target.value })}
                     className={`w-full h-11 border rounded px-3 text-sm font-semibold ${itemErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                   />
-                  <p className="text-xs text-gray-500 mt-1">مثال: تيشيرت بولو رجالي قطن مطرز</p>
                   <FieldError error={itemErrors.name} />
                 </div>
               </div>
@@ -1075,7 +1074,6 @@ export default function ProductsModule({ onBack, onNotify }) {
                     onChange={e => setItemForm({ ...itemForm, item_group: e.target.value })}
                     className="w-full h-11 border border-gray-300 rounded px-3 text-sm"
                   />
-                  <p className="text-xs text-gray-500 mt-1">مثال: ملابس صيفية رجالي</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">قسم الصنف</label>
@@ -1085,7 +1083,6 @@ export default function ProductsModule({ onBack, onNotify }) {
                     onChange={e => setItemForm({ ...itemForm, item_department: e.target.value })}
                     className="w-full h-11 border border-gray-300 rounded px-3 text-sm"
                   />
-                  <p className="text-xs text-gray-500 mt-1">مثال: قسم البولو والتيشيرت</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">الوحدة</label>
@@ -1340,7 +1337,6 @@ export default function ProductsModule({ onBack, onNotify }) {
                   onChange={e => setPartyForm({ ...partyForm, name: e.target.value })}
                   className={`w-full h-10 border rounded px-3 text-sm ${partyErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 />
-                <p className="text-xs text-gray-500 mt-1">مثال: مصنع النيل للغزل والنسيج</p>
                 <FieldError error={partyErrors.name} />
               </div>
 
@@ -1562,7 +1558,6 @@ export default function ProductsModule({ onBack, onNotify }) {
                   onChange={e => setExpenseForm({ ...expenseForm, name: e.target.value })}
                   className="w-full h-10 border border-gray-300 rounded px-3 text-sm font-bold"
                 />
-                <p className="text-xs text-gray-500 mt-1">مثال: صيانة ماكينات خياطة</p>
                 <FieldError error={expenseErrors.name} />
               </div>
               <div>

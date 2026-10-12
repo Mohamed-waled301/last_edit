@@ -15,10 +15,10 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
   const [form, setForm] = useState({
     outlet_id: activeUser.outlet_id || '',
     closing_date: getTodayDateString(),
-    cashier_name: activeUser.full_name || 'كاشير الوردية',
-    opening_cash: '500',
-    cash_sales: '2400',
-    cash_expenses: '150',
+    cashier_name: activeUser.full_name || '',
+    opening_cash: '0',
+    cash_sales: '0',
+    cash_expenses: '0',
     actual_cash_counted: '',
     notes: ''
   });

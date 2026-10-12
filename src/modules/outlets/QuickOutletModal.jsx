@@ -134,7 +134,6 @@ export default function QuickOutletModal({ isOpen, onClose, onCreated, onNotify 
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#1F3A5F] text-xs font-semibold"
               />
-              <p className="text-xs text-gray-500 mt-1">مثال: معرض وسط البلد، منفذ المصنع</p>
             </div>
 
             <div>
@@ -163,7 +162,6 @@ export default function QuickOutletModal({ isOpen, onClose, onCreated, onNotify 
                 onChange={(e) => setLocation(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#1F3A5F] text-xs"
               />
-              <p className="text-xs text-gray-500 mt-1">مثال: القاهرة - شارع طلعت حرب</p>
             </div>
 
             <div>

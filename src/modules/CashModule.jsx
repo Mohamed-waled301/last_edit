@@ -673,7 +673,6 @@ export default function CashModule({ onBack, onNotify }) {
                   onChange={e => setDisburseForm({ ...disburseForm, notes: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
-                <p className="text-xs text-gray-500 mt-1">مثال: سداد بوفيه وعمال تحميل</p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">

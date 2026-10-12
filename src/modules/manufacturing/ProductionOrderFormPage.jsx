@@ -12,13 +12,13 @@ export default function ProductionOrderFormPage({ onSaved, onNotify }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   const [form, setForm] = useState({
-    order_number: '',
+    order_number: `ORD-MFG-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`,
     product_id: '',
-    batch_quantity: '100',
+    batch_quantity: '',
     start_date: getTodayDateString(),
-    cutting_labor_cost: '600',
-    sewing_labor_cost: '1800',
-    ironing_packing_cost: '600',
+    cutting_labor_cost: '0',
+    sewing_labor_cost: '0',
+    ironing_packing_cost: '0',
     notes: ''
   });
 
@@ -39,17 +39,6 @@ export default function ProductionOrderFormPage({ onSaved, onNotify }) {
         const finishedItems = itemsList.filter(i => i.item_type === 'finished');
         const allProds = finishedItems.length > 0 ? finishedItems : prodsList;
         setProducts(allProds);
-
-        if (allProds.length > 0) {
-          const first = allProds[0];
-          setSelectedProduct(first);
-          setForm(prev => ({
-            ...prev,
-            product_id: first.id,
-            batch_quantity: String(first.min_issue_qty || 100),
-            order_number: `ORD-MFG-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`
-          }));
-        }
       } catch (err) {
         console.error(err);
       } finally {

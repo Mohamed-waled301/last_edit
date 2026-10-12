@@ -30,6 +30,7 @@ import {
   normalizePhoneForSave,
   validateEgyptianMobile,
 } from '../utils/phone';
+import { calculatePurchaseOrderTotals } from '../logic/purchaseOrderCalculations';
 
 export default function SuppliersModule({ onBack, onNotify }) {
   const [tab, setTab] = useState('suppliers'); // 'suppliers' | 'orders' | 'grn' | 'invoices'
@@ -51,6 +52,9 @@ export default function SuppliersModule({ onBack, onNotify }) {
   const [showPayModal, setShowPayModal] = useState(null);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showOffsetModal, setShowOffsetModal] = useState(null); // Party with offset data
+  const [cancelInvoiceCandidate, setCancelInvoiceCandidate] = useState(null);
+  const [cancelInvoiceReason, setCancelInvoiceReason] = useState('');
+  const [cancellingInvoice, setCancellingInvoice] = useState(false);
 
   // Forms state
   const [newSupplier, setNewSupplier] = useState({
@@ -68,10 +72,10 @@ export default function SuppliersModule({ onBack, onNotify }) {
   const [newQuickMaterial, setNewQuickMaterial] = useState({
     name: '',
     code: '',
-    group: 'خامات أقمشة',
+    group: '',
     type: 'raw',
     unit: 'متر',
-    cost_price: 50,
+    cost_price: 0,
     selling_price: 0
   });
 
@@ -92,7 +96,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
     supplier_id: '',
     po_id: '',
     receipt_date: getTodayDateString(),
-    receiver_name: 'أمين مخزن الخامات',
+    receiver_name: '',
     notes: '',
     items: [{ material_id: '', quantity_received: '', unit_cost: '' }]
   });
@@ -182,7 +186,13 @@ export default function SuppliersModule({ onBack, onNotify }) {
     return sum + (q * p);
   }, 0);
 
-  const poGrandTotal = Math.max(0, poSubtotal - (parseFloat(newPO.discount_amount) || 0) + (parseFloat(newPO.additional_expenses) || 0));
+  const poCalculations = calculatePurchaseOrderTotals({
+    subtotal: poSubtotal,
+    discount_amount: newPO.discount_amount,
+    discount_percent: newPO.discount_percent,
+    additional_expenses: newPO.additional_expenses
+  });
+  const poGrandTotal = poCalculations.finalNet;
 
   // Handle PO Discount Sync
   const handleDiscountPercentChange = (percentVal) => {
@@ -234,6 +244,10 @@ export default function SuppliersModule({ onBack, onNotify }) {
     e.preventDefault();
     if (!newPO.supplier_id) {
       alert('يجب اختيار المورد أولاً');
+      return;
+    }
+    if (!poCalculations.isValid) {
+      alert(poCalculations.errorMessage);
       return;
     }
     if (newPO.payment_terms === 'credit' && !newPO.expected_date && !newPO.credit_days) {
@@ -320,10 +334,10 @@ export default function SuppliersModule({ onBack, onNotify }) {
       setNewQuickMaterial({
         name: '',
         code: '',
-        group: 'خامات أقمشة',
+        group: '',
         type: 'raw',
         unit: 'متر',
-        cost_price: 50,
+        cost_price: 0,
         selling_price: 0
       });
       loadData();
@@ -343,7 +357,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
         supplier_id: '',
         po_id: '',
         receipt_date: getTodayDateString(),
-        receiver_name: 'أمين مخزن الخامات',
+        receiver_name: '',
         notes: '',
         items: [{ material_id: '', quantity_received: '', unit_cost: '' }]
       });
@@ -372,6 +386,25 @@ export default function SuppliersModule({ onBack, onNotify }) {
       setTab('invoices');
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  // Handle Cancel Supplier Invoice
+  const handleCancelInvoice = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!cancelInvoiceCandidate) return;
+    try {
+      setCancellingInvoice(true);
+      const res = await api.cancelSupplierInvoice(cancelInvoiceCandidate.id, cancelInvoiceReason);
+      if (onNotify) onNotify(res.message || 'تم إلغاء فاتورة المورد بنجاح');
+      setCancelInvoiceCandidate(null);
+      setCancelInvoiceReason('');
+      loadData();
+    } catch (err) {
+      console.error('Failed to cancel supplier invoice:', err);
+      alert(err.message || 'تعذر إلغاء فاتورة المورد');
+    } finally {
+      setCancellingInvoice(false);
     }
   };
 
@@ -900,29 +933,47 @@ export default function SuppliersModule({ onBack, onNotify }) {
                         <td className="py-3 px-4 text-left text-green-700 font-medium">{formatCurrency(inv.paid_amount || 0)}</td>
                         <td className="py-3 px-4 text-left font-bold text-red-600">{formatCurrency(inv.remaining_amount || (inv.total_amount - (inv.paid_amount || 0)))}</td>
                         <td className="py-3 px-4 text-center">
-                          {inv.payment_status === 'paid' ? (
+                          {inv.status === 'cancelled' ? (
+                            <span className="erp-badge-red text-xs">ملغاة</span>
+                          ) : inv.payment_status === 'paid' ? (
                             <span className="erp-badge-green text-xs">مسددة بالكامل</span>
                           ) : (
                             <span className="erp-badge-red text-xs">مستحقة</span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          {inv.payment_status !== 'paid' && (
-                            <button
-                              onClick={() => {
-                                setPaymentForm(prev => ({
-                                  ...prev,
-                                  supplier_id: inv.supplier_id,
-                                  invoice_id: inv.id,
-                                  amount: inv.remaining_amount || (inv.total_amount - (inv.paid_amount || 0))
-                                }));
-                                setShowPayModal(inv);
-                              }}
-                              className="px-3 py-1 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded text-xs font-semibold cursor-pointer"
-                            >
-                              سداد الفاتورة
-                            </button>
-                          )}
+                          <div className="flex items-center justify-center gap-1.5">
+                            {inv.status !== 'cancelled' && inv.payment_status !== 'paid' && (
+                              <button
+                                onClick={() => {
+                                  setPaymentForm(prev => ({
+                                    ...prev,
+                                    supplier_id: inv.supplier_id,
+                                    invoice_id: inv.id,
+                                    amount: inv.remaining_amount || (inv.total_amount - (inv.paid_amount || 0))
+                                  }));
+                                  setShowPayModal(inv);
+                                }}
+                                className="px-3 py-1 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded text-xs font-semibold cursor-pointer"
+                              >
+                                سداد الفاتورة
+                              </button>
+                            )}
+                            {inv.status !== 'cancelled' ? (
+                              <button
+                                onClick={() => {
+                                  setCancelInvoiceCandidate(inv);
+                                  setCancelInvoiceReason('');
+                                }}
+                                className="px-2.5 py-1 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded font-semibold cursor-pointer"
+                                title="إلغاء الفاتورة وعكس المخزون والحساب المالي"
+                              >
+                                إلغاء الفاتورة
+                              </button>
+                            ) : (
+                              <span className="text-[11px] font-bold text-gray-400">ملغاة</span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -955,7 +1006,6 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   onChange={e => setNewSupplier({ ...newSupplier, name: e.target.value })}
                   className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">مثال: مصنع النصر للغزل والنسيج</p>
                 <FieldError error={supplierFormErrors.name} />
               </div>
 
@@ -974,7 +1024,6 @@ export default function SuppliersModule({ onBack, onNotify }) {
                     }}
                     className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-mono text-left focus:border-[#1F3A5F] focus:outline-none"
                   />
-                  <p className="text-[11px] text-gray-500 mt-1">مثال: 01012345678</p>
                   <FieldError error={supplierFormErrors.phone} />
                 </div>
                 <div>
@@ -997,7 +1046,6 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   onChange={e => setNewSupplier({ ...newSupplier, address: e.target.value })}
                   className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm focus:border-[#1F3A5F] focus:outline-none"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">مثال: المحلة الكبرى، المنطقة الصناعية</p>
               </div>
 
               <div>
@@ -1084,7 +1132,6 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   onChange={e => setNewQuickMaterial({ ...newQuickMaterial, name: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm focus:border-[#1F3A5F] focus:outline-none"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">مثال: قماش جبردين قطن أسود</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1338,7 +1385,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 </button>
               </div>
 
-              {/* Totals Section: Subtotal, Linked Discount, Additional Expenses, Grand Total */}
+              {/* Totals Section: Subtotal, Discount %, Discount Value, Additional Expenses, Final Net */}
               <div className="bg-gray-100 p-3 rounded-md border border-gray-300 space-y-2 text-xs">
                 <div className="flex justify-between items-center font-semibold text-gray-700">
                   <span>المجموع الفرعي للأصناف:</span>
@@ -1374,7 +1421,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 </div>
 
                 <div className="pt-1">
-                  <label className="block font-semibold text-gray-700 mb-1">مصاريف إضافية (شحن، مشال، تحميل بالجنيه):</label>
+                  <label className="block font-semibold text-gray-700 mb-1">مصاريف إضافية (ج.م)</label>
                   <input
                     type="number"
                     min="0"
@@ -1387,9 +1434,12 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 </div>
 
                 <div className="flex justify-between items-center pt-2 border-t-2 border-gray-300 font-bold text-gray-900 text-sm">
-                  <span>الإجمالي النهائي لأمر الشراء:</span>
+                  <span>الصافي النهائي:</span>
                   <span className="text-base text-[#1F3A5F] font-mono font-black">{formatCurrency(poGrandTotal)}</span>
                 </div>
+                {!poCalculations.isValid && (
+                  <p className="text-xs font-bold text-red-600 pt-1">{poCalculations.errorMessage}</p>
+                )}
               </div>
 
               <div>
@@ -1400,7 +1450,6 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   onChange={e => setNewPO({ ...newPO, notes: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs focus:border-[#1F3A5F] focus:outline-none"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">مثال: الاستلام بمخزن المصنع بعد فحص عينات الأقمشة</p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
@@ -1413,7 +1462,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={!newPO.supplier_id || poGrandTotal <= 0}
+                  disabled={!newPO.supplier_id || !poCalculations.isValid}
                   className="h-11 px-6 bg-[#1F3A5F] hover:bg-[#172c48] disabled:opacity-50 text-white rounded-md font-bold text-sm cursor-pointer shadow-sm"
                 >
                   اعتماد وحفظ أمر الشراء وتحديث التكلفة
@@ -1539,7 +1588,6 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   onChange={e => setNewGRN({ ...newGRN, notes: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">مثال: مطابقة العينة ومستوى الجودة</p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
@@ -1749,7 +1797,6 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">مثال: دفعة تحت الحساب توريد خامات جبردين</p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
@@ -1934,7 +1981,6 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   onChange={e => setReturnForm({ ...returnForm, reason: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">مثال: عيوب صباغة في القماش أو عدم مطابقة العينة</p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
@@ -2113,6 +2159,72 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Supplier Invoice Confirmation Modal */}
+      {cancelInvoiceCandidate && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6 text-right space-y-4" dir="rtl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-gray-900">
+                  تأكيد إلغاء فاتورة المورد
+                </h3>
+                <p className="text-xs text-gray-500">
+                  فاتورة رقم {cancelInvoiceCandidate.invoice_number} - المورد: {cancelInvoiceCandidate.supplier_name}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 rounded-lg text-xs space-y-1.5 border border-amber-200 text-amber-900">
+              <p className="font-semibold">
+                تنبيه الأثر المالي والمخزني:
+              </p>
+              <p>
+                سيتم إلغاء الفاتورة بالكامل وعكس أثرها المالي على حساب المورد أو الخزينة، بالإضافة إلى عكس أي استلامات مخزنية مرتبطة بها تلقائياً.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="cancel-supplier-invoice-reason" className="block text-xs font-semibold text-gray-700 mb-1">
+                سبب الإلغاء
+              </label>
+              <textarea
+                id="cancel-supplier-invoice-reason"
+                rows={2}
+                value={cancelInvoiceReason}
+                onChange={(e) => setCancelInvoiceReason(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-gray-50 text-gray-800"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setCancelInvoiceCandidate(null)}
+                disabled={cancellingInvoice}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-xs font-semibold cursor-pointer"
+              >
+                تراجع
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelInvoice}
+                disabled={cancellingInvoice}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                <span>{cancellingInvoice ? 'جاري الإلغاء...' : 'تأكيد إلغاء الفاتورة'}</span>
+              </button>
             </div>
           </div>
         </div>

@@ -153,7 +153,6 @@ export default function ItemGroupFormPage({ groupId = null, onBack, onNotify }) 
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white text-slate-800"
               />
-              <p className="text-[11px] text-slate-500 mt-1">مثال: ملابس صيفية كاجوال، خامات أقمشة وتطريز</p>
               {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name}</p>}
             </div>
 

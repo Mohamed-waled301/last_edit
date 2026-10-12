@@ -276,7 +276,6 @@ export default function StockAdjustmentFormPage({ onSaved, onNotify }) {
                 required
               />
               <FieldError error={errors.reason} />
-              <p className="text-xs text-gray-500 mt-1">مثال: تلف أثناء مرحلة الكي، عينات لعميل تصدير، فرق جرد دوري</p>
             </div>
 
             {/* Notes */}

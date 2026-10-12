@@ -634,7 +634,6 @@ export default function InventoryModule({ onBack, onNotify }) {
                   onChange={e => setAdjustmentForm({ ...adjustmentForm, reason: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 text-xs"
                 />
-                <p className="text-xs text-gray-500 mt-1">مثال: تلف أثناء مرحلة فرد القماش / سحب عينات للمعمل</p>
                 {!validators.required(adjustmentForm.reason) && <FieldError error="سبب التسوية إجباري للتدقيق" />}
               </div>
 
@@ -751,7 +750,6 @@ export default function InventoryModule({ onBack, onNotify }) {
                   onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 text-xs"
                 />
-                <p className="text-xs text-gray-500 mt-1">مثال: نقل لقسم التفصيل والقص</p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
@@ -795,7 +793,6 @@ export default function InventoryModule({ onBack, onNotify }) {
                   onChange={e => setLocationForm({ ...locationForm, name: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 text-xs"
                 />
-                <p className="text-xs text-gray-500 mt-1">مثال: مخزن الأقمشة الرئيسي</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -807,7 +804,6 @@ export default function InventoryModule({ onBack, onNotify }) {
                     onChange={e => setLocationForm({ ...locationForm, code: e.target.value })}
                     className="w-full h-10 rounded border border-gray-300 px-3 text-xs font-mono"
                   />
-                  <p className="text-xs text-gray-500 mt-1">مثال: مخزن-01</p>
                 </div>
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">نوع الموقع</label>

@@ -80,7 +80,6 @@ export default function PaymentMethodsPage({ onNotify }) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">مثال: شيك بنكي، تحويل فوري، تحويل بنكي</p>
             </div>
 
             <div>

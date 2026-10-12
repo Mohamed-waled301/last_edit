@@ -406,11 +406,11 @@ export const backupRepo = {
           discount_percent: 5,
           discount_value: 2700,
           additional_expenses: 1200,
-          total_amount: 52500,
-          grand_total: 52500,
+          total_amount: 50100,
+          grand_total: 50100,
           installments: [
             { due_date: '2026-10-15', amount: 25000, notes: 'دفعة أولى بعد فحص واستلام الأقمشة' },
-            { due_date: '2026-10-30', amount: 27500, notes: 'دفعة ثانية نهائية' },
+            { due_date: '2026-10-30', amount: 25100, notes: 'دفعة ثانية نهائية' },
           ],
           status: 'received',
           notes: 'توريد أثواب قماش سنجل جيرسي قطن مصري 100% عالي التمشيط',
@@ -430,8 +430,8 @@ export const backupRepo = {
           discount_percent: 0,
           discount_value: 0,
           additional_expenses: 500,
-          total_amount: 18500,
-          grand_total: 18500,
+          total_amount: 17500,
+          grand_total: 17500,
           status: 'received',
           notes: 'مستلزمات خياطة وسوست وأزرار وبكر خيوط تركي',
           created_by: 'usr-purchasing',
@@ -459,12 +459,12 @@ export const backupRepo = {
 
       await db.supplier_invoices.bulkAdd([
         { id: 'sinv-1', invoice_number: 'INV-SUP-501', supplier_id: 'pty-1', grn_id: 'grn-1', po_id: 'po-1', invoice_date: '2026-09-29', due_date: '2026-10-29', subtotal: 54000, tax_amount: 0, total_amount: 54000, paid_amount: 30000, status: 'partially_paid', notes: 'فاتورة توريد قماش سنجل جيرسي - مسدد 30 ألف ج.م والباقي آجل', created_by: 'usr-accountant', created_at: now },
-        { id: 'sinv-2', invoice_number: 'INV-SUP-502', supplier_id: 'pty-2', grn_id: 'grn-2', po_id: 'po-2', invoice_date: '2026-10-01', due_date: null, subtotal: 18500, tax_amount: 0, total_amount: 18500, paid_amount: 18500, status: 'paid', notes: 'فاتورة مستلزمات خياطة مسددة نقداً', created_by: 'usr-accountant', created_at: now },
+        { id: 'sinv-2', invoice_number: 'INV-SUP-502', supplier_id: 'pty-2', grn_id: 'grn-2', po_id: 'po-2', invoice_date: '2026-10-01', due_date: null, subtotal: 17500, tax_amount: 0, total_amount: 17500, paid_amount: 17500, status: 'paid', notes: 'فاتورة مستلزمات خياطة مسددة نقداً', created_by: 'usr-accountant', created_at: now },
       ]);
 
       await db.payments.bulkAdd([
         { id: 'spay-1', payment_number: 'PAY-SUP-101', supplier_id: 'pty-1', invoice_id: 'sinv-1', account_id: 'acc-cib', amount: 30000, payment_date: '2026-09-30', payment_method: 'bank_transfer', notes: 'تحويل بنكي CIB دفعة تحت الحساب لمصنع النيل للأقمشة', created_by: 'usr-accountant', created_at: now },
-        { id: 'spay-2', payment_number: 'PAY-SUP-102', supplier_id: 'pty-2', invoice_id: 'sinv-2', account_id: 'acc-main', amount: 18500, payment_date: '2026-10-01', payment_method: 'cash', notes: 'سداد نقدي من الخزينة المركزية لشركة الأهرام للإكسسوارات', created_by: 'usr-accountant', created_at: now },
+        { id: 'spay-2', payment_number: 'PAY-SUP-102', supplier_id: 'pty-2', invoice_id: 'sinv-2', account_id: 'acc-main', amount: 17500, payment_date: '2026-10-01', payment_method: 'cash', notes: 'سداد نقدي من الخزينة المركزية لشركة الأهرام للإكسسوارات', created_by: 'usr-accountant', created_at: now },
       ]);
 
       // 15. Manufacturing: Production Orders with Clothing Stages (Cutting -> Sewing -> Ironing)

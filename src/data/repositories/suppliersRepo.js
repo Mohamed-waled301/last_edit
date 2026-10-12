@@ -9,6 +9,7 @@ import BalanceCalculator, {
 } from '../../logic/balances';
 import auditRepo from './auditRepo';
 import { validateNotPastDate } from '../../utils/formatters';
+import { calculatePurchaseOrderTotals } from '../../logic/purchaseOrderCalculations';
 
 export const suppliersRepo = {
   async getAll() {
@@ -292,13 +293,21 @@ export const suppliersRepo = {
       };
     });
 
-    const discountPercent = Math.max(0, Number(data.discount_percent) || 0);
-    const discountValue = data.discount_value !== undefined
-      ? Math.max(0, Number(data.discount_value) || 0)
-      : Number(((subtotal * discountPercent) / 100).toFixed(2));
+    const totals = calculatePurchaseOrderTotals({
+      subtotal,
+      discount_percent: data.discount_percent,
+      discount_value: data.discount_value !== undefined ? data.discount_value : data.discount_amount,
+      additional_expenses: data.additional_expenses
+    });
 
-    const additionalExpenses = Math.max(0, Number(data.additional_expenses) || 0);
-    const grandTotal = Math.max(0, Number((subtotal - discountValue + additionalExpenses).toFixed(2)));
+    if (!totals.isValid) {
+      throw new Error(totals.errorMessage || 'الصافي النهائي لا يمكن أن يكون أقل من صفر');
+    }
+
+    const discountPercent = totals.discountPercent;
+    const discountValue = totals.discountValue;
+    const additionalExpenses = totals.additionalExpenses;
+    const grandTotal = totals.finalNet;
 
     // Installments validation for credit orders
     let installments = [];
@@ -367,7 +376,9 @@ export const suppliersRepo = {
       db.goods_receipts,
       db.goods_receipt_items,
       db.stock_movements,
-      db.supplier_invoices
+      db.supplier_invoices,
+      db.treasury_accounts,
+      db.cash_transactions
     ], async () => {
       await db.purchase_orders.add(po);
       for (const itm of items) {
@@ -391,6 +402,45 @@ export const suppliersRepo = {
           }
         }
       }
+
+      // 1) Purchase orders -> Treasury deduction (balance allowed to go negative)
+      let treasury = (data.account_id ? await db.treasury_accounts.get(data.account_id) : null) ||
+                     (await db.treasury_accounts.where('is_main').equals(1).first()) ||
+                     (await db.treasury_accounts.where('account_type').equals('treasury').first()) ||
+                     (await db.treasury_accounts.toCollection().first());
+      if (!treasury) {
+        treasury = {
+          id: 'acc-main',
+          name: 'الخزينة الرئيسية',
+          account_type: 'treasury',
+          outlet_id: null,
+          is_main: 1,
+          current_balance: 0,
+          created_at: now
+        };
+        await db.treasury_accounts.put(treasury);
+      }
+
+      const currentBal = Number(treasury.current_balance) || 0;
+      const newBal = Number((currentBal - grandTotal).toFixed(2));
+      // Balance is allowed to go negative: update treasury balance unconditionally
+      await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
+
+      // Log treasury transaction linked to the purchase order
+      await db.cash_transactions.add({
+        id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+        account_id: treasury.id,
+        tx_type: 'outflow',
+        category: 'purchase_orders',
+        amount: grandTotal,
+        balance_after: newBal,
+        reference_type: 'purchase_orders',
+        reference_id: id,
+        description: `صرف أمر شراء ${poNumber} للمورد`,
+        created_by: userId,
+        created_at: now
+      });
 
       // If "تم الاستلام الآن" is checked: automatically create full goods receipt in this same transaction!
       if (receiveNow) {
@@ -465,6 +515,7 @@ export const suppliersRepo = {
           po_id: id,
           invoice_date: po.order_date,
           due_date: po.due_date,
+          payment_terms: paymentTerms,
           installments: po.installments,
           subtotal: po.subtotal,
           tax_amount: 0,
@@ -480,6 +531,196 @@ export const suppliersRepo = {
 
     await auditRepo.log(userId, 'CREATE_PURCHASE_ORDER', 'purchase_orders', id, null, po);
     return { ...po, items };
+  },
+
+  /**
+   * Deleting an order must NOT delete its items.
+   * Removes only the purchase order and its line links (purchase_order_items).
+   * Items master records in items & materials tables remain 100% intact.
+   */
+  async deletePurchaseOrder(poId, userId = 'usr-purchasing') {
+    const po = await db.purchase_orders.get(poId);
+    if (!po) throw new Error('أمر التوريد غير موجود');
+
+    await db.transaction('rw', [
+      db.purchase_orders,
+      db.purchase_order_items,
+      db.goods_receipts,
+      db.goods_receipt_items,
+      db.supplier_invoices
+    ], async () => {
+      // 1. Delete order item lines ONLY (NEVER touch db.items or db.materials)
+      await db.purchase_order_items.where('po_id').equals(poId).delete();
+
+      // 2. Clean up any unposted GRN links if present
+      const grns = await db.goods_receipts.where('po_id').equals(poId).toArray();
+      for (const grn of grns) {
+        await db.goods_receipt_items.where('grn_id').equals(grn.id).delete();
+      }
+      await db.goods_receipts.where('po_id').equals(poId).delete();
+
+      // 3. Clean up linked supplier invoices if present
+      await db.supplier_invoices.where('po_id').equals(poId).delete();
+
+      // 4. Delete the purchase order itself
+      await db.purchase_orders.delete(poId);
+    });
+
+    await auditRepo.log(userId, 'DELETE_PURCHASE_ORDER', 'purchase_orders', poId, po, null);
+    return { success: true };
+  },
+
+  /**
+   * Cancelling a supplier invoice:
+   * - Reverses inventory quantities from stock (reverse stock effect).
+   * - If CREDIT: removes debt from supplier's balance (treasury untouched).
+   * - If CASH: reverses effect on treasury (supplier balance untouched).
+   * - Must NOT delete the supplier, and must NOT delete/rename items.
+   * - Idempotent: already cancelled invoice changes nothing.
+   * - Uses a single database transaction.
+   */
+  async cancelSupplierInvoice(invoiceId, reason = '', userId = 'usr-accountant') {
+    const inv = await db.supplier_invoices.get(invoiceId);
+    if (!inv) throw new Error('فاتورة المورد غير موجودة');
+
+    // Prevent double cancellation (second attempt changes nothing)
+    if (inv.status === 'cancelled') {
+      return { success: true, message: 'الفاتورة ملغاة بالفعل', alreadyCancelled: true };
+    }
+
+    const now = new Date().toISOString();
+    const today = now.split('T')[0];
+
+    await db.transaction('rw', [
+      db.supplier_invoices,
+      db.purchase_orders,
+      db.purchase_order_items,
+      db.goods_receipts,
+      db.goods_receipt_items,
+      db.stock_movements,
+      db.items,
+      db.materials,
+      db.treasury_accounts,
+      db.cash_transactions,
+      db.suppliers,
+      db.parties
+    ], async () => {
+      // 1. Gather line items to reverse inventory
+      const itemsToReverse = [];
+      if (inv.grn_id) {
+        const griList = await db.goods_receipt_items.where('grn_id').equals(inv.grn_id).toArray();
+        for (const gri of griList) {
+          itemsToReverse.push({
+            material_id: gri.material_id,
+            quantity: Number(gri.quantity_received || gri.received_quantity || 0),
+            unit_cost: Number(gri.unit_cost || 0)
+          });
+        }
+      } else if (inv.po_id) {
+        const poiList = await db.purchase_order_items.where('po_id').equals(inv.po_id).toArray();
+        for (const poi of poiList) {
+          itemsToReverse.push({
+            material_id: poi.material_id,
+            quantity: Number(poi.quantity_ordered || poi.quantity || 0),
+            unit_cost: Number(poi.unit_price || poi.unit_cost || 0)
+          });
+        }
+      }
+
+      // If items found, reverse stock (direction: 'out')
+      for (let idx = 0; idx < itemsToReverse.length; idx++) {
+        const line = itemsToReverse[idx];
+        const qty = line.quantity;
+        if (qty > 0 && line.material_id) {
+          // Reversing stock movement
+          await db.stock_movements.add({
+            id: `sm-sinv-rev-${Date.now()}-${idx}`,
+            item_id: line.material_id,
+            material_id: line.material_id,
+            location_id: 'loc-main',
+            movement_type: 'reversal',
+            direction: 'out',
+            quantity: qty,
+            quantity_change: -qty,
+            unit_cost: line.unit_cost,
+            document_id: invoiceId,
+            reference_type: 'SUPPLIER_INVOICE_CANCELLED',
+            reference_id: invoiceId,
+            date: today,
+            movement_date: today,
+            notes: `حركة عكسية لإلغاء فاتورة المورد ${inv.invoice_number}: ${reason || 'إلغاء الفاتورة'}`,
+            created_by: userId,
+            created_at: now
+          });
+
+          // Decrement cached stock in items and materials (NEVER delete or rename items)
+          const itm = await db.items.get(line.material_id);
+          if (itm) {
+            const newStock = Number(((Number(itm.current_stock) || 0) - qty).toFixed(3));
+            await db.items.update(itm.id, { current_stock: newStock });
+          }
+          const mat = await db.materials.get(line.material_id);
+          if (mat) {
+            const newStock = Number(((Number(mat.current_stock) || 0) - qty).toFixed(3));
+            await db.materials.update(mat.id, { current_stock: newStock });
+          }
+        }
+      }
+
+      // 2. Reverse debt according to invoice payment type
+      const isCredit = inv.payment_terms === 'credit' ||
+                       (!inv.payment_terms && (Number(inv.paid_amount) || 0) === 0 && Boolean(inv.due_date));
+      const isCash = inv.payment_terms === 'cash' ||
+                     (!isCredit && (Number(inv.paid_amount) || 0) > 0);
+
+      if (isCredit) {
+        // CREDIT (آجل): remove debt from SUPPLIER balance (setting status to 'cancelled' excludes it from supplier payable)
+        // Do NOT touch the treasury.
+      } else if (isCash) {
+        // CASH (نقدي): reverse its effect on the TREASURY. Do NOT touch supplier balance.
+        const refundAmount = Number(inv.paid_amount || inv.total_amount) || 0;
+        if (refundAmount > 0) {
+          const treasury = (await db.treasury_accounts.where('is_main').equals(1).first()) ||
+                           (await db.treasury_accounts.where('account_type').equals('treasury').first()) ||
+                           (await db.treasury_accounts.toCollection().first());
+          if (treasury) {
+            const currentBal = Number(treasury.current_balance) || 0;
+            const newBal = Number((currentBal + refundAmount).toFixed(2));
+            await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
+
+            await db.cash_transactions.add({
+              id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+              account_id: treasury.id,
+              tx_type: 'inflow',
+              category: 'supplier_invoice_cancellation',
+              amount: refundAmount,
+              balance_after: newBal,
+              reference_type: 'supplier_invoices',
+              reference_id: invoiceId,
+              description: `استرداد نقدي لإلغاء فاتورة المورد النقدية ${inv.invoice_number}`,
+              created_by: userId,
+              created_at: now
+            });
+          }
+        }
+      }
+
+      // 3. Update invoice status to 'cancelled'
+      await db.supplier_invoices.update(invoiceId, {
+        status: 'cancelled',
+        cancellation_reason: reason || 'إلغاء الفاتورة',
+        cancelled_at: now,
+        cancelled_by: userId
+      });
+    });
+
+    await auditRepo.log(userId, 'CANCEL_SUPPLIER_INVOICE', 'supplier_invoices', invoiceId, inv, {
+      status: 'cancelled',
+      reason
+    });
+
+    return { success: true, message: 'تم إلغاء فاتورة المورد بنجاح' };
   },
 
   /**
@@ -625,8 +866,40 @@ export const suppliersRepo = {
       db.stock_movements,
       db.items,
       db.materials,
-      db.supplier_invoices
+      db.supplier_invoices,
+      db.treasury_accounts,
+      db.cash_transactions
     ], async () => {
+      // If purchase order was cash, refund the amount back to the treasury
+      if (po.payment_terms === 'cash') {
+        const refundAmt = Number(po.grand_total || po.total_amount) || 0;
+        if (refundAmt > 0) {
+          const treasury = (await db.treasury_accounts.where('is_main').equals(1).first()) ||
+                           (await db.treasury_accounts.where('account_type').equals('treasury').first()) ||
+                           (await db.treasury_accounts.toCollection().first());
+          if (treasury) {
+            const currentBal = Number(treasury.current_balance) || 0;
+            const newBal = Number((currentBal + refundAmt).toFixed(2));
+            await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
+
+            await db.cash_transactions.add({
+              id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+              account_id: treasury.id,
+              tx_type: 'inflow',
+              category: 'purchase_orders',
+              amount: refundAmt,
+              balance_after: newBal,
+              reference_type: 'purchase_orders',
+              reference_id: poId,
+              description: `استرداد نقدي لإلغاء أمر الشراء ${po.po_number}`,
+              created_by: userId,
+              created_at: now
+            });
+          }
+        }
+      }
+
       // If was received, reverse stock movements
       if (po.status === 'received' || po.status === 'partially_received') {
         const grns = await db.goods_receipts.where('po_id').equals(poId).toArray();
@@ -979,10 +1252,6 @@ export const suppliersRepo = {
       if (!account) throw new Error('الحساب المالي أو الخزينة غير موجودة');
 
       const currentAccBal = Number(account.current_balance) || 0;
-      if (currentAccBal < payAmount) {
-        throw new Error(`رصيد الخزينة (${currentAccBal} ج.م) لا يكفي لسداد مبلغ (${payAmount} ج.م)`);
-      }
-
       const newAccBal = Number((currentAccBal - payAmount).toFixed(2));
       await db.treasury_accounts.update(account_id, { current_balance: newAccBal });
 

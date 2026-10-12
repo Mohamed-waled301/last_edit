@@ -31,14 +31,14 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     item_department: '',
     item_type: 'finished', // 'finished' | 'raw_material'
     unit: 'قطعة',
-    cost_price: '',
-    selling_price: '',
+    cost_price: '0',
+    selling_price: '0',
     margin_percent: '0',
     margin_value: '0',
     image: '',
     min_issue_qty: '1',
     opening_balance: '0',
-    opening_cost: '',
+    opening_cost: '0',
     location_id: 'loc-main',
     notes: '',
     has_variants: false,
@@ -58,11 +58,14 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
   const [hasOperationalMovements, setHasOperationalMovements] = useState(false);
   const [variantToggleError, setVariantToggleError] = useState('');
 
-  // Quick inline add modals/panels for Group and Section
+  // Quick inline add modals/panels for Group, Section, and Unit
   const [quickAddGroupOpen, setQuickAddGroupOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [quickAddSectionOpen, setQuickAddSectionOpen] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
+  const [quickAddUnitOpen, setQuickAddUnitOpen] = useState(false);
+  const [newUnitName, setNewUnitName] = useState('');
+  const [unitsList, setUnitsList] = useState([]);
 
   // Variant helper input states
   const [newVariant, setNewVariant] = useState({
@@ -85,22 +88,27 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     async function loadData() {
       try {
         setLoading(true);
-        const [itemsRes, groupsRes, sectionsRes, sizesRes, colorsRes, locsRes] = await Promise.all([
+        const [itemsRes, groupsRes, sectionsRes, sizesRes, colorsRes, locsRes, unitsRes, settingsRes] = await Promise.all([
           api.getItems(),
           api.getItemGroups(),
           api.getItemSections(),
           api.getItemSizes(),
           api.getItemColors(),
-          api.getStorageLocations()
+          api.getStorageLocations(),
+          api.getItemUnits(),
+          api.getSettings()
         ]);
 
         const allItems = Array.isArray(itemsRes.data) ? itemsRes.data : (itemsRes.items || []);
         const grps = Array.isArray(groupsRes.data) ? groupsRes.data : (groupsRes.groups || []);
         const secs = Array.isArray(sectionsRes.data) ? sectionsRes.data : (sectionsRes.sections || []);
+        const unList = Array.isArray(unitsRes.data) ? unitsRes.data : (unitsRes.units || []);
+        const defMargin = Number(settingsRes?.data?.default_profit_margin_percent ?? settingsRes?.settings?.default_profit_margin_percent ?? 0);
 
         setExistingItems(allItems);
         setGroupsList(grps);
         setSectionsList(secs);
+        setUnitsList(unList);
         setSizesList(Array.isArray(sizesRes.data) ? sizesRes.data : []);
         setColorsList(Array.isArray(colorsRes.data) ? colorsRes.data : []);
         setLocations(Array.isArray(locsRes.data) ? locsRes.data : []);
@@ -124,12 +132,12 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
             setForm({
               code: itm.code || '',
               name: itm.name || '',
-              item_group: itm.item_group || (grps[0]?.name || 'ملابس جاهزة'),
-              item_department: itm.item_department || (secs[0]?.name || 'عام'),
+              item_group: itm.item_group || '',
+              item_department: itm.item_department || '',
               item_type: itm.item_type || 'finished',
               unit: itm.unit || 'قطعة',
-              cost_price: itm.cost_price !== undefined ? String(itm.cost_price) : '',
-              selling_price: itm.selling_price !== undefined ? String(itm.selling_price) : '',
+              cost_price: itm.cost_price !== undefined ? String(itm.cost_price) : '0',
+              selling_price: itm.selling_price !== undefined ? String(itm.selling_price) : '0',
               margin_percent: String(marginPercent || 0),
               margin_value: String(marginValue || 0),
               image: itm.image || '',
@@ -149,9 +157,12 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
           setForm((prev) => ({
             ...prev,
             code: nextCode,
-            item_group: grps.length > 0 ? grps[0].name : 'ملابس صيفية كاجوال',
-            item_department: secs.length > 0 ? secs[0].name : 'قسم التيشيرتات والبولو',
-            margin_percent: '0',
+            item_group: '',
+            item_department: '',
+            unit: 'قطعة',
+            cost_price: '0',
+            selling_price: '0',
+            margin_percent: String(defMargin),
             margin_value: '0'
           }));
         }
@@ -187,13 +198,15 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     let newSell = form.selling_price;
     let newMarginVal = form.margin_value;
 
-    if (marginPct === 0) {
-      // With margin 0, selling price equals cost price until changed
+    if (cost === 0) {
+      newSell = '0';
+      newMarginVal = '0';
+    } else if (marginPct === 0) {
       newSell = String(cost);
       newMarginVal = '0';
-    } else if (cost > 0) {
+    } else {
       newSell = String(calculateSellingPriceFromMargin(cost, marginPct));
-      newMarginVal = String((Number(newSell) - cost).toFixed(2));
+      newMarginVal = String(Number((Number(newSell) - cost).toFixed(2)));
     }
 
     setForm((prev) => ({
@@ -222,13 +235,16 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     const marginPct = Number(val) || 0;
     const cost = Math.max(0, Number(form.cost_price) || 0);
 
-    let newSell = cost;
+    let newSell = 0;
     let marginVal = 0;
 
-    if (marginPct === 0) {
+    if (cost === 0) {
+      newSell = 0;
+      marginVal = 0;
+    } else if (marginPct === 0) {
       newSell = cost;
       marginVal = 0;
-    } else if (cost > 0) {
+    } else {
       newSell = calculateSellingPriceFromMargin(cost, marginPct);
       marginVal = newSell > cost ? Number((newSell - cost).toFixed(2)) : 0;
     }
@@ -351,6 +367,22 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     }
   };
 
+  // Quick Add Unit
+  const handleQuickAddUnit = async () => {
+    if (!newUnitName.trim()) return;
+    try {
+      const res = await api.createItemUnit({ name: newUnitName.trim() });
+      const created = res.data || res.unit;
+      setUnitsList((prev) => [...prev, created]);
+      setForm((prev) => ({ ...prev, unit: created.name }));
+      setNewUnitName('');
+      setQuickAddUnitOpen(false);
+      if (onNotify) onNotify(`تم إضافة وحدة القياس "${created.name}" بنجاح`);
+    } catch (err) {
+      alert(err.message || 'تعذر إضافة وحدة القياس');
+    }
+  };
+
   // Validate form
   const validateForm = () => {
     const errs = {};
@@ -360,18 +392,26 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     const nameErr = Validators.required(form.name, 'اسم وتوصيف الصنف');
     if (nameErr) errs.name = nameErr;
 
-    const groupErr = Validators.required(form.item_group, 'مجموعة الصنف');
-    if (groupErr) errs.item_group = groupErr;
+    if (!form.item_group || !form.item_group.trim()) {
+      errs.item_group = 'مجموعة الصنف مطلوبة ولا يمكن تركها فارغة';
+    }
 
-    const deptErr = Validators.required(form.item_department, 'قسم الصنف');
-    if (deptErr) errs.item_department = deptErr;
+    if (!form.item_department || !form.item_department.trim()) {
+      errs.item_department = 'قسم الصنف مطلوب ولا يمكن تركه فارغاً';
+    }
 
-    const costErr = Validators.positiveNumber(form.cost_price, 'سعر التكلفة');
-    if (costErr) errs.cost_price = costErr;
+    if (form.cost_price === '' || form.cost_price === null || form.cost_price === undefined) {
+      errs.cost_price = 'سعر التكلفة مطلوب';
+    } else if (Number(form.cost_price) < 0) {
+      errs.cost_price = 'سعر التكلفة لا يمكن أن يكون سالباً';
+    }
 
     if (form.item_type === 'finished') {
-      const sellErr = Validators.positiveNumber(form.selling_price, 'سعر البيع');
-      if (sellErr) errs.selling_price = sellErr;
+      if (form.selling_price === '' || form.selling_price === null || form.selling_price === undefined) {
+        errs.selling_price = 'سعر البيع مطلوب';
+      } else if (Number(form.selling_price) < 0) {
+        errs.selling_price = 'سعر البيع لا يمكن أن يكون سالباً';
+      }
     }
 
     const minQtyErr = Validators.positiveNumber(form.min_issue_qty, 'الحد الأدنى للصرف / أمر التصنيع');
@@ -384,9 +424,8 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     if (!validateForm()) {
-      const firstField = Object.keys(errors)[0];
-      const el = document.getElementById(firstField);
-      if (el) el.focus();
+      if (onNotify) onNotify('أكمل البيانات المطلوبة', 'error');
+      alert('أكمل البيانات المطلوبة');
       return;
     }
 
@@ -516,7 +555,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                 required
               />
               <span className="text-[11px] text-slate-500 mt-1 block">
-                توصيف الصنف الكامل (مثال: تيشيرت بولو رجالي قطن 100% مطرز أو قماش سنجل جيرسي 180 جم)
+                توصيف الصنف الكامل للمنتج
               </span>
               <FieldError error={errors.name} />
             </div>
@@ -537,24 +576,44 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
               </select>
             </div>
 
-            {/* Item Group with Quick-Add shortcut */}
+            {/* Item Group with Inline Quick-Add panel */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="item-group-select" className="block text-xs font-semibold text-slate-700">
-                  مجموعة الصنف *
-                </label>
+              <label htmlFor="item-group-select" className="block text-xs font-semibold text-slate-700 mb-1">
+                مجموعة الصنف *
+              </label>
+              <div className="flex items-center gap-1.5">
+                <select
+                  id="item-group-select"
+                  value={form.item_group}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, item_group: e.target.value }));
+                    if (errors.item_group) setErrors((prev) => ({ ...prev, item_group: '' }));
+                  }}
+                  className={`flex-1 px-3 py-2 border rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 ${
+                    errors.item_group ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
+                  }`}
+                  required
+                >
+                  <option value="">-- اختر مجموعة الصنف --</option>
+                  {groupsList.map((g) => (
+                    <option key={g.id} value={g.name}>
+                      {g.name} ({g.code})
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={() => setQuickAddGroupOpen((prev) => !prev)}
-                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-0.5"
+                  className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-300 bg-slate-100 hover:bg-slate-200 text-blue-600 transition-colors shrink-0"
+                  title="إضافة مجموعة جديدة"
+                  aria-label="إضافة مجموعة جديدة"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>إضافة مجموعة</span>
+                  <Plus className="w-4 h-4" />
                 </button>
               </div>
 
               {quickAddGroupOpen && (
-                <div className="p-2 mb-2 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg space-y-1.5">
                   <label htmlFor="quick-group-name" className="block text-[11px] font-semibold text-blue-900">
                     اسم المجموعة الجديدة
                   </label>
@@ -577,47 +636,54 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                       type="button"
                       onClick={() => setQuickAddGroupOpen(false)}
                       className="p-1 text-slate-400 hover:text-slate-600"
+                      title="إلغاء"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
               )}
-
-              <select
-                id="item-group-select"
-                value={form.item_group}
-                onChange={(e) => setForm((prev) => ({ ...prev, item_group: e.target.value }))}
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
-                required
-              >
-                {groupsList.map((g) => (
-                  <option key={g.id} value={g.name}>
-                    {g.name} ({g.code})
-                  </option>
-                ))}
-              </select>
               <FieldError error={errors.item_group} />
             </div>
 
-            {/* Item Department/Section with Quick-Add shortcut */}
+            {/* Item Department/Section with Inline Quick-Add panel */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="item-section-select" className="block text-xs font-semibold text-slate-700">
-                  قسم الصنف *
-                </label>
+              <label htmlFor="item-section-select" className="block text-xs font-semibold text-slate-700 mb-1">
+                قسم الصنف *
+              </label>
+              <div className="flex items-center gap-1.5">
+                <select
+                  id="item-section-select"
+                  value={form.item_department}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, item_department: e.target.value }));
+                    if (errors.item_department) setErrors((prev) => ({ ...prev, item_department: '' }));
+                  }}
+                  className={`flex-1 px-3 py-2 border rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 ${
+                    errors.item_department ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
+                  }`}
+                  required
+                >
+                  <option value="">-- اختر قسم الصنف --</option>
+                  {sectionsList.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={() => setQuickAddSectionOpen((prev) => !prev)}
-                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-0.5"
+                  className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-300 bg-slate-100 hover:bg-slate-200 text-blue-600 transition-colors shrink-0"
+                  title="إضافة قسم جديد"
+                  aria-label="إضافة قسم جديد"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>إضافة قسم</span>
+                  <Plus className="w-4 h-4" />
                 </button>
               </div>
 
               {quickAddSectionOpen && (
-                <div className="p-2 mb-2 bg-emerald-50 border border-emerald-200 rounded-lg space-y-2">
+                <div className="mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg space-y-1.5">
                   <label htmlFor="quick-section-name" className="block text-[11px] font-semibold text-emerald-900">
                     اسم القسم الجديد
                   </label>
@@ -640,48 +706,76 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                       type="button"
                       onClick={() => setQuickAddSectionOpen(false)}
                       className="p-1 text-slate-400 hover:text-slate-600"
+                      title="إلغاء"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
               )}
-
-              <select
-                id="item-section-select"
-                value={form.item_department}
-                onChange={(e) => setForm((prev) => ({ ...prev, item_department: e.target.value }))}
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
-                required
-              >
-                {sectionsList.map((s) => (
-                  <option key={s.id} value={s.name}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </select>
               <FieldError error={errors.item_department} />
             </div>
 
-            {/* Unit */}
+            {/* Unit with Inline Quick-Add panel */}
             <div>
               <label htmlFor="item-unit-select" className="block text-xs font-semibold text-slate-700 mb-1">
                 وحدة القياس *
               </label>
-              <select
-                id="item-unit-select"
-                value={form.unit}
-                onChange={(e) => setForm((prev) => ({ ...prev, unit: e.target.value }))}
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
-              >
-                <option value="قطعة">قطعة</option>
-                <option value="دريزن">دريزن (12 قطعة)</option>
-                <option value="متر">متر</option>
-                <option value="كجم">كيلوجرام</option>
-                <option value="بكرة">بكرة خيط</option>
-                <option value="كيس">كيس</option>
-                <option value="كرتونة">كرتونة</option>
-              </select>
+              <div className="flex items-center gap-1.5">
+                <select
+                  id="item-unit-select"
+                  value={form.unit}
+                  onChange={(e) => setForm((prev) => ({ ...prev, unit: e.target.value }))}
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
+                >
+                  {unitsList.map((u) => (
+                    <option key={u.id || u.name} value={u.name}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setQuickAddUnitOpen((prev) => !prev)}
+                  className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-300 bg-slate-100 hover:bg-slate-200 text-blue-600 transition-colors shrink-0"
+                  title="إضافة وحدة قياس جديدة"
+                  aria-label="إضافة وحدة قياس جديدة"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+
+              {quickAddUnitOpen && (
+                <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg space-y-1.5">
+                  <label htmlFor="quick-unit-name" className="block text-[11px] font-semibold text-indigo-900">
+                    اسم وحدة القياس الجديدة
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      id="quick-unit-name"
+                      type="text"
+                      value={newUnitName}
+                      onChange={(e) => setNewUnitName(e.target.value)}
+                      className="flex-1 px-2.5 py-1 text-xs bg-white border border-indigo-300 rounded-md"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleQuickAddUnit}
+                      className="px-2.5 py-1 text-xs bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                    >
+                      حفظ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuickAddUnitOpen(false)}
+                      className="p-1 text-slate-400 hover:text-slate-600"
+                      title="إلغاء"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Minimum Issue / Manufacturing Qty */}
