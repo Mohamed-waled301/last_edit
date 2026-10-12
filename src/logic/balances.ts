@@ -107,7 +107,8 @@ export class BalanceCalculator {
   static calculateSupplierBalance(
     invoices: InvoiceRecord[] = [],
     returns: ReturnRecord[] = [],
-    openingBalance: number = 0
+    openingBalance: number = 0,
+    unlinkedPayments: number = 0
   ): BalanceSummary {
     let totalInvoiced = 0;
     let totalPaid = 0;
@@ -128,12 +129,13 @@ export class BalanceCalculator {
       }
     }
 
+    const unlinked = Math.max(0, Number(unlinkedPayments) || 0);
     const opening = normalizeOpeningBalance(openingBalance);
-    const balanceDue = Math.max(0, Number((opening + totalInvoiced - totalPaid - totalReturns).toFixed(2)));
+    const balanceDue = Math.max(0, Number((opening + totalInvoiced - totalPaid - totalReturns - unlinked).toFixed(2)));
 
     return {
       totalInvoiced: Number(totalInvoiced.toFixed(2)),
-      totalPaid: Number(totalPaid.toFixed(2)),
+      totalPaid: Number((totalPaid + unlinked).toFixed(2)),
       totalReturns: Number(totalReturns.toFixed(2)),
       balanceDue
     };
@@ -147,7 +149,8 @@ export class BalanceCalculator {
   static calculateCustomerBalance(
     invoices: InvoiceRecord[] = [],
     returns: ReturnRecord[] = [],
-    openingBalance: number = 0
+    openingBalance: number = 0,
+    unlinkedPayments: number = 0
   ): BalanceSummary {
     let totalInvoiced = 0;
     let totalPaid = 0;
@@ -168,12 +171,13 @@ export class BalanceCalculator {
       }
     }
 
+    const unlinked = Math.max(0, Number(unlinkedPayments) || 0);
     const opening = normalizeOpeningBalance(openingBalance);
-    const balanceDue = Math.max(0, Number((opening + totalInvoiced - totalPaid - totalReturns).toFixed(2)));
+    const balanceDue = Math.max(0, Number((opening + totalInvoiced - totalPaid - totalReturns - unlinked).toFixed(2)));
 
     return {
       totalInvoiced: Number(totalInvoiced.toFixed(2)),
-      totalPaid: Number(totalPaid.toFixed(2)),
+      totalPaid: Number((totalPaid + unlinked).toFixed(2)),
       totalReturns: Number(totalReturns.toFixed(2)),
       balanceDue
     };
@@ -189,10 +193,12 @@ export class BalanceCalculator {
     customerInvoices: InvoiceRecord[] = [],
     customerReturns: ReturnRecord[] = [],
     supplierOpening: number = 0,
-    customerOpening: number = 0
+    customerOpening: number = 0,
+    supplierUnlinkedPayments: number = 0,
+    customerUnlinkedPayments: number = 0
   ): PartyBalanceSummary {
-    const supBal = this.calculateSupplierBalance(supplierInvoices, supplierReturns, supplierOpening);
-    const custBal = this.calculateCustomerBalance(customerInvoices, customerReturns, customerOpening);
+    const supBal = this.calculateSupplierBalance(supplierInvoices, supplierReturns, supplierOpening, supplierUnlinkedPayments);
+    const custBal = this.calculateCustomerBalance(customerInvoices, customerReturns, customerOpening, customerUnlinkedPayments);
 
     const supplierBalance = supBal.balanceDue;
     const customerBalance = custBal.balanceDue;

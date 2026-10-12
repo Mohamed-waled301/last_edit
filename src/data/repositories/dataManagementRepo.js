@@ -1,7 +1,7 @@
 import db, { SCHEMA_V1 } from '../db';
 import { getActiveUser } from '../../services/api';
 import { syncPush } from '../../services/apiSync';
-import BalanceCalculator from '../../logic/balances';
+import BalanceCalculator, { resolveOpeningBalance } from '../../logic/balances';
 
 /**
  * Arabic names mapping for all system tables
@@ -631,14 +631,29 @@ async function recalculateBalancesInTransaction(tableName) {
       const supRets = db.supplier_returns ? await db.supplier_returns.toArray() : [];
       const custInvs = db.sales_invoices ? await db.sales_invoices.toArray() : [];
       const custRets = db.customer_returns ? await db.customer_returns.toArray() : [];
+      const payments = db.payments ? await db.payments.toArray() : [];
+      const custPayments = db.customer_payments ? await db.customer_payments.toArray() : [];
 
       for (const party of parties) {
         const sInvs = supInvs.filter((i) => i.supplier_id === party.id);
         const sRets = supRets.filter((r) => r.supplier_id === party.id);
         const cInvs = custInvs.filter((i) => i.customer_id === party.id);
         const cRets = custRets.filter((r) => r.customer_id === party.id);
+        const unlinkedSup = payments.filter((p) => p.supplier_id === party.id && !p.invoice_id).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+        const unlinkedCust = custPayments.filter((p) => p.customer_id === party.id && !p.invoice_id).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+        const supOpening = resolveOpeningBalance(party, 'supplier');
+        const custOpening = resolveOpeningBalance(party, 'customer');
 
-        const summary = BalanceCalculator.calculateUnifiedPartyBalance(sInvs, sRets, cInvs, cRets);
+        const summary = BalanceCalculator.calculateUnifiedPartyBalance(
+          sInvs,
+          sRets,
+          cInvs,
+          cRets,
+          supOpening,
+          custOpening,
+          unlinkedSup,
+          unlinkedCust
+        );
 
         await db.parties.update(party.id, {
           supplier_balance: summary.supplierBalance,

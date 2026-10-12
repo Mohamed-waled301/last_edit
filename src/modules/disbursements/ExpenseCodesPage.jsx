@@ -113,9 +113,9 @@ export default function ExpenseCodesPage({ onNotify }) {
                 type="text"
                 value={form.code}
                 onChange={(e) => setForm(p => ({ ...p, code: e.target.value }))}
-                placeholder="مثال: 01 أو كهرباء"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
+              <p className="text-xs text-gray-500 mt-1">مثال: 01 أو كهرباء</p>
             </div>
 
             <div>
@@ -126,11 +126,11 @@ export default function ExpenseCodesPage({ onNotify }) {
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))}
-                placeholder="مثال: كهرباء المصنع، شحن بضاعة، صيانة ماكينات"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
               <FieldError error={errors.name} />
+              <p className="text-xs text-gray-500 mt-1">مثال: كهرباء المصنع، شحن بضاعة، صيانة ماكينات</p>
             </div>
 
             <div>
@@ -143,7 +143,6 @@ export default function ExpenseCodesPage({ onNotify }) {
                 step="0.01"
                 value={form.default_amount}
                 onChange={(e) => setForm(p => ({ ...p, default_amount: e.target.value }))}
-                placeholder="0.00"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
               <span className="text-[11px] text-gray-400 mt-1 block">

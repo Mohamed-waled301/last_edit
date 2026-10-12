@@ -630,7 +630,6 @@ export default function CashModule({ onBack, onNotify }) {
                   min="0.01"
                   step="any"
                   required
-                  placeholder="المبلغ"
                   value={disburseForm.amount}
                   onChange={e => setDisburseForm({ ...disburseForm, amount: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 font-bold text-red-600 text-sm focus:border-[#1F3A5F] focus:outline-none"
@@ -670,11 +669,11 @@ export default function CashModule({ onBack, onNotify }) {
                 <label className="block font-bold text-gray-700 mb-1">ملاحظات وبيان الصرف</label>
                 <input
                   type="text"
-                  placeholder="مثال: سداد بوفيه وعمال تحميل"
                   value={disburseForm.notes}
                   onChange={e => setDisburseForm({ ...disburseForm, notes: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
+                <p className="text-xs text-gray-500 mt-1">مثال: سداد بوفيه وعمال تحميل</p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
@@ -742,7 +741,6 @@ export default function CashModule({ onBack, onNotify }) {
                   min="1"
                   step="any"
                   required
-                  placeholder="المبلغ"
                   value={outletTransferForm.amount}
                   onChange={e => setOutletTransferForm({ ...outletTransferForm, amount: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 font-bold text-green-700 text-sm"
@@ -868,7 +866,6 @@ export default function CashModule({ onBack, onNotify }) {
                   min="0"
                   step="any"
                   required
-                  placeholder="المبلغ الفعلي الموجود بالدرج"
                   value={closingForm.actual_cash_counted}
                   onChange={e => setClosingForm({ ...closingForm, actual_cash_counted: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 font-mono font-bold text-sm text-blue-900"
@@ -879,11 +876,11 @@ export default function CashModule({ onBack, onNotify }) {
                 <label className="block font-bold text-gray-700 mb-1">ملاحظات التقفيل</label>
                 <input
                   type="text"
-                  placeholder="أسباب العجز أو الزيادة إن وجدت"
                   value={closingForm.notes}
                   onChange={e => setClosingForm({ ...closingForm, notes: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
+                <p className="text-xs text-gray-500 mt-1">أسباب العجز أو الزيادة إن وجدت</p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">

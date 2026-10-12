@@ -255,7 +255,6 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
                 step="0.01"
                 value={form.actual_cash_counted}
                 onChange={(e) => setForm(p => ({ ...p, actual_cash_counted: e.target.value }))}
-                placeholder="0.00"
                 className="w-full px-3 py-2 border border-emerald-400 rounded-md text-sm font-mono font-bold text-emerald-800 bg-emerald-50/20"
                 required
               />
@@ -269,9 +268,9 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
               type="text"
               value={form.notes}
               onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))}
-              placeholder="أي فروقات أو ملاحظات استلام..."
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
             />
+            <p className="text-xs text-gray-500 mt-1">أي فروقات أو ملاحظات استلام</p>
           </div>
         </div>
       </form>

@@ -261,11 +261,11 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
                 type="text"
                 value={form.external_factory_name}
                 onChange={(e) => setForm(prev => ({ ...prev, external_factory_name: e.target.value }))}
-                placeholder="مثال: مصنع الفاخر للتطريز الآلي أو مغسلة الشروق"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
               <FieldError error={errors.external_factory_name} />
+              <p className="text-xs text-gray-500 mt-1">مثال: مصنع الفاخر للتطريز الآلي أو مغسلة الشروق</p>
             </div>
 
             {/* Transfer Date */}

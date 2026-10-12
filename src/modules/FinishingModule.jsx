@@ -373,11 +373,11 @@ export default function FinishingModule({ onBack, onNotify }) {
                 <label className="block font-semibold text-gray-700 mb-1">ملاحظات ومواصفات التشغيل</label>
                 <input
                   type="text"
-                  placeholder="تعليمات الجودة وألوان خيوط التطريز"
                   value={newOrder.notes}
                   onChange={e => setNewOrder({ ...newOrder, notes: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
+                <p className="text-xs text-gray-500 mt-1">تعليمات الجودة وألوان خيوط التطريز</p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">

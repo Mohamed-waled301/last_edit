@@ -1,32 +1,60 @@
 import db from '../db';
 import auditRepo from './auditRepo';
+import {
+  calculateItemActualBalance,
+  buildItemStockCard,
+  recomputeStockDiscrepancies
+} from '../../logic/inventoryBalances';
 
 export const itemsRepo = {
   /**
-   * Get all items with calculated actual balance, variants, and clothing info
+   * Get all items with calculated actual balance computed from movements:
+   * Formula: opening balance + sum of all "in" movements - sum of all "out" movements
    */
   async getAll() {
     const items = await db.items.toArray();
-    return items.map(item => {
-      const variants = Array.isArray(item.variants) ? item.variants : [];
-      const totalStock = variants.length > 0
-        ? variants.reduce((sum, v) => sum + (Number(v.current_stock) || 0), 0)
-        : Number(item.current_stock) || 0;
+    const movements = await db.stock_movements.toArray();
 
-      const totalOpening = variants.length > 0
-        ? variants.reduce((sum, v) => sum + (Number(v.opening_balance) || 0), 0)
+    return items.map(item => {
+      const itemMovements = movements.filter(m => String(m.item_id || m.material_id) === String(item.id));
+      const variants = Array.isArray(item.variants) ? item.variants : [];
+
+      // Calculate per-variant actual stock if variants exist
+      const computedVariants = variants.map(v => {
+        const vMovements = itemMovements.filter(m => m.variant_id === v.id);
+        const vOpening = Number(v.opening_balance) || 0;
+        const vStock = calculateItemActualBalance(vOpening, vMovements, v.id);
+        return {
+          ...v,
+          opening_balance: vOpening,
+          current_stock: vStock,
+          actual_balance: vStock
+        };
+      });
+
+      const totalOpening = computedVariants.length > 0
+        ? computedVariants.reduce((sum, v) => sum + (Number(v.opening_balance) || 0), 0)
         : Number(item.opening_balance) || 0;
+
+      const totalActualStock = computedVariants.length > 0
+        ? computedVariants.reduce((sum, v) => sum + (Number(v.current_stock) || 0), 0)
+        : calculateItemActualBalance(totalOpening, itemMovements);
+
+      const costPrice = Number(item.cost_price) || Number(item.average_cost) || 0;
+      const sellingPrice = Number(item.selling_price) || 0;
+      const marginPercent = costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(2)) : (Number(item.margin_percent) || 0);
 
       return {
         ...item,
         opening_balance: totalOpening,
-        current_stock: totalStock,
-        actual_balance: totalStock,
-        cost_price: Number(item.cost_price) || Number(item.average_cost) || 0,
-        average_cost: Number(item.cost_price) || Number(item.average_cost) || 0,
-        selling_price: Number(item.selling_price) || 0,
+        current_stock: totalActualStock,
+        actual_balance: totalActualStock,
+        cost_price: costPrice,
+        average_cost: costPrice,
+        selling_price: sellingPrice,
+        margin_percent: marginPercent,
         min_issue_qty: Number(item.min_issue_qty) || 1,
-        variants
+        variants: computedVariants
       };
     });
   },
@@ -34,18 +62,125 @@ export const itemsRepo = {
   async getById(id) {
     const item = await db.items.get(id);
     if (!item) return null;
+    const movements = await db.stock_movements.where('material_id').equals(id).toArray()
+      .then(async legacy => {
+        const byItemId = await db.stock_movements.where('item_id').equals(id).toArray().catch(() => []);
+        const map = new Map();
+        [...legacy, ...byItemId].forEach(m => map.set(m.id, m));
+        return Array.from(map.values());
+      });
+
     const variants = Array.isArray(item.variants) ? item.variants : [];
-    const totalStock = variants.length > 0
-      ? variants.reduce((sum, v) => sum + (Number(v.current_stock) || 0), 0)
-      : Number(item.current_stock) || 0;
+    const computedVariants = variants.map(v => {
+      const vMovements = movements.filter(m => m.variant_id === v.id);
+      const vOpening = Number(v.opening_balance) || 0;
+      const vStock = calculateItemActualBalance(vOpening, vMovements, v.id);
+      return {
+        ...v,
+        current_stock: vStock,
+        actual_balance: vStock
+      };
+    });
+
+    const totalOpening = computedVariants.length > 0
+      ? computedVariants.reduce((sum, v) => sum + (Number(v.opening_balance) || 0), 0)
+      : Number(item.opening_balance) || 0;
+
+    const totalStock = computedVariants.length > 0
+      ? computedVariants.reduce((sum, v) => sum + (Number(v.current_stock) || 0), 0)
+      : calculateItemActualBalance(totalOpening, movements);
+
+    const costPrice = Number(item.cost_price) || Number(item.average_cost) || 0;
+    const sellingPrice = Number(item.selling_price) || 0;
+    const marginPercent = costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(2)) : (Number(item.margin_percent) || 0);
 
     return {
       ...item,
+      opening_balance: totalOpening,
       current_stock: totalStock,
       actual_balance: totalStock,
-      cost_price: Number(item.cost_price) || Number(item.average_cost) || 0,
-      variants
+      cost_price: costPrice,
+      selling_price: sellingPrice,
+      margin_percent: marginPercent,
+      variants: computedVariants
     };
+  },
+
+  /**
+   * Check if an item has operational movements beyond its opening balance
+   */
+  async hasOperationalMovements(id) {
+    if (!id) return false;
+    const movements = await db.stock_movements.toArray();
+    const itemMovements = movements.filter(
+      m => String(m.item_id || m.material_id) === String(id) && m.movement_type !== 'opening_balance'
+    );
+    return itemMovements.length > 0;
+  },
+
+  /**
+   * Stock card / Item ledger for a single item with running balance & period breakdown
+   */
+  async getStockCard(id, filters = {}) {
+    const item = await this.getById(id);
+    if (!item) throw new Error('الصنف غير موجود');
+    const allMovements = await db.stock_movements.toArray();
+    return buildItemStockCard(item, allMovements, filters);
+  },
+
+  /**
+   * Recompute tool: recomputes all stock balances from movements,
+   * updates cached current_stock in items / materials / products, and reports differences.
+   */
+  async recomputeAllBalances(userId = 'usr-owner') {
+    const rawItems = await db.items.toArray();
+    const movements = await db.stock_movements.toArray();
+
+    const report = recomputeStockDiscrepancies(rawItems, movements);
+
+    // Apply updates inside a single Dexie transaction
+    await db.transaction('rw', [db.items, db.materials, db.products], async () => {
+      for (const item of rawItems) {
+        const itemMovements = movements.filter(m => String(m.item_id || m.material_id) === String(item.id));
+        const variants = Array.isArray(item.variants) ? item.variants : [];
+
+        const updatedVariants = variants.map(v => {
+          const vMovements = itemMovements.filter(m => m.variant_id === v.id);
+          const vOpening = Number(v.opening_balance) || 0;
+          const vStock = calculateItemActualBalance(vOpening, vMovements, v.id);
+          return {
+            ...v,
+            current_stock: vStock
+          };
+        });
+
+        const totalOpening = updatedVariants.length > 0
+          ? updatedVariants.reduce((sum, v) => sum + (Number(v.opening_balance) || 0), 0)
+          : Number(item.opening_balance) || 0;
+
+        const totalStock = updatedVariants.length > 0
+          ? updatedVariants.reduce((sum, v) => sum + (Number(v.current_stock) || 0), 0)
+          : calculateItemActualBalance(totalOpening, itemMovements);
+
+        await db.items.update(item.id, {
+          current_stock: totalStock,
+          variants: updatedVariants
+        });
+
+        if (item.item_type === 'raw_material') {
+          await db.materials.update(item.id, { current_stock: totalStock }).catch(() => {});
+        } else {
+          await db.products.update(item.id, { current_finished_stock: totalStock }).catch(() => {});
+        }
+      }
+    });
+
+    await auditRepo.log(userId, 'RECOMPUTE_STOCK_BALANCES', 'items', 'all', null, {
+      totalItemsChecked: report.totalItems,
+      discrepanciesCount: report.discrepanciesCount
+    });
+
+    return report;
   },
 
   /**
@@ -93,24 +228,27 @@ export const itemsRepo = {
   },
 
   /**
-   * Create new item with variants, image, and sync with materials/products
+   * Create new item with variants, image, and opening balance
    */
   async create(data, userId = 'usr-storekeeper') {
-    const id = `itm-${Date.now()}`;
+    const id = data.id || `itm-${Date.now()}`;
     const code = (data.code && String(data.code).trim()) || (await this.getNextCode());
 
-    const isUnique = await this.isCodeUnique(code);
+    const isUnique = await this.isCodeUnique(code, id);
     if (!isUnique) {
       throw new Error(`كود الصنف "${code}" مسجل بالفعل في النظام. يرجى اختيار كود آخر.`);
     }
 
     const costPrice = Math.max(0, Number(data.cost_price) || 0);
-    const sellingPrice = Math.max(0, Number(data.selling_price) || 0);
+    const sellingPrice = Math.max(0, Number(data.selling_price) || (costPrice));
+    const marginPercent = costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(2)) : (Number(data.margin_percent) || 0);
     const minIssueQty = Math.max(1, Number(data.min_issue_qty) || 1);
     const openingBalance = Math.max(0, Number(data.opening_balance) || 0);
+    const openingCost = Math.max(0, Number(data.opening_cost ?? costPrice) || 0);
+    const locationId = data.location_id || 'loc-main';
 
-    // Variants handling for clothing
-    const rawVariants = Array.isArray(data.variants) ? data.variants : [];
+    const hasVariants = Boolean(data.has_variants);
+    const rawVariants = hasVariants && Array.isArray(data.variants) ? data.variants : [];
     const variants = rawVariants.map((v, idx) => ({
       id: v.id || `var-${Date.now()}-${idx}`,
       size: v.size || 'عادي',
@@ -135,15 +273,18 @@ export const itemsRepo = {
       item_group: data.item_group || 'عام',
       item_department: data.item_department || 'عام',
       item_type: data.item_type || 'finished', // 'finished' | 'raw_material'
-      image: data.image || '', // Compressed base64
+      image: data.image || '',
       unit: data.unit || 'قطعة',
       cost_price: costPrice,
       selling_price: sellingPrice,
+      margin_percent: marginPercent,
       min_issue_qty: minIssueQty,
       opening_balance: totalOpening,
+      opening_cost: openingCost,
       current_stock: totalStock,
+      has_variants: hasVariants,
       variants,
-      location_id: data.location_id || 'loc-main',
+      location_id: locationId,
       notes: data.notes || '',
       is_active: 1,
       created_at: new Date().toISOString()
@@ -178,7 +319,7 @@ export const itemsRepo = {
           name: itemRecord.name,
           category: itemRecord.item_group,
           unit: itemRecord.unit,
-          target_profit_margin_percent: costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(1)) : 30,
+          target_profit_margin_percent: marginPercent,
           current_finished_stock: totalStock,
           cost_price: costPrice,
           selling_price: sellingPrice,
@@ -188,17 +329,50 @@ export const itemsRepo = {
         });
       }
 
-      // Record opening balance stock movement if > 0
-      if (totalStock > 0) {
+      // Record opening balance stock movements if > 0
+      if (variants.length > 0) {
+        for (let i = 0; i < variants.length; i++) {
+          const v = variants[i];
+          if (v.opening_balance > 0) {
+            await db.stock_movements.add({
+              id: `sm-op-${Date.now()}-${i}`,
+              item_id: id,
+              material_id: id,
+              variant_id: v.id,
+              location_id: locationId,
+              movement_type: 'opening_balance',
+              direction: 'in',
+              quantity: v.opening_balance,
+              quantity_change: v.opening_balance,
+              unit_cost: openingCost,
+              document_id: id,
+              reference_type: 'OPENING_BALANCE',
+              reference_id: id,
+              date: itemRecord.created_at.split('T')[0],
+              movement_date: itemRecord.created_at.split('T')[0],
+              notes: `رصيد افتتاحي للمتغير: ${v.size} / ${v.color}`,
+              created_by: userId,
+              created_at: itemRecord.created_at
+            });
+          }
+        }
+      } else if (totalStock > 0) {
         await db.stock_movements.add({
-          id: `sm-${Date.now()}`,
+          id: `sm-op-${Date.now()}`,
+          item_id: id,
           material_id: id,
+          variant_id: null,
+          location_id: locationId,
           movement_type: 'opening_balance',
+          direction: 'in',
+          quantity: totalStock,
+          quantity_change: totalStock,
+          unit_cost: openingCost,
+          document_id: id,
           reference_type: 'OPENING_BALANCE',
           reference_id: id,
-          quantity_change: totalStock,
-          unit_cost: costPrice,
-          new_balance: totalStock,
+          date: itemRecord.created_at.split('T')[0],
+          movement_date: itemRecord.created_at.split('T')[0],
           notes: `رصيد افتتاحي للصنف: ${itemRecord.name}`,
           created_by: userId,
           created_at: itemRecord.created_at
@@ -211,7 +385,7 @@ export const itemsRepo = {
   },
 
   /**
-   * Update item details, prices, and sync
+   * Update item details and sync
    */
   async update(id, data, userId = 'usr-storekeeper') {
     const current = await db.items.get(id);
@@ -224,11 +398,24 @@ export const itemsRepo = {
       }
     }
 
+    // Check if variants are being turned OFF while variant stock exists
+    const currentlyHasVariants = Boolean(current.has_variants || (Array.isArray(current.variants) && current.variants.length > 0));
+    const nextHasVariants = data.has_variants !== undefined ? Boolean(data.has_variants) : currentlyHasVariants;
+
+    if (currentlyHasVariants && !nextHasVariants) {
+      const variants = Array.isArray(current.variants) ? current.variants : [];
+      const hasVariantStock = variants.some(v => (Number(v.current_stock) || 0) > 0 || (Number(v.opening_balance) || 0) > 0);
+      if (hasVariantStock) {
+        throw new Error('لا يمكن إيقاف المقاسات والألوان لوجود أرصدة مخزنية مسجلة على المتغيرات. يرجى تصفية أو تسوية أرصدة المتغيرات أولاً.');
+      }
+    }
+
     const costPrice = data.cost_price !== undefined ? Math.max(0, Number(data.cost_price) || 0) : current.cost_price;
     const sellingPrice = data.selling_price !== undefined ? Math.max(0, Number(data.selling_price) || 0) : current.selling_price;
+    const marginPercent = costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(2)) : (Number(data.margin_percent) || current.margin_percent || 0);
     const minIssueQty = data.min_issue_qty !== undefined ? Math.max(1, Number(data.min_issue_qty) || 1) : current.min_issue_qty;
 
-    const variants = data.variants || current.variants || [];
+    const variants = nextHasVariants ? (data.variants || current.variants || []) : [];
     const totalStock = variants.length > 0
       ? variants.reduce((sum, v) => sum + (Number(v.current_stock) || 0), 0)
       : (data.current_stock !== undefined ? Number(data.current_stock) : current.current_stock);
@@ -244,12 +431,32 @@ export const itemsRepo = {
       unit: data.unit ?? current.unit,
       cost_price: costPrice,
       selling_price: sellingPrice,
+      margin_percent: marginPercent,
       min_issue_qty: minIssueQty,
-      current_stock: totalStock,
+      has_variants: nextHasVariants,
       variants,
+      location_id: data.location_id || current.location_id || 'loc-main',
       notes: data.notes ?? current.notes,
       is_active: data.is_active !== undefined ? Number(data.is_active) : current.is_active
     };
+
+    // If opening balance updated before any operational movements
+    const hasOps = await this.hasOperationalMovements(id);
+    if (!hasOps && data.opening_balance !== undefined) {
+      const newOpen = Math.max(0, Number(data.opening_balance) || 0);
+      updated.opening_balance = newOpen;
+      updated.current_stock = variants.length > 0 ? totalStock : newOpen;
+
+      // Update the opening balance stock movement
+      const opMovement = await db.stock_movements.where('item_id').equals(id).filter(m => m.movement_type === 'opening_balance').first();
+      if (opMovement) {
+        await db.stock_movements.update(opMovement.id, {
+          quantity: newOpen,
+          quantity_change: newOpen,
+          unit_cost: costPrice
+        });
+      }
+    }
 
     await db.transaction('rw', [db.items, db.materials, db.products], async () => {
       await db.items.put(updated);
@@ -263,7 +470,7 @@ export const itemsRepo = {
             unit: updated.unit,
             average_cost: costPrice,
             min_stock_alert: minIssueQty,
-            current_stock: totalStock
+            current_stock: updated.current_stock
           });
         }
       }
@@ -276,7 +483,8 @@ export const itemsRepo = {
             code: updated.code,
             unit: updated.unit,
             category: updated.item_group,
-            current_finished_stock: totalStock,
+            target_profit_margin_percent: marginPercent,
+            current_finished_stock: updated.current_stock,
             cost_price: costPrice,
             selling_price: sellingPrice
           });
@@ -286,6 +494,162 @@ export const itemsRepo = {
 
     await auditRepo.log(userId, 'UPDATE_ITEM', 'items', id, current, updated);
     return updated;
+  },
+
+  async delete(id, userId = 'usr-storekeeper') {
+    const current = await db.items.get(id);
+    if (!current) throw new Error('الصنف غير موجود');
+
+    const invCount = await db.sales_invoice_items.where('product_id').equals(id).count();
+    if (invCount > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${invCount}) بند في فواتير مبيعات مرتبطة به.`);
+    }
+
+    const poCount = await db.purchase_order_items.where('material_id').equals(id).count();
+    if (poCount > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${poCount}) بند في أوامر شراء مرتبطة به.`);
+    }
+
+    const bomRawCount = await db.bom_items.where('raw_material_id').equals(id).count();
+    const bomProdCount = await db.bom_items.where('product_id').equals(id).count();
+    if (bomRawCount > 0 || bomProdCount > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لدخوله في بطاقات مقادير خامات المنتجات (BOM).`);
+    }
+
+    const movements = await db.stock_movements.toArray();
+    const operationalMovements = movements.filter(m => (m.item_id === id || m.material_id === id) && m.movement_type !== 'opening_balance');
+    if (operationalMovements.length > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${operationalMovements.length}) حركة مخزنية تشغيلية مسجلة عليه.`);
+    }
+
+    const itemMovs = movements.filter(m => m.item_id === id || m.material_id === id);
+
+    await db.transaction('rw', [db.items, db.materials, db.products, db.stock_movements], async () => {
+      await db.items.delete(id);
+      await db.materials.delete(id).catch(() => {});
+      await db.products.delete(id).catch(() => {});
+      for (const m of itemMovs) {
+        await db.stock_movements.delete(m.id);
+      }
+    });
+
+    await auditRepo.log(userId, 'DELETE_ITEM', 'items', id, current, null);
+    return { success: true, message: `تم حذف الصنف "${current.name}" بنجاح` };
+  },
+
+  /**
+   * ITEM GROUPS CRUD
+   */
+  async getItemGroups() {
+    return await db.item_groups.filter(g => g.is_active === 1).toArray();
+  },
+
+  async getItemGroupById(id) {
+    return await db.item_groups.get(id);
+  },
+
+  async createItemGroup(data, userId = 'usr-storekeeper') {
+    const id = data.id || `grp-${Date.now()}`;
+    const code = data.code || `GRP-${Date.now().toString().slice(-4)}`;
+    const group = {
+      id,
+      code,
+      name: data.name.trim(),
+      notes: data.notes || '',
+      is_active: 1,
+      created_at: new Date().toISOString()
+    };
+    await db.item_groups.add(group);
+    await auditRepo.log(userId, 'CREATE_ITEM_GROUP', 'item_groups', id, null, group);
+    return group;
+  },
+
+  async updateItemGroup(id, data, userId = 'usr-storekeeper') {
+    const current = await db.item_groups.get(id);
+    if (!current) throw new Error('مجموعة الصنف غير موجودة');
+    const updated = {
+      ...current,
+      name: data.name !== undefined ? data.name.trim() : current.name,
+      code: data.code !== undefined ? data.code.trim() : current.code,
+      notes: data.notes !== undefined ? data.notes : current.notes,
+      is_active: data.is_active !== undefined ? Number(data.is_active) : current.is_active
+    };
+    await db.item_groups.put(updated);
+    await auditRepo.log(userId, 'UPDATE_ITEM_GROUP', 'item_groups', id, current, updated);
+    return updated;
+  },
+
+  async deleteItemGroup(id, userId = 'usr-storekeeper') {
+    const current = await db.item_groups.get(id);
+    if (!current) throw new Error('مجموعة الصنف غير موجودة');
+
+    // Check if any items belong to this group
+    const itemsCount = await db.items.filter(i => i.item_group === current.name || i.item_group === current.id).count();
+    if (itemsCount > 0) {
+      throw new Error(`لا يمكن حذف المجموعة "${current.name}" لوجود (${itemsCount}) صنف مسجل عليها. يرجى نقل الأصناف لمجموعة أخرى أولاً.`);
+    }
+
+    await db.item_groups.delete(id);
+    await auditRepo.log(userId, 'DELETE_ITEM_GROUP', 'item_groups', id, current, null);
+    return { success: true, message: `تم حذف مجموعة الصنف "${current.name}" بنجاح` };
+  },
+
+  /**
+   * ITEM SECTIONS CRUD
+   */
+  async getItemSections() {
+    return await db.item_sections.filter(s => s.is_active === 1).toArray();
+  },
+
+  async getItemSectionById(id) {
+    return await db.item_sections.get(id);
+  },
+
+  async createItemSection(data, userId = 'usr-storekeeper') {
+    const id = data.id || `sec-${Date.now()}`;
+    const code = data.code || `SEC-${Date.now().toString().slice(-4)}`;
+    const section = {
+      id,
+      code,
+      name: data.name.trim(),
+      group_id: data.group_id || null,
+      notes: data.notes || '',
+      is_active: 1,
+      created_at: new Date().toISOString()
+    };
+    await db.item_sections.add(section);
+    await auditRepo.log(userId, 'CREATE_ITEM_SECTION', 'item_sections', id, null, section);
+    return section;
+  },
+
+  async updateItemSection(id, data, userId = 'usr-storekeeper') {
+    const current = await db.item_sections.get(id);
+    if (!current) throw new Error('قسم الصنف غير موجود');
+    const updated = {
+      ...current,
+      name: data.name !== undefined ? data.name.trim() : current.name,
+      code: data.code !== undefined ? data.code.trim() : current.code,
+      group_id: data.group_id !== undefined ? data.group_id : current.group_id,
+      notes: data.notes !== undefined ? data.notes : current.notes,
+      is_active: data.is_active !== undefined ? Number(data.is_active) : current.is_active
+    };
+    await db.item_sections.put(updated);
+    await auditRepo.log(userId, 'UPDATE_ITEM_SECTION', 'item_sections', id, current, updated);
+    return updated;
+  },
+
+  async deleteItemSection(id, userId = 'usr-storekeeper') {
+    const current = await db.item_sections.get(id);
+    if (!current) throw new Error('قسم الصنف غير موجود');
+
+    const itemsCount = await db.items.filter(i => i.item_department === current.name || i.item_department === current.id).count();
+    if (itemsCount > 0) {
+      throw new Error(`لا يمكن حذف القسم "${current.name}" لوجود (${itemsCount}) صنف مسجل عليه.`);
+    }
+
+    await db.item_sections.delete(id);
+    await auditRepo.log(userId, 'DELETE_ITEM_SECTION', 'item_sections', id, current, null);
+    return { success: true, message: `تم حذف قسم الصنف "${current.name}" بنجاح` };
   },
 
   /**
@@ -319,49 +683,6 @@ export const itemsRepo = {
     };
     await db.item_colors.add(color);
     return color;
-  },
-
-  async delete(id, userId = 'usr-storekeeper') {
-    const current = await db.items.get(id);
-    if (!current) throw new Error('الصنف غير موجود');
-
-    // Check references in sales_invoice_items
-    const invCount = await db.sales_invoice_items.where('product_id').equals(id).count();
-    if (invCount > 0) {
-      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${invCount}) بند في فواتير مبيعات مرتبطة به.`);
-    }
-
-    // Check purchase_order_items
-    const poCount = await db.purchase_order_items.where('material_id').equals(id).count();
-    if (poCount > 0) {
-      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${poCount}) بند في أوامر شراء مرتبطة به.`);
-    }
-
-    // Check bom_items
-    const bomRawCount = await db.bom_items.where('raw_material_id').equals(id).count();
-    const bomProdCount = await db.bom_items.where('product_id').equals(id).count();
-    if (bomRawCount > 0 || bomProdCount > 0) {
-      throw new Error(`لا يمكن حذف الصنف "${current.name}" لدخوله في بطاقات مقادير خامات المنتجات (BOM).`);
-    }
-
-    // Check stock movements beyond opening balance
-    const movements = await db.stock_movements.where('material_id').equals(id).toArray();
-    const operationalMovements = movements.filter(m => m.movement_type !== 'opening_balance');
-    if (operationalMovements.length > 0) {
-      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${operationalMovements.length}) حركة مخزنية تشغيلية مسجلة عليه.`);
-    }
-
-    await db.transaction('rw', [db.items, db.materials, db.products, db.stock_movements], async () => {
-      await db.items.delete(id);
-      await db.materials.delete(id);
-      await db.products.delete(id);
-      for (const m of movements) {
-        await db.stock_movements.delete(m.id);
-      }
-    });
-
-    await auditRepo.log(userId, 'DELETE_ITEM', 'items', id, current, null);
-    return { success: true, message: `تم حذف الصنف "${current.name}" بنجاح` };
   }
 };
 

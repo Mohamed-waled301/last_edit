@@ -165,15 +165,20 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
       {/* Search and Role Filter Bar */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-xs space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="w-4 h-4 text-gray-400 absolute right-3 top-2.5" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="البحث بالاسم، الكود، أو رقم الهاتف..."
-              className="w-full pr-9 pl-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
-            />
+          <div className="flex-1 min-w-[240px]">
+            <label htmlFor="party-search-input" className="block text-xs font-semibold text-gray-700 mb-1">
+              بحث في جهات التعامل (بالاسم، الكود، أو رقم الهاتف)
+            </label>
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute right-3 top-2.5 pointer-events-none" />
+              <input
+                id="party-search-input"
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pr-9 pl-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-md text-xs font-bold">

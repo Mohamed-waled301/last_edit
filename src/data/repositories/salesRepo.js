@@ -47,7 +47,6 @@ export const salesRepo = {
       address: data.address || '',
       tax_number: data.tax_number || '',
       customer_type: data.customer_type || 'local',
-      payment_terms: data.payment_terms || 'cash',
       credit_limit: Number(data.credit_limit) || 0,
       opening_balance: opening,
       opening_balance_type: normalizeAccountNature(
@@ -412,23 +411,32 @@ export const salesRepo = {
       : Math.max(0, Number(data.paid_amount) || 0);
 
     // Validation: Credit Limit on Customer
-    // Applies only to customers with type "آجل" and only to credit invoices. Cash customers are never blocked by a limit.
+    // Applies ONLY when the invoice is Credit and customer has a positive credit limit (> 0).
+    // Calculates balance net of any supplier-side balance if the party is both!
     if (paymentTerms === 'credit' && data.customer_id) {
       const customer = await db.customers.get(data.customer_id);
-      const isCustomerCredit = customer && (
-        customer.customer_deal_type === 'credit' ||
-        (customer.customer_deal_type !== 'cash' && customer.payment_terms === 'credit')
-      );
-      if (isCustomerCredit && customer.credit_limit > 0) {
+      const limit = Number(customer?.credit_limit) || 0;
+      if (limit > 0) {
         const stmt = await this.getCustomerStatement(data.customer_id);
-        const currentBalance = stmt.summary?.remaining_balance || stmt.balance_due || 0;
-        const totalDueAfterThisInvoice = Number((currentBalance + (totalInvoiceAmount - paidAmount)).toFixed(2));
-        const limit = Number(customer.credit_limit) || 0;
+        const currentCustomerBal = stmt.summary?.remaining_balance || stmt.balance_due || 0;
+
+        // Check if party is also a supplier (netting)
+        let effectiveBalance = currentCustomerBal;
+        const party = await db.parties.get(data.customer_id).catch(() => null);
+        if (party && party.is_supplier) {
+          const supInvoices = await db.supplier_invoices.where('supplier_id').equals(data.customer_id).toArray();
+          const supReturns = await db.supplier_returns.where('supplier_id').equals(data.customer_id).toArray();
+          const supOpening = resolveOpeningBalance(party, 'supplier');
+          const supBal = BalanceCalculator.calculateSupplierBalance(supInvoices, supReturns, supOpening);
+          effectiveBalance = Math.max(0, currentCustomerBal - supBal.balanceDue);
+        }
+
+        const totalDueAfterThisInvoice = Number((effectiveBalance + (totalInvoiceAmount - paidAmount)).toFixed(2));
 
         if (totalDueAfterThisInvoice > limit) {
           const excess = Number((totalDueAfterThisInvoice - limit).toFixed(2));
           throw new Error(
-            `لا يمكن حفظ الفاتورة: إجمالي مديونية العميل مع الفاتورة الحالية ستصبح (${totalDueAfterThisInvoice} ج.م) وهي تتجاوز الحد الائتماني المسموح به (${limit} ج.م) بمقدار (${excess} ج.م). يرجى تحصيل دفعة نقدية أولاً أو زيادة الحد الائتماني.`
+            `لا يمكن حفظ الفاتورة الآجلة: إجمالي مديونية العميل (صافي بعد رصيد التوريد إن وجد) مع الفاتورة الحالية ستصبح (${totalDueAfterThisInvoice} ج.م) وهي تتجاوز الحد الائتماني المسموح به (${limit} ج.م) بمقدار (${excess} ج.م). يرجى تحصيل دفعة نقدية أولاً أو زيادة الحد الائتماني للعميل.`
           );
         }
       }
@@ -470,9 +478,10 @@ export const salesRepo = {
       created_at: now,
     };
 
-    await db.transaction('rw', [db.sales_invoices, db.sales_invoice_items, db.products, db.items, db.treasury_accounts, db.cash_transactions], async () => {
+    await db.transaction('rw', [db.sales_invoices, db.sales_invoice_items, db.products, db.items, db.stock_movements, db.treasury_accounts, db.cash_transactions], async () => {
       await db.sales_invoices.add(invoice);
-      for (const ii of invoiceItems) {
+      for (let idx = 0; idx < invoiceItems.length; idx++) {
+        const ii = invoiceItems[idx];
         await db.sales_invoice_items.add(ii);
 
         // Deduct finished stock from product and item
@@ -486,6 +495,28 @@ export const salesRepo = {
           const newStock = Number(((Number(itemMaster.current_stock) || 0) - ii.quantity).toFixed(2));
           await db.items.update(itemMaster.id, { current_stock: newStock });
         }
+
+        // Record stock movement (direction: 'out')
+        await db.stock_movements.add({
+          id: `sm-sls-${Date.now()}-${idx}`,
+          item_id: ii.product_id,
+          material_id: ii.product_id,
+          variant_id: ii.variant_id || null,
+          location_id: data.location_id || 'loc-main',
+          movement_type: 'sales_invoice',
+          direction: 'out',
+          quantity: ii.quantity,
+          quantity_change: -ii.quantity,
+          unit_cost: ii.unit_cost,
+          document_id: id,
+          reference_type: 'SALES_INVOICE',
+          reference_id: id,
+          date: invoice.invoice_date,
+          movement_date: invoice.invoice_date,
+          notes: `منصرف مبيعات فاتورة ${invoiceNumber}`,
+          created_by: userId,
+          created_at: now
+        });
       }
 
       // If Cash invoice or paid amount > 0, record cash inflow in outlet treasury
@@ -644,7 +675,7 @@ export const salesRepo = {
       }
     }
 
-    await db.transaction('rw', [db.customer_returns, db.products, db.items, db.treasury_accounts, db.cash_transactions], async () => {
+    await db.transaction('rw', [db.customer_returns, db.products, db.items, db.stock_movements, db.treasury_accounts, db.cash_transactions], async () => {
       // Restore stock
       const prod = await db.products.get(product_id);
       if (prod) {
@@ -669,6 +700,27 @@ export const salesRepo = {
         refund_method: actualRefundMethod,
         return_date: return_date || now.split('T')[0],
         reason: reason || 'مرتجع مبيعات',
+        created_by: userId,
+        created_at: now,
+      });
+
+      // Record stock movement (direction: 'in')
+      await db.stock_movements.add({
+        id: `sm-sret-${Date.now()}`,
+        item_id: product_id,
+        material_id: product_id,
+        location_id: 'loc-main',
+        movement_type: 'sales_return',
+        direction: 'in',
+        quantity: returnQty,
+        quantity_change: returnQty,
+        unit_cost: returnAmount > 0 ? Number((returnAmount / returnQty).toFixed(2)) : 0,
+        document_id: returnId,
+        reference_type: 'SALES_RETURN',
+        reference_id: returnId,
+        date: return_date || now.split('T')[0],
+        movement_date: return_date || now.split('T')[0],
+        notes: `وارد مرتجع مبيعات إذن ${returnNumber}`,
         created_by: userId,
         created_at: now,
       });

@@ -224,7 +224,6 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
                 step="0.01"
                 value={form.amount}
                 onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))}
-                placeholder="0.00"
                 className={`w-full px-3 py-2 border rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 ${
                   isBalanceInsufficient ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-300 focus:ring-[#1F3A5F]'
                 }`}
@@ -255,9 +254,9 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
                 type="text"
                 value={form.notes}
                 onChange={(e) => setForm(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="تفاصيل الفاتورة أو المستفيد أو الإيصال..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
+              <p className="text-xs text-gray-500 mt-1">تفاصيل الفاتورة أو المستفيد أو الإيصال</p>
             </div>
           </div>
         </div>

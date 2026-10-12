@@ -11,6 +11,11 @@ import ErrorBoundary from './components/ErrorBoundary';
 // Master Data & Full-Page Modules
 import ItemsListPage from './modules/items/ItemsListPage';
 import ItemFormPage from './modules/items/ItemFormPage';
+import ItemGroupsListPage from './modules/items/ItemGroupsListPage';
+import ItemGroupFormPage from './modules/items/ItemGroupFormPage';
+import ItemSectionsListPage from './modules/items/ItemSectionsListPage';
+import ItemSectionFormPage from './modules/items/ItemSectionFormPage';
+import StockCardPage from './modules/inventory/StockCardPage';
 import PartiesListPage from './modules/parties/PartiesListPage';
 import PartyFormPage from './modules/parties/PartyFormPage';
 import PurchasesListPage from './modules/purchases/PurchasesListPage';
@@ -251,6 +256,30 @@ export default function App() {
         }
         return <ItemsListPage onNavigate={navigateTo} onNotify={showNotification} />;
 
+      // Item Groups (مجموعات الأصناف)
+      case 'item-groups':
+        if (action === 'new') {
+          return <ItemGroupFormPage onBack={() => navigateTo('item-groups')} onNotify={showNotification} />;
+        }
+        if (subAction === 'edit' && parts[1]) {
+          return <ItemGroupFormPage groupId={parts[1]} onBack={() => navigateTo('item-groups')} onNotify={showNotification} />;
+        }
+        return <ItemGroupsListPage onNavigate={navigateTo} onNotify={showNotification} />;
+
+      // Item Sections (أقسام الأصناف)
+      case 'item-sections':
+        if (action === 'new') {
+          return <ItemSectionFormPage onBack={() => navigateTo('item-sections')} onNotify={showNotification} />;
+        }
+        if (subAction === 'edit' && parts[1]) {
+          return <ItemSectionFormPage sectionId={parts[1]} onBack={() => navigateTo('item-sections')} onNotify={showNotification} />;
+        }
+        return <ItemSectionsListPage onNavigate={navigateTo} onNotify={showNotification} />;
+
+      // Stock Card (كارت وحركة الصنف)
+      case 'stock-card':
+        return <StockCardPage onNavigate={navigateTo} onNotify={showNotification} />;
+
       // B) Parties (Suppliers & Customers)
       case 'suppliers':
         if (action === 'new') {
@@ -371,6 +400,7 @@ export default function App() {
         return (
           <ReportsModule
             onBack={() => navigateTo('home')}
+            onNavigate={navigateTo}
             userRole={activeUserRole}
             onNotify={showNotification}
           />

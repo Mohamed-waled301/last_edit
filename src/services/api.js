@@ -131,6 +131,70 @@ export const api = {
     return { success: true, data: res, color: res, message: 'تم إضافة اللون بنجاح' };
   },
 
+  // Item Groups
+  getItemGroups: async () => {
+    const list = await itemsRepo.getItemGroups();
+    return { success: true, data: list, groups: list };
+  },
+  getItemGroup: async (id) => {
+    const group = await itemsRepo.getItemGroupById(id);
+    return { success: true, data: group, group };
+  },
+  createItemGroup: async (data) => {
+    const res = await itemsRepo.createItemGroup(data, currentUserId);
+    syncPush('item_groups', 'insert', res);
+    return { success: true, data: res, group: res, message: 'تم إضافة مجموعة الصنف بنجاح' };
+  },
+  updateItemGroup: async (id, data) => {
+    const res = await itemsRepo.updateItemGroup(id, data, currentUserId);
+    syncPush('item_groups', 'update', res, id);
+    return { success: true, data: res, group: res, message: 'تم تحديث مجموعة الصنف بنجاح' };
+  },
+  deleteItemGroup: async (id) => {
+    const res = await itemsRepo.deleteItemGroup(id, currentUserId);
+    syncPush('item_groups', 'delete', { id });
+    return { success: true, ...res };
+  },
+
+  // Item Sections
+  getItemSections: async () => {
+    const list = await itemsRepo.getItemSections();
+    return { success: true, data: list, sections: list };
+  },
+  getItemSection: async (id) => {
+    const sec = await itemsRepo.getItemSectionById(id);
+    return { success: true, data: sec, section: sec };
+  },
+  createItemSection: async (data) => {
+    const res = await itemsRepo.createItemSection(data, currentUserId);
+    syncPush('item_sections', 'insert', res);
+    return { success: true, data: res, section: res, message: 'تم إضافة قسم الصنف بنجاح' };
+  },
+  updateItemSection: async (id, data) => {
+    const res = await itemsRepo.updateItemSection(id, data, currentUserId);
+    syncPush('item_sections', 'update', res, id);
+    return { success: true, data: res, section: res, message: 'تم تحديث قسم الصنف بنجاح' };
+  },
+  deleteItemSection: async (id) => {
+    const res = await itemsRepo.deleteItemSection(id, currentUserId);
+    syncPush('item_sections', 'delete', { id });
+    return { success: true, ...res };
+  },
+
+  // Stock Balance Engine & Stock Card
+  hasItemOperationalMovements: async (id) => {
+    const hasOps = await itemsRepo.hasOperationalMovements(id);
+    return { success: true, hasOperationalMovements: hasOps, data: hasOps };
+  },
+  getItemStockCard: async (id, filters = {}) => {
+    const card = await itemsRepo.getStockCard(id, filters);
+    return { success: true, data: card, ...card };
+  },
+  recomputeStockBalances: async () => {
+    const report = await itemsRepo.recomputeAllBalances(currentUserId);
+    return { success: true, data: report, ...report, message: 'تم إعادة احتساب أرصدة المخزون بالكامل بنجاح' };
+  },
+
   // Master Data: Unified Parties (Suppliers & Customers)
   getParties: async () => {
     const list = await partiesRepo.getAll();
@@ -191,6 +255,10 @@ export const api = {
   executePartyOffset: async (partyId, amount, notes = '') => {
     const res = await partiesRepo.executeOffset(partyId, amount, notes, currentUserId);
     return { success: true, data: res, ...res, message: 'تم إجراء المقاصة وتسوية الرصيد بنجاح' };
+  },
+  getPartySettlements: async (partyId = null) => {
+    const list = await partiesRepo.getSettlements(partyId);
+    return { success: true, data: list, settlements: list };
   },
 
   // Storage Locations & Stock Transfers & Adjustments
@@ -335,6 +403,18 @@ export const api = {
       syncPush('purchase_order_items', 'insert', res.items);
     }
     return { success: true, data: res, ...res, message: 'تم إصدار أمر التوريد بنجاح' };
+  },
+  receivePurchaseOrderFull: async (poId) => {
+    const res = await suppliersRepo.receivePurchaseOrderFull(poId, currentUserId);
+    return { success: true, data: res, ...res, message: 'تم استلام أمر التوريد بالكامل وتحديث أرصدة المخزون وحساب المورد بنجاح' };
+  },
+  cancelPurchaseOrder: async (poId, reason = '') => {
+    const res = await suppliersRepo.cancelPurchaseOrder(poId, reason, currentUserId);
+    return { success: true, data: res, ...res, message: 'تم إلغاء أمر التوريد بنجاح' };
+  },
+  getDueInstallments: async () => {
+    const list = await suppliersRepo.getDueInstallments();
+    return { success: true, data: list, installments: list };
   },
   getGoodsReceipts: async () => {
     const list = await suppliersRepo.getGoodsReceipts();

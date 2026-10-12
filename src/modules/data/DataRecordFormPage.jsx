@@ -293,9 +293,9 @@ export default function DataRecordFormPage({ tableName, recordId, onBack, onNoti
             rows={2}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="اكتب سبب إجراء هذا التعديل المباشر على قاعدة البيانات..."
             className="w-full text-sm border border-gray-300 rounded p-3 focus:border-[#1F3A5F] focus:outline-none"
           />
+          <p className="text-xs text-gray-500 mt-1">اكتب سبب إجراء هذا التعديل المباشر على قاعدة البيانات</p>
         </div>
       </form>
 

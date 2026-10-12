@@ -291,8 +291,8 @@ export default function Sidebar({
             );
           })}
 
-          {/* إدارة البيانات الشاملة */}
-          {(isCeo || userRole === 'accountant' || userRole === 'owner') && (
+          {/* إدارة البيانات الشاملة - مخصصة للإدارة العليا والرئيس التنفيذي فقط */}
+          {userRole === 'owner' && (
             <>
               <div className="my-2 border-t border-gray-200" />
               <button

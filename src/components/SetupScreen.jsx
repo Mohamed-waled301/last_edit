@@ -88,7 +88,6 @@ export const SetupScreen = ({ onComplete }) => {
                 value={factoryName}
                 onChange={(e) => setFactoryName(e.target.value)}
                 className="w-full h-12 px-3 border border-gray-300 rounded-md text-base focus:border-[#1F3A5F] focus:outline-none"
-                placeholder="اكتب اسم المنشأة أو المصنع"
                 required
               />
             </div>
@@ -102,7 +101,6 @@ export const SetupScreen = ({ onComplete }) => {
                 value={ownerName}
                 onChange={(e) => setOwnerName(e.target.value)}
                 className="w-full h-12 px-3 border border-gray-300 rounded-md text-base focus:border-[#1F3A5F] focus:outline-none"
-                placeholder="اكتب اسم المدير المسؤول"
                 required
               />
             </div>
@@ -117,9 +115,9 @@ export const SetupScreen = ({ onComplete }) => {
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                 className="w-full h-12 px-3 border border-gray-300 rounded-md text-base tracking-widest text-center font-mono focus:border-[#1F3A5F] focus:outline-none"
-                placeholder="4-6 أرقام"
                 required
               />
+              <p className="text-xs text-gray-500 mt-1">من 4 إلى 6 أرقام</p>
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">تأكيد رمز الدخول *</label>
@@ -129,7 +127,6 @@ export const SetupScreen = ({ onComplete }) => {
                 value={confirmPin}
                 onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
                 className="w-full h-12 px-3 border border-gray-300 rounded-md text-base tracking-widest text-center font-mono focus:border-[#1F3A5F] focus:outline-none"
-                placeholder="أعد إدخال الرمز"
                 required
               />
             </div>

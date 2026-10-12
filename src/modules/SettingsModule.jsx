@@ -241,6 +241,33 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
               )}
             </div>
 
+            {/* Recompute Stock Balances Tool */}
+            <div className="p-4 bg-indigo-50/60 rounded-md border border-indigo-200 space-y-3">
+              <div className="text-xs font-bold text-indigo-900">أداة تدقيق وإعادة احتساب أرصدة المخزون:</div>
+              <p className="text-[11px] text-indigo-700 leading-relaxed">
+                تقوم هذه الأداة بإعادة احتساب جميع أرصدة الأصناف والخامات والمنتجات من واقع حركات التوريد والصرف الفعلية ومعالجة أي فروق تلقائياً.
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    setIsBackupLoading(true);
+                    const res = await api.recomputeStockBalances();
+                    onNotify(res.message || 'تم إعادة احتساب أرصدة المخزون بنجاح ومطابقتها', 'success');
+                  } catch (e) {
+                    alert(e.message || 'فشل في إعادة احتساب الأرصدة');
+                  } finally {
+                    setIsBackupLoading(false);
+                  }
+                }}
+                disabled={isBackupLoading}
+                className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isBackupLoading ? 'animate-spin' : ''}`} />
+                <span>إعادة احتساب أرصدة المخزون الآن</span>
+              </button>
+            </div>
+
             {/* Clear All Data */}
             <div className="p-4 bg-gray-50 rounded-md border border-gray-200 space-y-3">
               <div className="text-xs font-bold text-gray-700">تصفير النظام والبدء من الصفر:</div>
@@ -337,9 +364,9 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
 
             <input
               type="text"
+              aria-label="عبارة تأكيد مسح كل البيانات"
               value={clearConfirmationText}
               onChange={(e) => setClearConfirmationText(e.target.value)}
-              placeholder="اكتب: مسح كل البيانات"
               className="w-full h-11 px-3 border border-gray-300 rounded-md text-center text-sm focus:border-red-500 focus:outline-none mb-4"
             />
 

@@ -23,9 +23,12 @@ export const SCHEMA_V1 = {
   parties: 'id, code, name, is_supplier, is_customer, is_active, created_at',
   suppliers: 'id, name, phone, supplier_type, payment_terms, is_active, created_at',
   customers: 'id, name, phone, customer_type, payment_terms, is_active, created_at',
+  party_settlements: 'id, settlement_number, party_id, settlement_date, created_at',
 
   // Items & Master Data (Clothing Factory with variants)
   items: 'id, code, name, item_group, item_department, item_type, is_active, created_at',
+  item_groups: 'id, code, name, is_active, created_at',
+  item_sections: 'id, code, name, group_id, is_active, created_at',
   item_sizes: 'id, name, code, is_active',
   item_colors: 'id, name, hex_code, is_active',
   materials: 'id, code, name, unit, is_active, created_at',
@@ -35,7 +38,7 @@ export const SCHEMA_V1 = {
   // Storage Locations & Transfers
   storage_locations: 'id, code, name, location_type, is_active, created_at',
   stock_transfers: 'id, transfer_number, from_location_id, to_location_id, transfer_date, created_at',
-  stock_movements: 'id, material_id, location_id, movement_type, reference_type, reference_id, created_at',
+  stock_movements: 'id, item_id, material_id, location_id, movement_type, reference_type, reference_id, direction, date, created_at',
   stock_adjustments: 'id, adjustment_number, adjustment_type, sub_type, adjustment_date, created_at',
   stock_counts: 'id, count_date, status, created_at',
   stock_count_items: 'id, count_id, material_id',
@@ -74,6 +77,7 @@ export class WorkshopDatabase extends Dexie {
     this.version(3).stores(SCHEMA_V1);
     this.version(4).stores(SCHEMA_V1);
     this.version(5).stores(SCHEMA_V1);
+    this.version(6).stores(SCHEMA_V1);
   }
 }
 
@@ -104,9 +108,12 @@ export async function purgeAllMockData() {
   }
   const tablesToClear = [
     'parties',
+    'party_settlements',
     'suppliers',
     'customers',
     'items',
+    'item_groups',
+    'item_sections',
     'item_sizes',
     'item_colors',
     'materials',
@@ -194,18 +201,29 @@ export async function ensureDatabaseIntegrity() {
       await purgeAllMockData();
     }
 
-    // Ensure baseline single owner user exists
+    // Ensure baseline owner and cashier users exist
     const usersCount = await db.users.count();
     if (usersCount === 0) {
-      await db.users.put({
-        id: 'usr-owner',
-        username: 'owner',
-        full_name: 'المدير العام',
-        password_hash: '1234',
-        role: 'owner',
-        is_active: 1,
-        created_at: new Date().toISOString(),
-      });
+      await db.users.bulkAdd([
+        {
+          id: 'usr-owner',
+          username: 'owner',
+          full_name: 'م. خالد المنشاوي (الرئيس التنفيذي - CEO)',
+          password_hash: '1234',
+          role: 'owner',
+          is_active: 1,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'usr-cashier',
+          username: 'cashier',
+          full_name: 'أحمد محمود (كاشير)',
+          password_hash: '1234',
+          role: 'cashier',
+          is_active: 1,
+          created_at: new Date().toISOString(),
+        },
+      ]);
     }
 
     // Ensure baseline settings with clean defaults
@@ -265,6 +283,29 @@ export async function ensureDatabaseIntegrity() {
         notes: '',
         is_active: 1,
       });
+    }
+
+    // Ensure baseline item groups
+    const groupCount = await db.item_groups.count().catch(() => 0);
+    if (groupCount === 0) {
+      await db.item_groups.bulkPut([
+        { id: 'grp-1', code: 'GRP-01', name: 'ملابس جاهزة ومنتجات تامة', notes: 'الملابس الجاهزة للبيع المباشر والمعارض', is_active: 1, created_at: new Date().toISOString() },
+        { id: 'grp-2', code: 'GRP-02', name: 'أقمشة ومنسوجات قطنية', notes: 'أثواب الأقمشة الخام الجيرسي والجينز والميلتون', is_active: 1, created_at: new Date().toISOString() },
+        { id: 'grp-3', code: 'GRP-03', name: 'إكسسوارات ومستلزمات خياطة', notes: 'أزرار وسوست وتيكتات وبكر خيوط', is_active: 1, created_at: new Date().toISOString() },
+        { id: 'grp-4', code: 'GRP-04', name: 'مواد ومستلزمات تعبئة وتغليف', notes: 'أكياس سلوفان وشماعات وكراتين', is_active: 1, created_at: new Date().toISOString() },
+      ]);
+    }
+
+    // Ensure baseline item sections
+    const secCount = await db.item_sections.count().catch(() => 0);
+    if (secCount === 0) {
+      await db.item_sections.bulkPut([
+        { id: 'sec-1', code: 'SEC-01', name: 'قسم التيشيرتات والبولو', group_id: 'grp-1', notes: 'تيشيرتات قطنية وبولو كاجوال', is_active: 1, created_at: new Date().toISOString() },
+        { id: 'sec-2', code: 'SEC-02', name: 'قسم البنطلونات والجينز', group_id: 'grp-1', notes: 'بناطيل جينز وجبردين', is_active: 1, created_at: new Date().toISOString() },
+        { id: 'sec-3', code: 'SEC-03', name: 'قسم السويت شيرت والهودي', group_id: 'grp-1', notes: 'ملابس شتوية وميلتون', is_active: 1, created_at: new Date().toISOString() },
+        { id: 'sec-4', code: 'SEC-04', name: 'قسم أقمشة التريكو والقص', group_id: 'grp-2', notes: 'أثواب قماش صالة القص', is_active: 1, created_at: new Date().toISOString() },
+        { id: 'sec-5', code: 'SEC-05', name: 'قسم الخيوط والأزرار والمستلزمات', group_id: 'grp-3', notes: 'مستلزمات ماكينات الحياكة', is_active: 1, created_at: new Date().toISOString() },
+      ]);
     }
   } catch (err) {
     console.error('Database integrity check error, applying auto-recovery:', err);

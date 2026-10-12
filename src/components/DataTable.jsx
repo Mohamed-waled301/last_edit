@@ -15,7 +15,7 @@ export default function DataTable({
   data = [],
   loading = false,
   pageSize = 10,
-  searchPlaceholder = 'بحث في الجدول...',
+  searchLabel = 'بحث في الجدول',
   searchable,
   emptyMessage = 'لا توجد بيانات مسجلة حالياً',
   emptyAction,
@@ -115,15 +115,15 @@ export default function DataTable({
           <div className="flex items-center gap-2.5 flex-1 justify-end flex-wrap">
             {shouldShowSearch && (
               <div className="relative min-w-[200px] max-w-xs w-full">
-                <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
                 <input
                   type="text"
+                  aria-label={searchLabel}
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
                     setCurrentPage(1);
                   }}
-                  placeholder={searchPlaceholder}
                   className="w-full h-9 pr-9 pl-3 text-xs bg-white border border-gray-300 rounded-md focus:border-[#1F3A5F] focus:outline-none"
                 />
               </div>

@@ -6,11 +6,19 @@ import {
   MapPin, 
   FileText, 
   CheckCircle2, 
-  AlertCircle 
+  AlertCircle,
+  ArrowRight,
+  Save,
+  Layers,
+  FolderTree,
+  Package,
+  Search,
+  Scale,
+  X
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import {
   DEFAULT_PHONE_VALUE,
@@ -33,67 +41,129 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
   const isEdit = Boolean(partyId);
   const effectiveRole = initialRole || initialType;
 
+  // Single choice (supplier/customer) or both
+  const [isBoth, setIsBoth] = useState(false);
+  const [singleType, setSingleType] = useState(effectiveRole === 'customer' ? 'customer' : 'supplier');
+
   const [form, setForm] = useState({
     code: '',
     name: '',
     phone: DEFAULT_PHONE_VALUE,
     address: '',
     tax_number: '',
-    is_supplier: effectiveRole === 'supplier' || (effectiveRole !== 'customer' && effectiveRole === null),
-    is_customer: effectiveRole === 'customer',
-    supplier_type: 'goods', // 'goods' | 'service' (تشغيل وتصنيع خارجي)
-    customer_deal_type: 'cash', // 'cash' (نقدي) | 'credit' (آجل) - default: نقدي
-    credit_limit: '50000', // Stored in form state so switching back restores it
-    payment_terms: 'cash',
-    // Opening balances (رصيد أول المدة): suppliers default credit (دائن), customers default debit (مدين)
+    supplier_type: 'goods', // 'goods' | 'service'
+    credit_limit: '', // Blank or 0 means no limit
     supplier_opening_balance: '0',
     supplier_opening_type: 'credit',
     customer_opening_balance: '0',
     customer_opening_type: 'debit',
+    // Supplier-item linking
+    supplied_all_items: true,
+    supplied_group_ids: [],
+    supplied_section_ids: [],
+    supplied_item_ids: [],
     notes: ''
   });
+
+  // Current ledger balances for dual party netting display
+  const [currentBalances, setCurrentBalances] = useState({
+    supplier_balance: 0,
+    customer_balance: 0,
+    net_balance: 0,
+    max_offset: 0
+  });
+
+  // Offset modal state
+  const [showOffsetModal, setShowOffsetModal] = useState(false);
+  const [offsetAmount, setOffsetAmount] = useState('');
+  const [offsetNotes, setOffsetNotes] = useState('');
+  const [offsetSubmitting, setOffsetSubmitting] = useState(false);
+
+  const [itemsList, setItemsList] = useState([]);
+  const [groupsList, setGroupsList] = useState([]);
+  const [sectionsList, setSectionsList] = useState([]);
+  const [itemSearchTerm, setItemSearchTerm] = useState('');
 
   const [errors, setErrors] = useState({});
   const [existingParties, setExistingParties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const isSupplier = isBoth || singleType === 'supplier';
+  const isCustomer = isBoth || singleType === 'customer';
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else if (onCancel) {
+      onCancel();
+    } else {
+      window.location.hash = isCustomer && !isSupplier ? '#/customers' : '#/suppliers';
+    }
+  };
+
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
-        const partiesRes = await api.getParties();
-        const list = Array.isArray(partiesRes.data) ? partiesRes.data : [];
+        const [partiesRes, itemsRes, groupsRes, sectionsRes] = await Promise.all([
+          api.getParties(),
+          api.getItems(),
+          api.getItemGroups(),
+          api.getItemSections()
+        ]);
+
+        const list = Array.isArray(partiesRes.data) ? partiesRes.data : (partiesRes.parties || []);
         setExistingParties(list);
+        setItemsList(Array.isArray(itemsRes.data) ? itemsRes.data : (itemsRes.items || []));
+        setGroupsList(Array.isArray(groupsRes.data) ? groupsRes.data : (groupsRes.groups || []));
+        setSectionsList(Array.isArray(sectionsRes.data) ? sectionsRes.data : (sectionsRes.sections || []));
 
         if (isEdit && partyId) {
           const res = await api.getParty(partyId);
           if (res && res.data) {
             const p = res.data;
-            const dealType = p.customer_deal_type || (p.credit_limit && Number(p.credit_limit) > 0 ? 'credit' : (p.payment_terms === 'credit' ? 'credit' : 'cash'));
+            const dual = Boolean(p.is_supplier && p.is_customer);
+            setIsBoth(dual);
+            if (!dual) {
+              setSingleType(p.is_customer ? 'customer' : 'supplier');
+            }
+
+            const supBal = Number(p.supplier_balance || 0);
+            const custBal = Number(p.customer_balance || 0);
+            const net = Number((custBal - supBal).toFixed(2));
+            const maxOff = Math.min(Math.max(0, supBal), Math.max(0, custBal));
+
+            setCurrentBalances({
+              supplier_balance: supBal,
+              customer_balance: custBal,
+              net_balance: net,
+              max_offset: maxOff
+            });
+
             setForm({
               code: p.code || '',
               name: p.name || '',
               phone: p.phone || DEFAULT_PHONE_VALUE,
               address: p.address || '',
               tax_number: p.tax_number || '',
-              is_supplier: Boolean(p.is_supplier),
-              is_customer: Boolean(p.is_customer),
               supplier_type: p.supplier_type || 'goods',
-              customer_deal_type: dealType,
-              credit_limit: p.credit_limit && Number(p.credit_limit) > 0 ? String(p.credit_limit) : '50000',
-              payment_terms: p.payment_terms || 'cash',
-              supplier_opening_balance: String(p.supplier_opening_balance ?? p.opening_balance ?? p.supplier_balance ?? 0),
-              supplier_opening_type: p.supplier_opening_type || p.opening_balance_type || 'credit',
-              customer_opening_balance: String(p.customer_opening_balance ?? p.opening_balance ?? p.customer_balance ?? 0),
-              customer_opening_type: p.customer_opening_type || p.opening_balance_type || 'debit',
+              credit_limit: p.credit_limit ? String(p.credit_limit) : '',
+              supplier_opening_balance: String(p.supplier_opening_balance ?? p.opening_balance ?? 0),
+              supplier_opening_type: p.supplier_opening_type || 'credit',
+              customer_opening_balance: String(p.customer_opening_balance ?? p.opening_balance ?? 0),
+              customer_opening_type: p.customer_opening_type || 'debit',
+              supplied_all_items: p.supplied_all_items !== undefined ? Boolean(p.supplied_all_items) : true,
+              supplied_group_ids: Array.isArray(p.supplied_group_ids) ? p.supplied_group_ids : [],
+              supplied_section_ids: Array.isArray(p.supplied_section_ids) ? p.supplied_section_ids : [],
+              supplied_item_ids: Array.isArray(p.supplied_item_ids) ? p.supplied_item_ids : [],
               notes: p.notes || ''
             });
           }
         } else {
           const nextNum = list.length + 1;
           const defaultCode = `PRT-${1000 + nextNum}`;
-          setForm(prev => ({ ...prev, code: defaultCode }));
+          setForm((prev) => ({ ...prev, code: defaultCode }));
         }
       } catch (err) {
         console.error('Failed to load party data:', err);
@@ -102,35 +172,23 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
       }
     }
     loadData();
-  }, [partyId, isEdit, initialRole, initialType]);
+  }, [partyId, isEdit, effectiveRole]);
 
   const validate = () => {
     const errs = {};
     if (!form.name.trim()) errs.name = 'اسم جهة التعامل مطلوب';
     if (!form.code.trim()) errs.code = 'كود جهة التعامل مطلوب';
-    if (!form.is_supplier && !form.is_customer) {
-      errs.role = 'يرجى تحديد صفة جهة التعامل على الأقل (مورد أو عميل أو كلاهما)';
-    }
 
     const phoneErr = validateEgyptianMobile(form.phone, { required: false });
     if (phoneErr) errs.phone = phoneErr;
 
-    // Validation: credit limit is required and must be greater than 0 ONLY when "آجل" is selected
-    if (form.is_customer && form.customer_deal_type === 'credit') {
-      const num = Number(form.credit_limit);
-      if (!form.credit_limit || isNaN(num) || num <= 0) {
-        errs.credit_limit = 'الحد الائتماني مطلوب ويجب أن يكون أكبر من 0 للتعامل الآجل';
-      }
-    }
-
-    // Opening balances must be non-negative numbers
-    if (form.is_supplier) {
+    if (isSupplier) {
       const supOpen = Number(form.supplier_opening_balance);
       if (form.supplier_opening_balance === '' || isNaN(supOpen) || supOpen < 0) {
         errs.supplier_opening_balance = 'رصيد أول المدة للمورد يجب أن يكون رقماً لا يقل عن صفر';
       }
     }
-    if (form.is_customer) {
+    if (isCustomer) {
       const custOpen = Number(form.customer_opening_balance);
       if (form.customer_opening_balance === '' || isNaN(custOpen) || custOpen < 0) {
         errs.customer_opening_balance = 'رصيد أول المدة للعميل يجب أن يكون رقماً لا يقل عن صفر';
@@ -143,17 +201,51 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
 
   const handlePhoneChange = (e) => {
     const digits = sanitizeEgyptianPhoneInput(e.target.value);
-    setForm(prev => ({ ...prev, phone: digits === '' ? DEFAULT_PHONE_VALUE : digits }));
+    setForm((prev) => ({ ...prev, phone: digits === '' ? DEFAULT_PHONE_VALUE : digits }));
     if (errors.phone) {
-      setErrors(prev => ({ ...prev, phone: null }));
+      setErrors((prev) => ({ ...prev, phone: null }));
     }
   };
 
   const handleCreditLimitChange = (e) => {
     const rawDigits = e.target.value.replace(/[^0-9]/g, '');
-    setForm(prev => ({ ...prev, credit_limit: rawDigits }));
-    if (errors.credit_limit) {
-      setErrors(prev => ({ ...prev, credit_limit: null }));
+    setForm((prev) => ({ ...prev, credit_limit: rawDigits }));
+  };
+
+  const handleExecuteOffset = async () => {
+    const num = Number(offsetAmount) || 0;
+    if (num <= 0) {
+      alert('مبلغ المقاصة يجب أن يكون أكبر من صفر');
+      return;
+    }
+    if (num > currentBalances.max_offset) {
+      alert(`مبلغ المقاصة لا يمكن أن يتجاوز الطرف الأقل (${currentBalances.max_offset} ج.م)`);
+      return;
+    }
+
+    try {
+      setOffsetSubmitting(true);
+      const res = await api.executePartyOffset(partyId, num, offsetNotes);
+      if (onNotify) onNotify(res.message || 'تم إجراء المقاصة بنجاح');
+      setShowOffsetModal(false);
+
+      // Refresh balances
+      const updatedParty = await api.getParty(partyId);
+      if (updatedParty?.data) {
+        const p = updatedParty.data;
+        const supBal = Number(p.supplier_balance || 0);
+        const custBal = Number(p.customer_balance || 0);
+        setCurrentBalances({
+          supplier_balance: supBal,
+          customer_balance: custBal,
+          net_balance: Number((custBal - supBal).toFixed(2)),
+          max_offset: Math.min(Math.max(0, supBal), Math.max(0, custBal))
+        });
+      }
+    } catch (err) {
+      alert(err.message || 'حدث خطأ أثناء إجراء المقاصة');
+    } finally {
+      setOffsetSubmitting(false);
     }
   };
 
@@ -163,23 +255,27 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
 
     try {
       setSaving(true);
-      const isCreditCustomer = form.is_customer && form.customer_deal_type === 'credit';
+      const supFlag = isBoth ? 1 : (singleType === 'supplier' ? 1 : 0);
+      const custFlag = isBoth ? 1 : (singleType === 'customer' ? 1 : 0);
+
       const payload = {
         code: form.code.trim(),
         name: form.name.trim(),
         phone: normalizePhoneForSave(form.phone),
         address: form.address.trim(),
         tax_number: form.tax_number.trim(),
-        is_supplier: form.is_supplier ? 1 : 0,
-        is_customer: form.is_customer ? 1 : 0,
+        is_supplier: supFlag,
+        is_customer: custFlag,
         supplier_type: form.supplier_type,
-        customer_deal_type: form.is_customer ? form.customer_deal_type : 'cash',
-        credit_limit: isCreditCustomer ? (Number(form.credit_limit) || 0) : 0, // Stored only when type is 'credit', otherwise 0
-        payment_terms: form.payment_terms,
-        supplier_opening_balance: form.is_supplier ? Math.max(0, Number(form.supplier_opening_balance) || 0) : 0,
+        credit_limit: form.credit_limit ? (Number(form.credit_limit) || 0) : 0,
+        supplier_opening_balance: supFlag ? Math.max(0, Number(form.supplier_opening_balance) || 0) : 0,
         supplier_opening_type: form.supplier_opening_type === 'debit' ? 'debit' : 'credit',
-        customer_opening_balance: form.is_customer ? Math.max(0, Number(form.customer_opening_balance) || 0) : 0,
+        customer_opening_balance: custFlag ? Math.max(0, Number(form.customer_opening_balance) || 0) : 0,
         customer_opening_type: form.customer_opening_type === 'credit' ? 'credit' : 'debit',
+        supplied_all_items: form.supplied_all_items ? 1 : 0,
+        supplied_group_ids: form.supplied_group_ids,
+        supplied_section_ids: form.supplied_section_ids,
+        supplied_item_ids: form.supplied_item_ids,
         notes: form.notes
       };
 
@@ -193,11 +289,8 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
 
       if (onSaved) {
         onSaved();
-      } else if (onBack) {
-        onBack();
       } else {
-        const dest = form.is_customer && !form.is_supplier ? '#/customers' : '#/suppliers';
-        window.location.hash = dest;
+        handleBack();
       }
     } catch (err) {
       alert(err.message || 'حدث خطأ أثناء حفظ جهة التعامل');
@@ -206,344 +299,665 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
     }
   };
 
-  const isCreditValid = !form.is_customer || form.customer_deal_type !== 'credit' || (Number(form.credit_limit) > 0);
-  const isPhoneValid = !validateEgyptianMobile(form.phone, { required: false });
-  const isSupplierOpeningValid = !form.is_supplier || (form.supplier_opening_balance !== '' && Number(form.supplier_opening_balance) >= 0);
-  const isCustomerOpeningValid = !form.is_customer || (form.customer_opening_balance !== '' && Number(form.customer_opening_balance) >= 0);
-  const isFormValid = Boolean(
-    form.name.trim() && 
-    form.code.trim() && 
-    (form.is_supplier || form.is_customer) &&
-    isCreditValid &&
-    isPhoneValid &&
-    isSupplierOpeningValid &&
-    isCustomerOpeningValid
-  );
+  const filteredItemsForLink = itemsList.filter((item) => {
+    const term = itemSearchTerm.trim().toLowerCase();
+    if (!term) return true;
+    return (
+      (item.name || '').toLowerCase().includes(term) ||
+      (item.code || '').toLowerCase().includes(term)
+    );
+  });
+
+  const toggleLinkedItem = (itemId) => {
+    setForm((prev) => {
+      const exists = prev.supplied_item_ids.includes(itemId);
+      const updated = exists
+        ? prev.supplied_item_ids.filter((id) => id !== itemId)
+        : [...prev.supplied_item_ids, itemId];
+      return { ...prev, supplied_item_ids: updated };
+    });
+  };
+
+  const toggleLinkedGroup = (groupId) => {
+    setForm((prev) => {
+      const exists = prev.supplied_group_ids.includes(groupId);
+      const updated = exists
+        ? prev.supplied_group_ids.filter((id) => id !== groupId)
+        : [...prev.supplied_group_ids, groupId];
+      return { ...prev, supplied_group_ids: updated };
+    });
+  };
+
+  const toggleLinkedSection = (secId) => {
+    setForm((prev) => {
+      const exists = prev.supplied_section_ids.includes(secId);
+      const updated = exists
+        ? prev.supplied_section_ids.filter((id) => id !== secId)
+        : [...prev.supplied_section_ids, secId];
+      return { ...prev, supplied_section_ids: updated };
+    });
+  };
+
+  const isFormValid = Boolean(form.name.trim() && form.code.trim());
+
+  if (loading) {
+    return (
+      <PageContainer title="بيانات جهة التعامل">
+        <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500">
+          جاري تحميل بيانات جهة التعامل...
+        </div>
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer
-      title={isEdit ? `تعديل جهة التعامل: ${form.name}` : 'إضافة جهة تعامل (مورد / عميل)'}
-      subtitle="شاشة موحدة لإدارة الموردين والعملاء، دعم صفة المورد والعميل معاً، والحد الائتماني للعميل"
-      breadcrumbs={[
-        { label: form.is_customer && !form.is_supplier ? 'العملاء' : 'الموردين', href: form.is_customer && !form.is_supplier ? '#/customers' : '#/suppliers' },
-        { label: isEdit ? 'تعديل جهة التعامل' : 'إضافة جديد' }
-      ]}
-      hasBottomBar={true}
-      onSave={handleSubmit}
-      onCancel={() => { window.history.back(); }}
-      isSaving={saving}
-      saveDisabled={!isFormValid || saving}
-      saveText={isEdit ? 'حفظ التعديلات' : 'حفظ جهة التعامل'}
+      title={isEdit ? `تعديل جهة التعامل: ${form.name}` : 'إضافة جهة تعامل'}
+      subtitle="إدارة بيانات الموردين والعملاء، دعم صفة المورد والعميل المشتركة مع المقاصة والربط بالأصناف"
+      actions={
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-xs"
+          >
+            <ArrowRight className="w-4 h-4" />
+            <span>رجوع للقائمة</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!isFormValid || saving}
+            className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            <span>{saving ? 'جاري الحفظ...' : isEdit ? 'حفظ التعديلات' : 'حفظ جهة التعامل'}</span>
+          </button>
+        </div>
+      }
     >
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Checkbox Roles Selector (مورد / عميل) */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-3">
-          <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 border-b border-gray-100 pb-2">
-            <Users className="w-5 h-5 text-[#1F3A5F]" />
-            صفة جهة التعامل (مورد / عميل / كلاهما)
+        {/* Section 1: Party Type Selection with Single Both Checkbox */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+            <Users className="w-5 h-5 text-blue-600" />
+            تصنيف وصفة جهة التعامل
           </h2>
 
-          <div className="flex flex-wrap items-center gap-6 pt-1">
-            <label className="flex items-center gap-2.5 cursor-pointer bg-blue-50/60 hover:bg-blue-50 px-4 py-2.5 rounded-md border border-blue-200 transition-colors">
-              <input
-                type="checkbox"
-                checked={form.is_supplier}
-                onChange={(e) => setForm(prev => ({ ...prev, is_supplier: e.target.checked }))}
-                className="w-4 h-4 text-[#1F3A5F] rounded-xs cursor-pointer"
-              />
-              <span className="font-bold text-sm text-gray-800">مورد (توريد خامات أو تشغيل خارجي)</span>
-            </label>
-
-            <label className="flex items-center gap-2.5 cursor-pointer bg-emerald-50/60 hover:bg-emerald-50 px-4 py-2.5 rounded-md border border-emerald-200 transition-colors">
-              <input
-                type="checkbox"
-                checked={form.is_customer}
-                onChange={(e) => setForm(prev => ({ ...prev, is_customer: e.target.checked }))}
-                className="w-4 h-4 text-emerald-600 rounded-xs cursor-pointer"
-              />
-              <span className="font-bold text-sm text-gray-800">عميل (مبيعات وفواتير)</span>
-            </label>
-          </div>
-          <FieldError error={errors.role} />
-          {form.is_supplier && form.is_customer && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-xs font-semibold text-amber-800 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                جهة التعامل هذه مسجلة كـ (مورد وعميل في آن واحد). سيتم احتساب صافي الرصيد تلقائياً وإتاحة إجراء المقاصة بين رصيد التوريد ورصيد البيع.
-              </span>
+          <div className="space-y-4">
+            {/* The single checkbox */}
+            <div className="p-3 bg-indigo-50/60 border border-indigo-200 rounded-lg">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isBoth}
+                  onChange={(e) => setIsBoth(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded-sm focus:ring-indigo-500"
+                />
+                <span className="font-bold text-sm text-indigo-900">
+                  عميل ومورد في نفس الوقت
+                </span>
+              </label>
+              <p className="text-xs text-indigo-700 mt-1 mr-7">
+                عند التحديد، تعتبر هذه الجهة عميلاً ومورداً معاً، ويتم فتح حسابين بدفتر الأستاذ مع تمكين المقاصة التلقائية.
+              </p>
             </div>
-          )}
+
+            {/* When NOT both, choose single option */}
+            {!isBoth && (
+              <div className="flex items-center gap-6 pr-1">
+                <span className="text-xs font-semibold text-slate-700">الصفة الفردية:</span>
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-800">
+                  <input
+                    type="radio"
+                    name="singleType"
+                    value="supplier"
+                    checked={singleType === 'supplier'}
+                    onChange={() => setSingleType('supplier')}
+                    className="text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>مورد (توريد خامات ومستلزمات)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-800">
+                  <input
+                    type="radio"
+                    name="singleType"
+                    value="customer"
+                    checked={singleType === 'customer'}
+                    onChange={() => setSingleType('customer')}
+                    className="text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>عميل (شراء وتوزيع ملابس)</span>
+                </label>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Section 2: Contact & Identification */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
-          <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2">
-            البيانات الأساسية ومعلومات الاتصال
+        {/* Section 2: Dual Party Netting & Settlement Card (When isBoth is active) */}
+        {isBoth && isEdit && (
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Scale className="w-5 h-5 text-indigo-600" />
+                <span>المركز المالي والمقاصة المشتركة (له / عليه / الصافي)</span>
+              </h3>
+              {currentBalances.max_offset > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOffsetAmount(String(currentBalances.max_offset));
+                    setOffsetNotes(`تسوية مقاصة متبادلة مع جهة التعامل ${form.name}`);
+                    setShowOffsetModal(true);
+                  }}
+                  className="px-3.5 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors shadow-xs"
+                >
+                  إجراء مقاصة تسوية
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+              <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
+                <div className="text-xs font-semibold text-blue-700 mb-1">له (مستحقاته كمورد / مشتريات)</div>
+                <div className="text-xl font-bold font-mono text-blue-900">
+                  {formatCurrency(currentBalances.supplier_balance)}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                <div className="text-xs font-semibold text-emerald-700 mb-1">عليه (مستحقاتنا كعميل / مبيعات)</div>
+                <div className="text-xl font-bold font-mono text-emerald-900">
+                  {formatCurrency(currentBalances.customer_balance)}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-purple-50 border border-purple-200">
+                <div className="text-xs font-semibold text-purple-700 mb-1">الصافي (مبيعات − مشتريات)</div>
+                <div className={`text-xl font-bold font-mono ${currentBalances.net_balance >= 0 ? 'text-emerald-800' : 'text-red-800'}`}>
+                  {formatCurrency(Math.abs(currentBalances.net_balance))}
+                  <span className="text-xs mr-1 font-sans">
+                    ({currentBalances.net_balance >= 0 ? 'مستحق لنا' : 'مستحق له'})
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section 3: Basic Identification & Contact */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+          <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-600" />
+            بيانات جهة التعامل ومعلومات الاتصال
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                كود جهة التعامل <span className="text-red-500">*</span>
+              <label htmlFor="party-code-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                كود جهة التعامل *
               </label>
               <input
+                id="party-code-input"
                 type="text"
                 value={form.code}
-                onChange={(e) => setForm(prev => ({ ...prev, code: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
                 required
               />
               <FieldError error={errors.code} />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                الاسم / اسم الشركة أو المصنع <span className="text-red-500">*</span>
+              <label htmlFor="party-name-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                الاسم / اسم الشركة أو المصنع *
               </label>
               <input
+                id="party-name-input"
                 type="text"
                 value={form.name}
-                onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="مثال: شركة النيل للغزل والنسيج أو محلات الأناقة"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
                 required
               />
               <FieldError error={errors.name} />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
+              <label htmlFor="party-phone-input" className="block text-xs font-semibold text-slate-700 mb-1">
                 رقم الهاتف
               </label>
               <input
+                id="party-phone-input"
                 type="tel"
                 inputMode="numeric"
                 dir="ltr"
                 maxLength={11}
                 value={form.phone}
                 onChange={handlePhoneChange}
-                placeholder="01xxxxxxxxx"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono text-left focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono text-left bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
               />
-              <span className="text-[11px] text-gray-500 mt-1 block">
-                رقم موبايل مصري يبدأ بـ 01 (010 / 011 / 012 / 015) ومكوّن من 11 رقماً
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                رقم موبايل مصري يبدأ بـ 01 (010 / 011 / 012 / 015)
               </span>
               <FieldError error={errors.phone} />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                الرقم الضريبي / السجل
+              <label htmlFor="party-tax-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                الرقم الضريبي / السجل التجاري
               </label>
               <input
+                id="party-tax-input"
                 type="text"
                 value={form.tax_number}
-                onChange={(e) => setForm(prev => ({ ...prev, tax_number: e.target.value }))}
-                placeholder="9 أرقام ضريبية"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                onChange={(e) => setForm((prev) => ({ ...prev, tax_number: e.target.value }))}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                شروط السداد الافتراضية
-              </label>
-              <select
-                value={form.payment_terms}
-                onChange={(e) => setForm(prev => ({ ...prev, payment_terms: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
-              >
-                <option value="cash">نقدي</option>
-                <option value="credit">آجل</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-3">
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                العنوان
-              </label>
-              <input
-                type="text"
-                value={form.address}
-                onChange={(e) => setForm(prev => ({ ...prev, address: e.target.value }))}
-                placeholder="المدينة، المنطقة، الشارع..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Section 3: Conditional Financial Rules */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
-          <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-green-700" />
-            الضوابط المالية والتشغيلية
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Customer Side Controls */}
-            {form.is_customer && (
-              <div className={`p-4 bg-emerald-50/50 border border-emerald-200 rounded-md space-y-3 ${!form.is_supplier ? 'md:col-span-2' : ''}`}>
-                <div>
-                  <label htmlFor="customer-deal-type-select" className="block text-xs font-bold text-emerald-900 mb-1">
-                    نوع التعامل
-                  </label>
-                  <select
-                    id="customer-deal-type-select"
-                    value={form.customer_deal_type}
-                    onChange={(e) => {
-                      const newType = e.target.value;
-                      setForm(prev => ({ ...prev, customer_deal_type: newType }));
-                      if (errors.credit_limit) {
-                        setErrors(prev => ({ ...prev, credit_limit: null }));
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-emerald-300 rounded-md text-sm bg-white font-semibold text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-600 cursor-pointer"
-                  >
-                    <option value="cash">نقدي</option>
-                    <option value="credit">آجل</option>
-                  </select>
-                </div>
-
-                {/* Show credit limit ONLY when deal type is credit */}
-                {form.customer_deal_type === 'credit' && (
-                  <div id="credit-limit-container" className="space-y-1">
-                    <label htmlFor="party-credit-limit-input" className="block text-xs font-bold text-emerald-900 mb-1">
-                      الحد الائتماني للعميل (ج.م) <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        id="party-credit-limit-input"
-                        name="credit_limit"
-                        value={formatNumberWithSeparators(form.credit_limit)}
-                        onChange={handleCreditLimitChange}
-                        placeholder="0"
-                        className="w-full px-3 py-2 border border-emerald-300 rounded-md text-sm font-mono font-bold text-emerald-800 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600 text-left"
-                        style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}
-                        required={true}
-                      />
-                    </div>
-                    <span className="text-[11px] text-emerald-700 mt-1 block">
-                      يطبق على فواتير المبيعات الآجلة فقط، ويمنع حفظ الفاتورة عند تجاوز المديونية لهذا الحد.
-                    </span>
-                    <FieldError error={errors.credit_limit} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Supplier Side Controls */}
-            {form.is_supplier && (
-              <div className={`p-4 bg-blue-50/50 border border-blue-200 rounded-md space-y-1 ${!form.is_customer ? 'md:col-span-2' : ''}`}>
-                <label htmlFor="supplier-type-select" className="block text-xs font-bold text-blue-900 mb-1">
-                  نوع نشاط المورد
+            {/* Credit Limit: ALWAYS visible on customer records */}
+            {isCustomer && (
+              <div>
+                <label htmlFor="party-credit-limit-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                  الحد الائتماني للعميل (ج.م)
                 </label>
-                <select
-                  id="supplier-type-select"
-                  value={form.supplier_type}
-                  onChange={(e) => setForm(prev => ({ ...prev, supplier_type: e.target.value }))}
-                  className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
-                >
-                  <option value="goods">توريد خامات ومستلزمات إنتاج</option>
-                  <option value="service">مصنع تشغيل خارجي لدى الغير (خدمات تطريز / غسيل / حياكة)</option>
-                </select>
-                <span className="text-[11px] text-blue-700 mt-1 block">
-                  مورد الخدمة يُستخدم في شاشة التصنيع لدى الغير واحتساب التكاليف التراكمية.
+                <input
+                  id="party-credit-limit-input"
+                  type="text"
+                  inputMode="numeric"
+                  dir="ltr"
+                  value={formatNumberWithSeparators(form.credit_limit)}
+                  onChange={handleCreditLimitChange}
+                  className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono font-bold text-slate-800 bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-left"
+                />
+                <span className="text-[11px] text-slate-500 mt-1 block">
+                  اختياري؛ اتركه فارغاً أو 0 لعدم تحديد سقف ائتماني. يطبق فقط على الفواتير الآجلة.
                 </span>
               </div>
             )}
 
-            {!form.is_customer && !form.is_supplier && (
-              <div className="md:col-span-2 p-4 bg-gray-50 border border-gray-200 rounded-md text-xs text-gray-500">
-                يرجى تحديد صفة جهة التعامل (مورد أو عميل) أعلاه لتفعيل الضوابط الخاصة بها.
+            {isSupplier && (
+              <div>
+                <label htmlFor="party-sup-type" className="block text-xs font-semibold text-slate-700 mb-1">
+                  نوع نشاط المورد
+                </label>
+                <select
+                  id="party-sup-type"
+                  value={form.supplier_type}
+                  onChange={(e) => setForm((prev) => ({ ...prev, supplier_type: e.target.value }))}
+                  className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
+                >
+                  <option value="goods">توريد خامات ومستلزمات إنتاج</option>
+                  <option value="service">مصنع تشغيل خارجي لدى الغير (تطريز / غسيل / حياكة)</option>
+                </select>
+              </div>
+            )}
+
+            <div className="md:col-span-3">
+              <label htmlFor="party-address-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                العنوان
+              </label>
+              <input
+                id="party-address-input"
+                type="text"
+                value={form.address}
+                onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 4: Supplier-Item Linking ("الأصناف التي يوردها") */}
+        {isSupplier && (
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Package className="w-5 h-5 text-blue-600" />
+                  الأصناف والخامات التي يوردها هذا المورد
+                </h2>
+                <span className="text-xs text-slate-500">
+                  ربط المورد بالأصناف المحددة لفلترة منتقي الأصناف في أوامر الشراء افتراضياً
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="suppliedAll"
+                    checked={form.supplied_all_items}
+                    onChange={() => setForm((prev) => ({ ...prev, supplied_all_items: true }))}
+                    className="text-blue-600"
+                  />
+                  <span>جميع الأصناف والخامات</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="suppliedAll"
+                    checked={!form.supplied_all_items}
+                    onChange={() => setForm((prev) => ({ ...prev, supplied_all_items: false }))}
+                    className="text-blue-600"
+                  />
+                  <span>أصناف ومجموعات محددة</span>
+                </label>
+              </div>
+            </div>
+
+            {!form.supplied_all_items && (
+              <div className="space-y-4 pt-2">
+                {/* Groups & Sections multi-check */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <span className="block text-xs font-bold text-slate-800">
+                      مجموعات الأصناف الموردة:
+                    </span>
+                    <div className="max-h-36 overflow-y-auto space-y-1.5 text-xs">
+                      {groupsList.map((g) => (
+                        <label key={g.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded-sm">
+                          <input
+                            type="checkbox"
+                            checked={form.supplied_group_ids.includes(g.id)}
+                            onChange={() => toggleLinkedGroup(g.id)}
+                            className="rounded-xs text-blue-600"
+                          />
+                          <span className="font-medium text-slate-800">{g.name}</span>
+                          <span className="text-slate-400 font-mono">({g.code})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <span className="block text-xs font-bold text-slate-800">
+                      أقسام الأصناف الموردة:
+                    </span>
+                    <div className="max-h-36 overflow-y-auto space-y-1.5 text-xs">
+                      {sectionsList.map((s) => (
+                        <label key={s.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded-sm">
+                          <input
+                            type="checkbox"
+                            checked={form.supplied_section_ids.includes(s.id)}
+                            onChange={() => toggleLinkedSection(s.id)}
+                            className="rounded-xs text-blue-600"
+                          />
+                          <span className="font-medium text-slate-800">{s.name}</span>
+                          <span className="text-slate-400 font-mono">({s.code})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Individual Items multi-select with search */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-xs font-bold text-slate-800">
+                      أصناف فردية محددة ({form.supplied_item_ids.length} صنف محدد):
+                    </span>
+                    <div className="w-64">
+                      <label htmlFor="search-supplier-items" className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                        بحث في الأصناف لربطها
+                      </label>
+                      <input
+                        id="search-supplier-items"
+                        type="text"
+                        value={itemSearchTerm}
+                        onChange={(e) => setItemSearchTerm(e.target.value)}
+                        className="w-full px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-md"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                    {filteredItemsForLink.map((itm) => {
+                      const isChecked = form.supplied_item_ids.includes(itm.id);
+                      return (
+                        <label
+                          key={itm.id}
+                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                            isChecked
+                              ? 'bg-blue-50 border-blue-300 text-blue-900'
+                              : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-800'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleLinkedItem(itm.id)}
+                            className="rounded-xs text-blue-600"
+                          />
+                          <div className="truncate">
+                            <span className="font-bold block truncate">{itm.name}</span>
+                            <span className="text-[10px] text-slate-500 font-mono">{itm.code}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Section 5: Opening Balances */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+          <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
+            رصيد أول المدة وطبيعة الحساب
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {isSupplier && (
+              <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-xl space-y-3">
+                <div className="text-xs font-bold text-blue-900">رصيد أول المدة للمورد (ج.م)</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="sup-opening-bal" className="block text-xs font-semibold text-slate-700 mb-1">
+                      المبلغ
+                    </label>
+                    <input
+                      id="sup-opening-bal"
+                      type="number"
+                      min="0"
+                      step="any"
+                      dir="ltr"
+                      value={form.supplier_opening_balance}
+                      onChange={(e) => setForm((prev) => ({ ...prev, supplier_opening_balance: e.target.value }))}
+                      className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm font-mono font-bold text-left bg-white text-slate-800"
+                    />
+                    <FieldError error={errors.supplier_opening_balance} />
+                  </div>
+                  <div>
+                    <label htmlFor="sup-opening-type" className="block text-xs font-semibold text-slate-700 mb-1">
+                      طبيعة الحساب
+                    </label>
+                    <select
+                      id="sup-opening-type"
+                      value={form.supplier_opening_type}
+                      onChange={(e) => setForm((prev) => ({ ...prev, supplier_opening_type: e.target.value }))}
+                      className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm bg-white font-semibold text-slate-800"
+                    >
+                      <option value="credit">دائن (مستحق له)</option>
+                      <option value="debit">مدين (دفعة مقدمة له)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isCustomer && (
+              <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-3">
+                <div className="text-xs font-bold text-emerald-900">رصيد أول المدة للعميل (ج.م)</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="cust-opening-bal" className="block text-xs font-semibold text-slate-700 mb-1">
+                      المبلغ
+                    </label>
+                    <input
+                      id="cust-opening-bal"
+                      type="number"
+                      min="0"
+                      step="any"
+                      dir="ltr"
+                      value={form.customer_opening_balance}
+                      onChange={(e) => setForm((prev) => ({ ...prev, customer_opening_balance: e.target.value }))}
+                      className="w-full px-3 py-2 border border-emerald-300 rounded-lg text-sm font-mono font-bold text-left bg-white text-slate-800"
+                    />
+                    <FieldError error={errors.customer_opening_balance} />
+                  </div>
+                  <div>
+                    <label htmlFor="cust-opening-type" className="block text-xs font-semibold text-slate-700 mb-1">
+                      طبيعة الحساب
+                    </label>
+                    <select
+                      id="cust-opening-type"
+                      value={form.customer_opening_type}
+                      onChange={(e) => setForm((prev) => ({ ...prev, customer_opening_type: e.target.value }))}
+                      className="w-full px-3 py-2 border border-emerald-300 rounded-lg text-sm bg-white font-semibold text-slate-800"
+                    >
+                      <option value="debit">مدين (مستحق عليه)</option>
+                      <option value="credit">دائن (دفعة مقدمة منه)</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Section 4: Opening Balances (رصيد أول المدة) */}
-        {(form.is_supplier || form.is_customer) && (
-          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
-            <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2">
-              رصيد أول المدة وطبيعة الحساب
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {form.is_supplier && (
-                <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-md space-y-3">
-                  <div className="text-xs font-bold text-blue-900">رصيد أول المدة للمورد (ج.م)</div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">المبلغ</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        dir="ltr"
-                        value={form.supplier_opening_balance}
-                        onChange={(e) => setForm(prev => ({ ...prev, supplier_opening_balance: e.target.value }))}
-                        placeholder="0"
-                        className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm font-mono font-bold text-left bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
-                      />
-                      <FieldError error={errors.supplier_opening_balance} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">طبيعة الحساب</label>
-                      <select
-                        value={form.supplier_opening_type}
-                        onChange={(e) => setForm(prev => ({ ...prev, supplier_opening_type: e.target.value }))}
-                        className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
-                      >
-                        <option value="credit">دائن (مستحق له)</option>
-                        <option value="debit">مدين (دفعة مقدمة له)</option>
-                      </select>
-                    </div>
-                  </div>
-                  <span className="text-[11px] text-blue-700 block">
-                    الرصيد الحالي للمورد = رصيد أول المدة + فواتير الشراء الآجلة − سندات الصرف النقدية.
-                  </span>
-                </div>
-              )}
-              {form.is_customer && (
-                <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-md space-y-3">
-                  <div className="text-xs font-bold text-emerald-900">رصيد أول المدة للعميل (ج.م)</div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">المبلغ</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        dir="ltr"
-                        value={form.customer_opening_balance}
-                        onChange={(e) => setForm(prev => ({ ...prev, customer_opening_balance: e.target.value }))}
-                        placeholder="0"
-                        className="w-full px-3 py-2 border border-emerald-300 rounded-md text-sm font-mono font-bold text-left bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600"
-                      />
-                      <FieldError error={errors.customer_opening_balance} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">طبيعة الحساب</label>
-                      <select
-                        value={form.customer_opening_type}
-                        onChange={(e) => setForm(prev => ({ ...prev, customer_opening_type: e.target.value }))}
-                        className="w-full px-3 py-2 border border-emerald-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-                      >
-                        <option value="debit">مدين (مستحق عليه)</option>
-                        <option value="credit">دائن (دفعة مقدمة منه)</option>
-                      </select>
-                    </div>
-                  </div>
-                  <span className="text-[11px] text-emerald-700 block">
-                    الرصيد الحالي للعميل = رصيد أول المدة + فواتير البيع الآجلة − سندات القبض النقدية.
-                  </span>
-                </div>
-              )}
+        {/* Section 6: Notes */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+          <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
+            ملاحظات وتفاصيل إضافية
+          </h2>
+          <div>
+            <label htmlFor="party-notes-input" className="block text-xs font-semibold text-slate-700 mb-1">
+              ملاحظات عامة حول جهة التعامل
+            </label>
+            <textarea
+              id="party-notes-input"
+              rows={3}
+              value={form.notes}
+              onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+              className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
+            />
+          </div>
+        </div>
+
+        {/* Bottom Actions */}
+        <div className="flex items-center justify-end gap-3 pt-4">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="px-5 py-2.5 text-sm text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-xs"
+          >
+            إلغاء
+          </button>
+          <button
+            type="submit"
+            disabled={!isFormValid || saving}
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            <span>{saving ? 'جاري الحفظ...' : isEdit ? 'حفظ التعديلات' : 'حفظ جهة التعامل'}</span>
+          </button>
+        </div>
+      </form>
+
+      {/* Offset Settlement Modal */}
+      {showOffsetModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 text-right space-y-5" dir="rtl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Scale className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-bold text-base text-slate-900">إجراء مستند مقاصة وتسوية الأرصدة</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOffsetModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-600">رصيد المورد (مستحق له):</span>
+                <span className="font-bold font-mono text-blue-900">{formatCurrency(currentBalances.supplier_balance)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-600">رصيد العميل (مستحق عليه):</span>
+                <span className="font-bold font-mono text-emerald-900">{formatCurrency(currentBalances.customer_balance)}</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-slate-200">
+                <span className="font-bold text-slate-800">الحد الأقصى المتاح للتسوية:</span>
+                <span className="font-bold font-mono text-indigo-700">{formatCurrency(currentBalances.max_offset)}</span>
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="offset-amount-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                مبلغ المقاصة المراد تسويته (ج.م) *
+              </label>
+              <input
+                id="offset-amount-input"
+                type="number"
+                min="0.01"
+                max={currentBalances.max_offset}
+                step="any"
+                value={offsetAmount}
+                onChange={(e) => setOffsetAmount(e.target.value)}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                سيتم قيد سند صرف لمورد وسند قبض من عميل بنفس القيمة وتوليد إذن مقاصة رسمي في سجل التدقيق.
+              </span>
+            </div>
+
+            <div>
+              <label htmlFor="offset-notes-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                ملاحظات وبيان التسوية
+              </label>
+              <textarea
+                id="offset-notes-input"
+                rows={2}
+                value={offsetNotes}
+                onChange={(e) => setOffsetNotes(e.target.value)}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm text-slate-800"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowOffsetModal(false)}
+                disabled={offsetSubmitting}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteOffset}
+                disabled={offsetSubmitting || !Number(offsetAmount)}
+                className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {offsetSubmitting ? 'جاري الاعتماد...' : 'اعتماد المقاصة'}
+              </button>
             </div>
           </div>
-        )}
-      </form>
+        </div>
+      )}
     </PageContainer>
   );
 }

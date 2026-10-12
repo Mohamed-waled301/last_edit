@@ -180,15 +180,31 @@ export const backupRepo = {
         { id: 'pm-4', name: 'محفظة إلكترونية (إنستاباي / فودافون كاش)', code: 'WALLET', notes: 'دفع إلكتروني لحظي بالهاتف', is_active: 1 },
       ]);
 
-      // 9. Unified Parties (Suppliers, Customers, Both)
+      // 9. Master Data: Item Groups & Item Sections
+      await db.item_groups.bulkAdd([
+        { id: 'grp-1', code: 'GRP-FAB', name: 'أقمشة ومنسوجات', description: 'أثواب الأقمشة القطنية والشتوية والجينز', is_active: 1, created_at: now },
+        { id: 'grp-2', code: 'GRP-ACC', name: 'إكسسوارات ومستلزمات', description: 'الأزرار والسوست والبادجات وأكياس التعبئة', is_active: 1, created_at: now },
+        { id: 'grp-3', code: 'GRP-THD', name: 'خيوط حياكة', description: 'بكر خيوط الخياطة والأوفر عالية الشد', is_active: 1, created_at: now },
+        { id: 'grp-4', code: 'GRP-CAS', name: 'ملابس صيفية كاجوال', description: 'تيشيرتات بولو ورجالي', is_active: 1, created_at: now },
+        { id: 'grp-5', code: 'GRP-JNS', name: 'بناطيل جينز ودنيم', description: 'بناطيل جينز سليم فيت ومطاطية', is_active: 1, created_at: now },
+        { id: 'grp-6', code: 'GRP-WNT', name: 'ملابس شتوية ثقيلة', description: 'سويت شيرت وهودي مبطن', is_active: 1, created_at: now },
+      ]);
+
+      await db.item_sections.bulkAdd([
+        { id: 'sec-1', code: 'SEC-FAB', name: 'قسم الأقمشة والغزول', group_id: 'grp-1', is_active: 1, created_at: now },
+        { id: 'sec-2', code: 'SEC-ACC', name: 'قسم مستلزمات الخياطة', group_id: 'grp-2', is_active: 1, created_at: now },
+        { id: 'sec-3', code: 'SEC-FIN', name: 'قسم الملابس التامة', group_id: 'grp-4', is_active: 1, created_at: now },
+      ]);
+
+      // 10. Unified Parties (Suppliers, Customers, Both)
       await db.parties.bulkAdd([
-        { id: 'pty-1', code: 'PRT-SUP-01', name: 'مصنع النيل للغزل والنسيج والأقمشة القطنية', phone: '0226901122', address: 'المحلة الكبرى - المنطقة الصناعية', tax_number: '210-458-991', is_supplier: 1, is_customer: 0, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 0, notes: 'توريد أثواب أقمشة سنجل جيرسي وميلتون وجبردين قطن 100%', is_active: 1, created_at: now },
-        { id: 'pty-2', code: 'PRT-SUP-02', name: 'الأهرام لتصنيع وتجارة إكسسوارات وسوست الملابس', phone: '01098877665', address: 'شبرا الخيمة - القليوبية', tax_number: '315-890-442', is_supplier: 1, is_customer: 0, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 0, notes: 'أزرار، سوست نحاس وعظم، خيوط بوليستر، بادجات وتيكتات', is_active: 1, created_at: now },
-        { id: 'pty-3', code: 'PRT-SUP-03', name: 'الدلتا لخدمات التطريز الآلي والطباعة السلك سكرين', phone: '01122334488', address: 'العاشر من رمضان - مجمع الصناعات B2', tax_number: '402-119-763', is_supplier: 1, is_customer: 0, supplier_type: 'service', payment_terms: 'cash', credit_limit: 0, notes: 'مورد خدمة - تشغيل لدى الغير: تطريز كمبيوتر وطباعة سلك سكرين وربر', is_active: 1, created_at: now },
-        { id: 'pty-4', code: 'PRT-SUP-04', name: 'المصرية الألمانية لمغاسل وتجهيز وصباغة الجينز', phone: '01200445566', address: 'أبو رواش - المنطقة الصناعية - الجيزة', tax_number: '501-772-831', is_supplier: 1, is_customer: 0, supplier_type: 'service', payment_terms: 'credit', credit_limit: 0, notes: 'مورد خدمة - تشغيل لدى الغير: غسيل إنزيم، تبييض ثلجي، وكرمشة حرارية للجينز', is_active: 1, created_at: now },
-        { id: 'pty-5', code: 'PRT-BOTH-05', name: 'شركة طيبة للملابس الجاهزة وتوزيع الجملة', phone: '01019988771', address: 'العتبة - وسط البلد - القاهرة', tax_number: '612-334-550', is_supplier: 1, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 250000, notes: 'شريك استراتيجي: نشتري منهم أقمشة مستوردة ونبيع لهم ملابس تامة جاهزة (مورد وعميل - يسمح بالمقاصة)', is_active: 1, created_at: now },
-        { id: 'pty-6', code: 'PRT-CUST-06', name: 'مجموعة فاشون لاند للمتاجر وسلاسل التوزيع', phone: '0223891000', address: 'مدينة نصر - المنطقة الأولى - القاهرة', tax_number: '710-440-120', is_supplier: 0, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 180000, notes: 'عميل رئيسي - طلبيات جملة دورية لكولكشن الصيف والشتاء', is_active: 1, created_at: now },
-        { id: 'pty-7', code: 'PRT-CUST-07', name: 'سلسلة متاجر كاجوال كلوب', phone: '01009876543', address: 'المهندسين - شارع لبنان - الجيزة', tax_number: '820-550-230', is_supplier: 0, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 200000, notes: 'عميل معتمد لتوزيع البناطيل الجينز والتيشيرتات البولو', is_active: 1, created_at: now },
+        { id: 'pty-1', code: 'PRT-SUP-01', name: 'مصنع النيل للغزل والنسيج والأقمشة القطنية', phone: '0226901122', address: 'المحلة الكبرى - المنطقة الصناعية', tax_number: '210-458-991', is_supplier: 1, is_customer: 0, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 0, supplied_all_items: 0, supplied_items: ['mat-1', 'mat-2', 'mat-3'], notes: 'توريد أثواب أقمشة سنجل جيرسي وميلتون وجبردين قطن 100%', is_active: 1, created_at: now },
+        { id: 'pty-2', code: 'PRT-SUP-02', name: 'الأهرام لتصنيع وتجارة إكسسوارات وسوست الملابس', phone: '01098877665', address: 'شبرا الخيمة - القليوبية', tax_number: '315-890-442', is_supplier: 1, is_customer: 0, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 0, supplied_all_items: 0, supplied_items: ['mat-4', 'mat-5', 'mat-6', 'mat-7', 'mat-8'], notes: 'أزرار، سوست نحاس وعظم، خيوط بوليستر، بادجات وتيكتات', is_active: 1, created_at: now },
+        { id: 'pty-3', code: 'PRT-SUP-03', name: 'الدلتا لخدمات التطريز الآلي والطباعة السلك سكرين', phone: '01122334488', address: 'العاشر من رمضان - مجمع الصناعات B2', tax_number: '402-119-763', is_supplier: 1, is_customer: 0, supplier_type: 'service', payment_terms: 'cash', credit_limit: 0, supplied_all_items: 1, notes: 'مورد خدمة - تشغيل لدى الغير: تطريز كمبيوتر وطباعة سلك سكرين وربر', is_active: 1, created_at: now },
+        { id: 'pty-4', code: 'PRT-SUP-04', name: 'المصرية الألمانية لمغاسل وتجهيز وصباغة الجينز', phone: '01200445566', address: 'أبو رواش - المنطقة الصناعية - الجيزة', tax_number: '501-772-831', is_supplier: 1, is_customer: 0, supplier_type: 'service', payment_terms: 'credit', credit_limit: 0, supplied_all_items: 1, notes: 'مورد خدمة - تشغيل لدى الغير: غسيل إنزيم، تبييض ثلجي، وكرمشة حرارية للجينز', is_active: 1, created_at: now },
+        { id: 'pty-5', code: 'PRT-BOTH-05', name: 'شركة طيبة للملابس الجاهزة وتوزيع الجملة', phone: '01019988771', address: 'العتبة - وسط البلد - القاهرة', tax_number: '612-334-550', is_supplier: 1, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 250000, supplier_opening_balance: 15000, customer_opening_balance: 35000, supplied_all_items: 1, notes: 'شريك استراتيجي: نشتري منهم أقمشة مستوردة ونبيع لهم ملابس تامة جاهزة (مورد وعميل - يسمح بالمقاصة)', is_active: 1, created_at: now },
+        { id: 'pty-6', code: 'PRT-CUST-06', name: 'مجموعة فاشون لاند للمتاجر وسلاسل التوزيع', phone: '0223891000', address: 'مدينة نصر - المنطقة الأولى - القاهرة', tax_number: '710-440-120', is_supplier: 0, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 180000, customer_opening_balance: 0, notes: 'عميل رئيسي - طلبيات جملة دورية لكولكشن الصيف والشتاء', is_active: 1, created_at: now },
+        { id: 'pty-7', code: 'PRT-CUST-07', name: 'سلسلة متاجر كاجوال كلوب', phone: '01009876543', address: 'المهندسين - شارع لبنان - الجيزة', tax_number: '820-550-230', is_supplier: 0, is_customer: 1, supplier_type: 'goods', payment_terms: 'credit', credit_limit: 200000, customer_opening_balance: 0, notes: 'عميل معتمد لتوزيع البناطيل الجينز والتيشيرتات البولو', is_active: 1, created_at: now },
       ]);
 
       // Sync into legacy suppliers and customers tables
@@ -220,14 +236,14 @@ export const backupRepo = {
 
       // Sync raw materials into items table
       await db.items.bulkAdd([
-        { id: 'mat-1', code: 'RAW-FAB-01', name: 'قماش سنجل جيرسي قطن 100% ممشط 180 جم', item_group: 'أقمشة قطنية', item_department: 'قسم الأقمشة', item_type: 'raw_material', image: '', unit: 'كجم', cost_price: 180, selling_price: 0, min_issue_qty: 20, opening_balance: 450, current_stock: 450, variants: [], is_active: 1, created_at: now },
-        { id: 'mat-2', code: 'RAW-DEN-02', name: 'قماش جينز قطن مدعم ليكرا 12 أونصة إنديغو', item_group: 'أقمشة جينز', item_department: 'قسم الأقمشة', item_type: 'raw_material', image: '', unit: 'متر', cost_price: 130, selling_price: 0, min_issue_qty: 30, opening_balance: 620, current_stock: 620, variants: [], is_active: 1, created_at: now },
-        { id: 'mat-3', code: 'RAW-MLT-03', name: 'قماش ميلتون مبطن شتوي ثقيل 320 جم ميلانج', item_group: 'أقمشة شتوية', item_department: 'قسم الأقمشة', item_type: 'raw_material', image: '', unit: 'كجم', cost_price: 210, selling_price: 0, min_issue_qty: 25, opening_balance: 320, current_stock: 320, variants: [], is_active: 1, created_at: now },
-        { id: 'mat-4', code: 'RAW-BTN-04', name: 'أزرار بولو وقميص بوليستر 4 خرم مقاوم للحرارة', item_group: 'إكسسوارات ومستلزمات', item_department: 'قسم المستلزمات', item_type: 'raw_material', image: '', unit: 'كيس', cost_price: 45, selling_price: 0, min_issue_qty: 5, opening_balance: 120, current_stock: 120, variants: [], is_active: 1, created_at: now },
-        { id: 'mat-5', code: 'RAW-ZIP-05', name: 'سحابات جينز معدنية نحاس صلب 15 سم لوك أوتوماتيك', item_group: 'إكسسوارات ومستلزمات', item_department: 'قسم المستلزمات', item_type: 'raw_material', image: '', unit: 'قطعة', cost_price: 12, selling_price: 0, min_issue_qty: 20, opening_balance: 480, current_stock: 480, variants: [], is_active: 1, created_at: now },
-        { id: 'mat-6', code: 'RAW-THD-06', name: 'بكر خيوط حياكة بوليستر 40/2 تركي عالي الشد', item_group: 'خيوط حياكة', item_department: 'قسم المستلزمات', item_type: 'raw_material', image: '', unit: 'بكرة', cost_price: 35, selling_price: 0, min_issue_qty: 10, opening_balance: 180, current_stock: 180, variants: [], is_active: 1, created_at: now },
-        { id: 'mat-7', code: 'RAW-BAG-07', name: 'أكياس تغليف سلوفان مطبوعة باللوجو بشريط لاصق', item_group: 'مستلزمات تعبئة', item_department: 'قسم التعبئة والكي', item_type: 'raw_material', image: '', unit: 'كيس', cost_price: 1.5, selling_price: 0, min_issue_qty: 100, opening_balance: 2500, current_stock: 2500, variants: [], is_active: 1, created_at: now },
-        { id: 'mat-8', code: 'RAW-LBL-08', name: 'تيكت غسيل وماركة قطن منسوج مع مقاسات', item_group: 'إكسسوارات ومستلزمات', item_department: 'قسم المستلزمات', item_type: 'raw_material', image: '', unit: 'قطعة', cost_price: 2.2, selling_price: 0, min_issue_qty: 50, opening_balance: 1800, current_stock: 1800, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-1', code: 'RAW-FAB-01', name: 'قماش سنجل جيرسي قطن 100% ممشط 180 جم', item_group: 'أقمشة ومنسوجات', group_id: 'grp-1', item_department: 'قسم الأقمشة والغزول', section_id: 'sec-1', item_type: 'raw_material', image: '', unit: 'كجم', cost_price: 180, selling_price: 180, profit_margin_percent: 0, min_issue_qty: 20, opening_balance: 450, current_stock: 450, has_variants: 0, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-2', code: 'RAW-DEN-02', name: 'قماش جينز قطن مدعم ليكرا 12 أونصة إنديغو', item_group: 'أقمشة ومنسوجات', group_id: 'grp-1', item_department: 'قسم الأقمشة والغزول', section_id: 'sec-1', item_type: 'raw_material', image: '', unit: 'متر', cost_price: 130, selling_price: 130, profit_margin_percent: 0, min_issue_qty: 30, opening_balance: 620, current_stock: 620, has_variants: 0, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-3', code: 'RAW-MLT-03', name: 'قماش ميلتون مبطن شتوي ثقيل 320 جم ميلانج', item_group: 'أقمشة ومنسوجات', group_id: 'grp-1', item_department: 'قسم الأقمشة والغزول', section_id: 'sec-1', item_type: 'raw_material', image: '', unit: 'كجم', cost_price: 210, selling_price: 210, profit_margin_percent: 0, min_issue_qty: 25, opening_balance: 320, current_stock: 320, has_variants: 0, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-4', code: 'RAW-BTN-04', name: 'أزرار بولو وقميص بوليستر 4 خرم مقاوم للحرارة', item_group: 'إكسسوارات ومستلزمات', group_id: 'grp-2', item_department: 'قسم مستلزمات الخياطة', section_id: 'sec-2', item_type: 'raw_material', image: '', unit: 'كيس', cost_price: 45, selling_price: 45, profit_margin_percent: 0, min_issue_qty: 5, opening_balance: 120, current_stock: 120, has_variants: 0, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-5', code: 'RAW-ZIP-05', name: 'سحابات جينز معدنية نحاس صلب 15 سم لوك أوتوماتيك', item_group: 'إكسسوارات ومستلزمات', group_id: 'grp-2', item_department: 'قسم مستلزمات الخياطة', section_id: 'sec-2', item_type: 'raw_material', image: '', unit: 'قطعة', cost_price: 12, selling_price: 12, profit_margin_percent: 0, min_issue_qty: 20, opening_balance: 480, current_stock: 480, has_variants: 0, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-6', code: 'RAW-THD-06', name: 'بكر خيوط حياكة بوليستر 40/2 تركي عالي الشد', item_group: 'خيوط حياكة', group_id: 'grp-3', item_department: 'قسم مستلزمات الخياطة', section_id: 'sec-2', item_type: 'raw_material', image: '', unit: 'بكرة', cost_price: 35, selling_price: 35, profit_margin_percent: 0, min_issue_qty: 10, opening_balance: 180, current_stock: 180, has_variants: 0, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-7', code: 'RAW-BAG-07', name: 'أكياس تغليف سلوفان مطبوعة باللوجو بشريط لاصق', item_group: 'إكسسوارات ومستلزمات', group_id: 'grp-2', item_department: 'قسم مستلزمات الخياطة', section_id: 'sec-2', item_type: 'raw_material', image: '', unit: 'كيس', cost_price: 1.5, selling_price: 1.5, profit_margin_percent: 0, min_issue_qty: 100, opening_balance: 2500, current_stock: 2500, has_variants: 0, variants: [], is_active: 1, created_at: now },
+        { id: 'mat-8', code: 'RAW-LBL-08', name: 'تيكت غسيل وماركة قطن منسوج مع مقاسات', item_group: 'إكسسوارات ومستلزمات', group_id: 'grp-2', item_department: 'قسم مستلزمات الخياطة', section_id: 'sec-2', item_type: 'raw_material', image: '', unit: 'قطعة', cost_price: 2.2, selling_price: 2.2, profit_margin_percent: 0, min_issue_qty: 50, opening_balance: 1800, current_stock: 1800, has_variants: 0, variants: [], is_active: 1, created_at: now },
       ]);
 
       // 11. Finished Clothing Products with Clothing Variants (Sizes & Colors)
@@ -263,15 +279,19 @@ export const backupRepo = {
           code: '1001',
           name: 'تيشيرت بولو رجالي قطن 100% مطرز',
           item_group: 'ملابس صيفية كاجوال',
-          item_department: 'قسم التيشيرتات والبولو',
+          group_id: 'grp-4',
+          item_department: 'قسم الملابس التامة',
+          section_id: 'sec-3',
           item_type: 'finished',
           image: '',
           unit: 'قطعة',
           cost_price: 135,
           selling_price: 250,
+          profit_margin_percent: 85.19,
           min_issue_qty: 50,
           opening_balance: totalPoloStock,
           current_stock: totalPoloStock,
+          has_variants: 1,
           variants: poloVariants,
           notes: 'تيشيرت قطن ممشط بياقة مضلعة ومطرز بشعار الماركة بدقة',
           is_active: 1,
@@ -282,15 +302,19 @@ export const backupRepo = {
           code: '1002',
           name: 'بنطلون جينز كاجوال سليم فيت مطاطي',
           item_group: 'بناطيل جينز ودنيم',
-          item_department: 'قسم البنطلون والجينز',
+          group_id: 'grp-5',
+          item_department: 'قسم الملابس التامة',
+          section_id: 'sec-3',
           item_type: 'finished',
           image: '',
           unit: 'قطعة',
           cost_price: 220,
           selling_price: 420,
+          profit_margin_percent: 90.91,
           min_issue_qty: 30,
           opening_balance: totalJeansStock,
           current_stock: totalJeansStock,
+          has_variants: 1,
           variants: jeansVariants,
           notes: 'جينز 12 أونصة معالج بغسيل إنزيم وكرمشة خفيفة مريحة',
           is_active: 1,
@@ -301,15 +325,19 @@ export const backupRepo = {
           code: '1003',
           name: 'سويت شيرت هودي شتوي ميلتون مبطن',
           item_group: 'ملابس شتوية ثقيلة',
-          item_department: 'قسم السويت شيرت والهودي',
+          group_id: 'grp-6',
+          item_department: 'قسم الملابس التامة',
+          section_id: 'sec-3',
           item_type: 'finished',
           image: '',
           unit: 'قطعة',
           cost_price: 280,
           selling_price: 520,
+          profit_margin_percent: 85.71,
           min_issue_qty: 40,
           opening_balance: totalHoodieStock,
           current_stock: totalHoodieStock,
+          has_variants: 1,
           variants: hoodieVariants,
           notes: 'هودي شتوي بجيب كانغارو وكابيشو مبطن بطانة داخلية دافئة',
           is_active: 1,
@@ -380,6 +408,10 @@ export const backupRepo = {
           additional_expenses: 1200,
           total_amount: 52500,
           grand_total: 52500,
+          installments: [
+            { due_date: '2026-10-15', amount: 25000, notes: 'دفعة أولى بعد فحص واستلام الأقمشة' },
+            { due_date: '2026-10-30', amount: 27500, notes: 'دفعة ثانية نهائية' },
+          ],
           status: 'received',
           notes: 'توريد أثواب قماش سنجل جيرسي قطن مصري 100% عالي التمشيط',
           created_by: 'usr-purchasing',
@@ -683,6 +715,16 @@ export const backupRepo = {
         { id: 'tx-2', tx_number: 'TXN-002', account_id: 'acc-main', tx_type: 'outflow', category: 'supplier_payment', amount: 18500, balance_after: 185000, reference_type: 'supplier_invoices', reference_id: 'sinv-2', description: 'سداد نقدي من الخزينة المركزية لشركة الأهرام للإكسسوارات', created_by: 'usr-accountant', created_at: now },
         { id: 'tx-3', tx_number: 'TXN-003', account_id: 'acc-out-2', tx_type: 'inflow', category: 'sales', amount: 20000, balance_after: 20000, reference_type: 'sales_invoices', reference_id: 'sls-1', description: 'تحصيل دفعة نقدية من معرض وسط البلد', created_by: 'usr-accountant', created_at: now },
         { id: 'tx-4', tx_number: 'TXN-004', account_id: 'acc-out-2', tx_type: 'inflow', category: 'sales', amount: 23940, balance_after: 38500, reference_type: 'sales_invoices', reference_id: 'sls-2', description: 'تحصيل كاش مبيعات معرض وسط البلد', created_by: 'usr-cashier', created_at: now },
+      ]);
+
+      // 20. Stock Movements Ledger (Direction: in / out for receipts, sales, adjustments)
+      await db.stock_movements.bulkAdd([
+        { id: 'mov-1', item_id: 'mat-1', movement_type: 'purchase_receipt', direction: 'in', location_id: 'loc-1', quantity: 300, unit_cost: 180, reference_type: 'goods_receipts', reference_id: 'grn-1', notes: 'استلام أمر شراء PO-2026-001', date: '2026-09-28', created_at: now },
+        { id: 'mov-2', item_id: 'mat-5', movement_type: 'purchase_receipt', direction: 'in', location_id: 'loc-2', quantity: 500, unit_cost: 12, reference_type: 'goods_receipts', reference_id: 'grn-2', notes: 'استلام أمر شراء PO-2026-002', date: '2026-10-01', created_at: now },
+        { id: 'mov-3', item_id: 'mat-6', movement_type: 'purchase_receipt', direction: 'in', location_id: 'loc-2', quantity: 200, unit_cost: 35, reference_type: 'goods_receipts', reference_id: 'grn-2', notes: 'استلام أمر شراء PO-2026-002', date: '2026-10-01', created_at: now },
+        { id: 'mov-4', item_id: 'prd-1', variant_id: 'var-polo-2', movement_type: 'sales_issue', direction: 'out', location_id: 'loc-3', quantity: 150, unit_cost: 136.45, reference_type: 'sales_invoices', reference_id: 'sls-1', notes: 'صرف مبيعات فاتورة INV-SLS-2026-001', date: '2026-10-03', created_at: now },
+        { id: 'mov-5', item_id: 'prd-2', variant_id: 'var-jns-2', movement_type: 'sales_issue', direction: 'out', location_id: 'loc-4', quantity: 50, unit_cost: 220, reference_type: 'sales_invoices', reference_id: 'sls-2', notes: 'صرف مبيعات فاتورة INV-SLS-2026-002', date: '2026-10-05', created_at: now },
+        { id: 'mov-6', item_id: 'mat-1', movement_type: 'stock_adjustment', direction: 'out', location_id: 'loc-1', quantity: 5, unit_cost: 180, reference_type: 'stock_adjustments', reference_id: 'adj-1', notes: 'هالك قص وعيوب نسيج', date: today, created_at: now },
       ]);
     });
 

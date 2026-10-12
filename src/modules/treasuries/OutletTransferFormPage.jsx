@@ -165,7 +165,6 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
                 step="0.01"
                 value={form.amount}
                 onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))}
-                placeholder="0.00"
                 className={`w-full px-3 py-2 border rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 ${
                   isBalanceInsufficient ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-300 focus:ring-[#1F3A5F]'
                 }`}

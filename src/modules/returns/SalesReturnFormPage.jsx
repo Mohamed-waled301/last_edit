@@ -373,9 +373,9 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
                 type="text"
                 value={form.reason}
                 onChange={(e) => setForm(prev => ({ ...prev, reason: e.target.value }))}
-                placeholder="مثال: مقاس غير مناسب للعميل، عيب نسج أو خياطة..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
+              <p className="text-xs text-gray-500 mt-1">مثال: مقاس غير مناسب للعميل، عيب نسج أو خياطة</p>
             </div>
           </div>
         </div>

@@ -132,9 +132,9 @@ export default function QuickOutletModal({ isOpen, onClose, onCreated, onNotify 
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="مثال: معرض وسط البلد، منفذ المصنع..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#1F3A5F] text-xs font-semibold"
               />
+              <p className="text-xs text-gray-500 mt-1">مثال: معرض وسط البلد، منفذ المصنع</p>
             </div>
 
             <div>
@@ -161,9 +161,9 @@ export default function QuickOutletModal({ isOpen, onClose, onCreated, onNotify 
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="مثال: القاهرة - شارع طلعت حرب"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#1F3A5F] text-xs"
               />
+              <p className="text-xs text-gray-500 mt-1">مثال: القاهرة - شارع طلعت حرب</p>
             </div>
 
             <div>
@@ -175,7 +175,6 @@ export default function QuickOutletModal({ isOpen, onClose, onCreated, onNotify 
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="01xxxxxxxxx"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#1F3A5F] text-xs"
               />
             </div>
@@ -223,9 +222,9 @@ export default function QuickOutletModal({ isOpen, onClose, onCreated, onNotify 
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="أي ملاحظات إضافية عن الفرع أو المسؤول..."
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#1F3A5F] text-xs"
             />
+            <p className="text-xs text-gray-500 mt-1">أي ملاحظات إضافية عن الفرع أو المسؤول</p>
           </div>
 
           {/* Footer Actions */}

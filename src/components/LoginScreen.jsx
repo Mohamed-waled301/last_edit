@@ -127,7 +127,6 @@ export const LoginScreen = ({ onLoginSuccess }) => {
               maxLength={6}
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-              placeholder="••••"
               className="w-full h-12 text-center text-2xl font-mono tracking-widest border border-gray-300 rounded-md focus:border-[#1F3A5F] focus:outline-none"
               autoFocus
             />

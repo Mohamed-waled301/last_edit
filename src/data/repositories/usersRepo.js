@@ -38,6 +38,21 @@ export const usersRepo = {
         created_at: now,
       });
 
+      // Ensure staff cashier user exists for multi-role operations and role testing
+      const existingCashier = await db.users.get('usr-cashier');
+      if (!existingCashier) {
+        await db.users.put({
+          id: 'usr-cashier',
+          username: 'cashier',
+          full_name: 'أحمد محمود (كاشير)',
+          password_hash: hash,
+          password_salt: salt,
+          role: 'cashier',
+          is_active: 1,
+          created_at: now,
+        });
+      }
+
       // Initialize default settings
       const existingSettings = await db.settings.get(1);
       if (!existingSettings) {

@@ -381,10 +381,10 @@ export default function SalesModule({ onBack, onNotify }) {
           {/* Action Row */}
           <div className="bg-white border border-gray-200 rounded-md p-3 flex flex-wrap items-center justify-between gap-3">
             <div className="relative flex-1 min-w-[260px] max-w-md">
-              <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
               <input
                 type="text"
-                placeholder="بحث برقم الفاتورة التلقائي أو اسم العميل..."
+                aria-label="بحث برقم الفاتورة التلقائي أو اسم العميل"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full h-10 pr-9 pl-3 rounded-md border border-gray-300 text-sm focus:border-[#1F3A5F] focus:outline-none"
@@ -904,11 +904,11 @@ export default function SalesModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: محلات النجمة للملابس"
                   value={newCustomer.name}
                   onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
+                <p className="text-xs text-gray-500 mt-1">مثال: محلات النجمة للملابس</p>
                 <FieldError error={customerFormErrors.name} />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -919,7 +919,6 @@ export default function SalesModule({ onBack, onNotify }) {
                     inputMode="numeric"
                     dir="ltr"
                     maxLength={11}
-                    placeholder="01xxxxxxxxx"
                     value={newCustomer.phone}
                     onChange={e => {
                       const digits = sanitizeEgyptianPhoneInput(e.target.value);
@@ -951,7 +950,6 @@ export default function SalesModule({ onBack, onNotify }) {
                     dir="ltr"
                     value={newCustomer.opening_balance}
                     onChange={e => setNewCustomer({ ...newCustomer, opening_balance: e.target.value })}
-                    placeholder="0"
                     className="w-full h-10 rounded border border-emerald-300 px-3 font-bold text-left bg-white"
                   />
                   <FieldError error={customerFormErrors.opening_balance} />
@@ -1007,11 +1005,11 @@ export default function SalesModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: قميص أكسفورد كلاسيك أزرق"
                   value={newQuickProduct.name}
                   onChange={e => setNewQuickProduct({ ...newQuickProduct, name: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
+                <p className="text-xs text-gray-500 mt-1">مثال: قميص أكسفورد كلاسيك أزرق</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1217,11 +1215,11 @@ export default function SalesModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: مقاس غير مناسب / استبدال موديل"
                   value={returnForm.reason}
                   onChange={e => setReturnForm({ ...returnForm, reason: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3"
                 />
+                <p className="text-xs text-gray-500 mt-1">مثال: مقاس غير مناسب / استبدال موديل</p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">

@@ -588,10 +588,10 @@ export default function ProductsModule({ onBack, onNotify }) {
           {/* Search bar */}
           <div className="bg-white border border-gray-200 rounded-md p-3 flex items-center justify-between gap-3">
             <div className="relative max-w-md w-full">
-              <Search className="w-4 h-4 text-gray-400 absolute right-3 top-3" />
+              <Search className="w-4 h-4 text-gray-400 absolute right-3 top-3 pointer-events-none" aria-hidden="true" />
               <input
                 type="text"
-                placeholder="ابحث بكود الصنف، الاسم، أو المجموعة..."
+                aria-label="ابحث بكود الصنف، الاسم، أو المجموعة"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full pr-9 pl-3 h-10 rounded-md border border-gray-300 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
@@ -714,10 +714,10 @@ export default function ProductsModule({ onBack, onNotify }) {
         <div className="space-y-4">
           <div className="bg-white border border-gray-200 rounded-md p-3 flex items-center justify-between gap-3">
             <div className="relative max-w-md w-full">
-              <Search className="w-4 h-4 text-gray-400 absolute right-3 top-3" />
+              <Search className="w-4 h-4 text-gray-400 absolute right-3 top-3 pointer-events-none" aria-hidden="true" />
               <input
                 type="text"
-                placeholder="ابحث بالاسم، التليفون، أو الكود..."
+                aria-label="ابحث بالاسم، التليفون، أو الكود"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full pr-9 pl-3 h-10 rounded-md border border-gray-300 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
@@ -830,7 +830,7 @@ export default function ProductsModule({ onBack, onNotify }) {
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="اسم المقاس الجديد (مثال: 38 أو خاص)..."
+                aria-label="اسم المقاس الجديد"
                 value={newSizeName}
                 onChange={e => setNewSizeName(e.target.value)}
                 className="flex-1 h-10 border border-gray-300 rounded px-3 text-sm focus:border-[#1F3A5F] focus:outline-none"
@@ -860,7 +860,7 @@ export default function ProductsModule({ onBack, onNotify }) {
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="اسم اللون الجديد (مثال: كحلي بترولي)..."
+                aria-label="اسم اللون الجديد"
                 value={newColorName}
                 onChange={e => setNewColorName(e.target.value)}
                 className="flex-1 h-10 border border-gray-300 rounded px-3 text-sm focus:border-[#1F3A5F] focus:outline-none"
@@ -901,7 +901,7 @@ export default function ProductsModule({ onBack, onNotify }) {
           <div className="flex gap-2 max-w-lg">
             <input
               type="text"
-              placeholder="اسم موقع التخزين أو المستودع الجديد..."
+              aria-label="اسم موقع التخزين أو المستودع الجديد"
               value={newLocationName}
               onChange={e => setNewLocationName(e.target.value)}
               className="flex-1 h-10 border border-gray-300 rounded px-3 text-sm focus:border-[#1F3A5F] focus:outline-none"
@@ -991,7 +991,7 @@ export default function ProductsModule({ onBack, onNotify }) {
           <div className="flex gap-2 max-w-md">
             <input
               type="text"
-              placeholder="اسم طريقة الدفع الجديدة (مثال: محفظة إلكترونية)..."
+              aria-label="اسم طريقة الدفع الجديدة"
               value={newMethodName}
               onChange={e => setNewMethodName(e.target.value)}
               className="flex-1 h-10 border border-gray-300 rounded px-3 text-sm focus:border-[#1F3A5F] focus:outline-none"
@@ -1057,11 +1057,11 @@ export default function ProductsModule({ onBack, onNotify }) {
                   <input
                     type="text"
                     required
-                    placeholder="مثال: تيشيرت بولو رجالي قطن مطرز"
                     value={itemForm.name}
                     onChange={e => setItemForm({ ...itemForm, name: e.target.value })}
                     className={`w-full h-11 border rounded px-3 text-sm font-semibold ${itemErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                   />
+                  <p className="text-xs text-gray-500 mt-1">مثال: تيشيرت بولو رجالي قطن مطرز</p>
                   <FieldError error={itemErrors.name} />
                 </div>
               </div>
@@ -1071,21 +1071,21 @@ export default function ProductsModule({ onBack, onNotify }) {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">مجموعة الصنف</label>
                   <input
                     type="text"
-                    placeholder="مثال: ملابس صيفية رجالي"
                     value={itemForm.item_group}
                     onChange={e => setItemForm({ ...itemForm, item_group: e.target.value })}
                     className="w-full h-11 border border-gray-300 rounded px-3 text-sm"
                   />
+                  <p className="text-xs text-gray-500 mt-1">مثال: ملابس صيفية رجالي</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">قسم الصنف</label>
                   <input
                     type="text"
-                    placeholder="مثال: قسم البولو والتيشيرت"
                     value={itemForm.item_department}
                     onChange={e => setItemForm({ ...itemForm, item_department: e.target.value })}
                     className="w-full h-11 border border-gray-300 rounded px-3 text-sm"
                   />
+                  <p className="text-xs text-gray-500 mt-1">مثال: قسم البولو والتيشيرت</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">الوحدة</label>
@@ -1107,7 +1107,6 @@ export default function ProductsModule({ onBack, onNotify }) {
                     step="0.01"
                     min="0"
                     required
-                    placeholder="0.00"
                     value={itemForm.cost_price}
                     onChange={e => setItemForm({ ...itemForm, cost_price: e.target.value })}
                     className={`w-full h-11 border rounded px-3 text-sm font-bold text-blue-900 ${itemErrors.cost_price ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white'}`}
@@ -1122,7 +1121,6 @@ export default function ProductsModule({ onBack, onNotify }) {
                       step="0.01"
                       min="0"
                       required
-                      placeholder="0.00"
                       value={itemForm.selling_price}
                       onChange={e => setItemForm({ ...itemForm, selling_price: e.target.value })}
                       className={`w-full h-11 border rounded px-3 text-sm font-bold text-green-900 ${itemErrors.selling_price ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white'}`}
@@ -1338,11 +1336,11 @@ export default function ProductsModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: مصنع النيل للغزل والنسيج"
                   value={partyForm.name}
                   onChange={e => setPartyForm({ ...partyForm, name: e.target.value })}
                   className={`w-full h-10 border rounded px-3 text-sm ${partyErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 />
+                <p className="text-xs text-gray-500 mt-1">مثال: مصنع النيل للغزل والنسيج</p>
                 <FieldError error={partyErrors.name} />
               </div>
 
@@ -1354,7 +1352,6 @@ export default function ProductsModule({ onBack, onNotify }) {
                     inputMode="numeric"
                     dir="ltr"
                     maxLength={11}
-                    placeholder="01xxxxxxxxx"
                     value={partyForm.phone}
                     onChange={e => {
                       const digits = sanitizeEgyptianPhoneInput(e.target.value);
@@ -1394,12 +1391,11 @@ export default function ProductsModule({ onBack, onNotify }) {
                   <input
                     type="number"
                     min="0"
-                    placeholder="مثال: 150000 (0 يعني لا يوجد سقف)"
                     value={partyForm.credit_limit}
                     onChange={e => setPartyForm({ ...partyForm, credit_limit: e.target.value })}
                     className="w-full h-10 border border-gray-300 rounded px-3 text-sm font-bold text-amber-900 bg-white"
                   />
-                  <span className="text-xs text-gray-500 block mt-1">الحد الائتماني يمنع حفظ الفواتير الآجلة إذا تجاوز رصيد العميل هذا المبلغ.</span>
+                  <span className="text-xs text-gray-500 block mt-1">الحد الائتماني يمنع حفظ الفواتير الآجلة إذا تجاوز رصيد العميل هذا المبلغ (0 أو فارغ يعني لا يوجد سقف).</span>
                   <FieldError error={partyErrors.credit_limit} />
                 </div>
               )}
@@ -1414,7 +1410,6 @@ export default function ProductsModule({ onBack, onNotify }) {
                     dir="ltr"
                     value={partyForm.opening_balance}
                     onChange={e => setPartyForm({ ...partyForm, opening_balance: e.target.value })}
-                    placeholder="0"
                     className="w-full h-10 border border-gray-300 rounded px-3 text-sm font-mono font-bold text-left bg-white"
                   />
                   <FieldError error={partyErrors.opening_balance} />
@@ -1563,11 +1558,11 @@ export default function ProductsModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: صيانة ماكينات خياطة"
                   value={expenseForm.name}
                   onChange={e => setExpenseForm({ ...expenseForm, name: e.target.value })}
                   className="w-full h-10 border border-gray-300 rounded px-3 text-sm font-bold"
                 />
+                <p className="text-xs text-gray-500 mt-1">مثال: صيانة ماكينات خياطة</p>
                 <FieldError error={expenseErrors.name} />
               </div>
               <div>
@@ -1575,7 +1570,6 @@ export default function ProductsModule({ onBack, onNotify }) {
                 <input
                   type="number"
                   min="0"
-                  placeholder="0.00"
                   value={expenseForm.default_amount}
                   onChange={e => setExpenseForm({ ...expenseForm, default_amount: e.target.value })}
                   className="w-full h-10 border border-gray-300 rounded px-3 text-sm font-bold text-[#1F3A5F]"
@@ -1648,7 +1642,7 @@ export default function ProductsModule({ onBack, onNotify }) {
                         step="0.001"
                         min="0.001"
                         required
-                        placeholder="الكمية"
+                        aria-label="الكمية لكل قطعة"
                         value={item.quantity_per_unit}
                         onChange={e => {
                           const val = e.target.value;
@@ -1667,7 +1661,7 @@ export default function ProductsModule({ onBack, onNotify }) {
                         type="number"
                         step="0.1"
                         min="0"
-                        placeholder="الهالك %"
+                        aria-label="نسبة هالك القماش %"
                         value={item.waste_percent}
                         onChange={e => {
                           const val = e.target.value;

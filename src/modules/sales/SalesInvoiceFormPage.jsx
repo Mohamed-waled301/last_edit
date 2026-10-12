@@ -615,9 +615,9 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
                 type="text"
                 value={form.notes}
                 onChange={(e) => setForm(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="بيانات الاستلام أو بوليصة الشحن..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
+              <p className="text-xs text-gray-500 mt-1">بيانات الاستلام أو بوليصة الشحن</p>
             </div>
           </div>
         </div>
@@ -729,7 +729,6 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
                           step="0.01"
                           value={line.price_before_discount}
                           onChange={(e) => handleLinePriceBeforeDiscountChange(idx, e.target.value)}
-                          placeholder="0.00"
                           className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md text-xs text-center font-mono font-bold bg-white"
                           required
                         />
@@ -743,7 +742,6 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
                           step="0.01"
                           value={line.discount_value}
                           onChange={(e) => handleLineDiscountValueChange(idx, e.target.value)}
-                          placeholder="0.00"
                           className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md text-xs text-center font-mono font-bold text-red-600 bg-white"
                         />
                       </td>

@@ -345,9 +345,9 @@ export const BackupModule = ({ onBack, onNotify }) => {
 
             <input
               type="text"
+              aria-label="عبارة تأكيد مسح كل البيانات"
               value={clearConfirmationText}
               onChange={(e) => setClearConfirmationText(e.target.value)}
-              placeholder="اكتب: مسح كل البيانات"
               className="w-full h-11 px-3 border border-gray-300 rounded-md text-center text-sm focus:border-red-500 focus:outline-none mb-4"
             />
 

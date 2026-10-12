@@ -226,7 +226,6 @@ export default function StockTransferFormPage({ onSaved, onNotify }) {
                 step="any"
                 value={form.quantity}
                 onChange={(e) => setForm(prev => ({ ...prev, quantity: e.target.value }))}
-                placeholder="0.00"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
@@ -255,9 +254,9 @@ export default function StockTransferFormPage({ onSaved, onNotify }) {
                 type="text"
                 value={form.notes}
                 onChange={(e) => setForm(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="بيانات سيارة النقل أو إذن الاستلام..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
+              <p className="text-xs text-gray-500 mt-1">بيانات سيارة النقل أو إذن الاستلام</p>
             </div>
           </div>
         </div>

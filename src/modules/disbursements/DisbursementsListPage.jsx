@@ -103,12 +103,12 @@ export default function DisbursementsListPage({ onNotify }) {
       {/* Search Bar & Total Card */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div className="relative flex-1 min-w-[240px]">
-          <Search className="w-4 h-4 text-gray-400 absolute right-3 top-2.5" />
+          <Search className="w-4 h-4 text-gray-400 absolute right-3 top-2.5 pointer-events-none" aria-hidden="true" />
           <input
             type="text"
             value={searchTerm}
+            aria-label="البحث في سندات الصرف بالبيان أو رقم السند أو الخزينة"
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="البحث بالبيان، رقم السند، أو الخزينة..."
             className="w-full pr-9 pl-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
           />
         </div>

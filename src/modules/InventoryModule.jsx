@@ -252,10 +252,10 @@ export default function InventoryModule({ onBack, onNotify }) {
           {/* Action Row */}
           <div className="bg-white border border-gray-200 rounded-md p-3 flex flex-wrap items-center justify-between gap-3">
             <div className="relative flex-1 min-w-[260px] max-w-md">
-              <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
               <input
                 type="text"
-                placeholder="بحث بكود أو اسم الخامة أو المنتج التام..."
+                aria-label="بحث بكود أو اسم الخامة أو المنتج التام"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full h-10 pr-9 pl-3 rounded-md border border-gray-300 text-sm focus:border-[#1F3A5F] focus:outline-none"
@@ -617,7 +617,6 @@ export default function InventoryModule({ onBack, onNotify }) {
                     min="0.01"
                     step="any"
                     required
-                    placeholder="الكمية"
                     value={adjustmentForm.quantity}
                     onChange={e => setAdjustmentForm({ ...adjustmentForm, quantity: e.target.value })}
                     className="w-full h-10 rounded border border-gray-300 px-3 text-sm font-bold"
@@ -631,11 +630,11 @@ export default function InventoryModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: تلف أثناء مرحلة فرد القماش / سحب عينات للمعمل"
                   value={adjustmentForm.reason}
                   onChange={e => setAdjustmentForm({ ...adjustmentForm, reason: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 text-xs"
                 />
+                <p className="text-xs text-gray-500 mt-1">مثال: تلف أثناء مرحلة فرد القماش / سحب عينات للمعمل</p>
                 {!validators.required(adjustmentForm.reason) && <FieldError error="سبب التسوية إجباري للتدقيق" />}
               </div>
 
@@ -643,11 +642,11 @@ export default function InventoryModule({ onBack, onNotify }) {
                 <label className="block font-bold text-gray-700 mb-1">ملاحظات إضافية</label>
                 <input
                   type="text"
-                  placeholder="رقم محضر الجرد أو قرار الإتلاف"
                   value={adjustmentForm.notes}
                   onChange={e => setAdjustmentForm({ ...adjustmentForm, notes: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 text-xs"
                 />
+                <p className="text-xs text-gray-500 mt-1">رقم محضر الجرد أو قرار الإتلاف</p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
@@ -738,7 +737,6 @@ export default function InventoryModule({ onBack, onNotify }) {
                   min="0.01"
                   step="any"
                   required
-                  placeholder="الكمية"
                   value={transferForm.quantity}
                   onChange={e => setTransferForm({ ...transferForm, quantity: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 text-sm font-bold"
@@ -749,11 +747,11 @@ export default function InventoryModule({ onBack, onNotify }) {
                 <label className="block font-bold text-gray-700 mb-1">ملاحظات وسند الصرف</label>
                 <input
                   type="text"
-                  placeholder="مثال: نقل لقسم التفصيل والقص"
                   value={transferForm.notes}
                   onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 text-xs"
                 />
+                <p className="text-xs text-gray-500 mt-1">مثال: نقل لقسم التفصيل والقص</p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
@@ -793,11 +791,11 @@ export default function InventoryModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: مخزن الأقمشة الرئيسي"
                   value={locationForm.name}
                   onChange={e => setLocationForm({ ...locationForm, name: e.target.value })}
                   className="w-full h-10 rounded border border-gray-300 px-3 text-xs"
                 />
+                <p className="text-xs text-gray-500 mt-1">مثال: مخزن الأقمشة الرئيسي</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -805,11 +803,11 @@ export default function InventoryModule({ onBack, onNotify }) {
                   <label className="block font-bold text-gray-700 mb-1">كود الموقع</label>
                   <input
                     type="text"
-                    placeholder="مخزن-01"
                     value={locationForm.code}
                     onChange={e => setLocationForm({ ...locationForm, code: e.target.value })}
                     className="w-full h-10 rounded border border-gray-300 px-3 text-xs font-mono"
                   />
+                  <p className="text-xs text-gray-500 mt-1">مثال: مخزن-01</p>
                 </div>
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">نوع الموقع</label>

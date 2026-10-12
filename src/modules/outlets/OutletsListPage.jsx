@@ -275,12 +275,12 @@ export default function OutletsListPage({ onNavigate, onNotify }) {
       {/* Search Bar */}
       <div className="bg-white border border-gray-200 rounded-lg p-3.5 shadow-xs">
         <div className="relative max-w-md">
-          <Search className="w-4 h-4 text-gray-400 absolute right-3 top-2.5" />
+          <Search className="w-4 h-4 text-gray-400 absolute right-3 top-2.5 pointer-events-none" aria-hidden="true" />
           <input
             type="text"
             value={searchTerm}
+            aria-label="البحث باسم المنفذ، الكود، الموقع، أو الهاتف"
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="البحث باسم المنفذ، الكود، الموقع، أو الهاتف..."
             className="w-full pr-9 pl-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
           />
         </div>
@@ -500,9 +500,9 @@ export default function OutletsListPage({ onNavigate, onNotify }) {
                     required
                     value={formData.name}
                     onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                    placeholder="مثال: معرض النزهة، منفذ العاشر..."
                     className="w-full px-3 py-2 border border-gray-300 rounded-md font-semibold text-xs focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                   />
+                  <p className="text-xs text-gray-500 mt-1">مثال: معرض النزهة، منفذ العاشر</p>
                   {formErrors.name && (
                     <span className="text-[10px] text-red-600 mt-0.5 block">{formErrors.name}</span>
                   )}
@@ -533,9 +533,9 @@ export default function OutletsListPage({ onNavigate, onNotify }) {
                     type="text"
                     value={formData.location}
                     onChange={(e) => setFormData((p) => ({ ...p, location: e.target.value }))}
-                    placeholder="مثال: القاهرة، مدينة نصر..."
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                   />
+                  <p className="text-xs text-gray-500 mt-1">مثال: القاهرة، مدينة نصر</p>
                 </div>
 
                 <div>
@@ -547,7 +547,6 @@ export default function OutletsListPage({ onNavigate, onNotify }) {
                     type="text"
                     value={formData.contact_phone}
                     onChange={(e) => setFormData((p) => ({ ...p, contact_phone: e.target.value }))}
-                    placeholder="01xxxxxxxxx"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                   />
                 </div>
@@ -612,9 +611,9 @@ export default function OutletsListPage({ onNavigate, onNotify }) {
                   rows={2}
                   value={formData.notes}
                   onChange={(e) => setFormData((p) => ({ ...p, notes: e.target.value }))}
-                  placeholder="أي ملاحظات حول المنفذ، أمين العهدة، مواعيد العمل..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 />
+                <p className="text-xs text-gray-500 mt-1">أي ملاحظات حول المنفذ، أمين العهدة، مواعيد العمل</p>
               </div>
 
               {/* Actions */}

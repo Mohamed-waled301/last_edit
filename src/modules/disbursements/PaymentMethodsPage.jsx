@@ -77,10 +77,10 @@ export default function PaymentMethodsPage({ onNotify }) {
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))}
-                placeholder="مثال: شيك بنكي، تحويل فوري، تحويل بنكي..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
+              <p className="text-xs text-gray-500 mt-1">مثال: شيك بنكي، تحويل فوري، تحويل بنكي</p>
             </div>
 
             <div>
@@ -91,7 +91,6 @@ export default function PaymentMethodsPage({ onNotify }) {
                 type="text"
                 value={form.code}
                 onChange={(e) => setForm(p => ({ ...p, code: e.target.value }))}
-                placeholder="مثال: شيك أو تحويل أو إيداع"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
             </div>

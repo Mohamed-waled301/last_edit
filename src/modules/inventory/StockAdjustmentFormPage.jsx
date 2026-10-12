@@ -257,7 +257,6 @@ export default function StockAdjustmentFormPage({ onSaved, onNotify }) {
                 step="any"
                 value={form.quantity}
                 onChange={(e) => setForm(prev => ({ ...prev, quantity: e.target.value }))}
-                placeholder="0.00"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
@@ -273,11 +272,11 @@ export default function StockAdjustmentFormPage({ onSaved, onNotify }) {
                 type="text"
                 value={form.reason}
                 onChange={(e) => setForm(prev => ({ ...prev, reason: e.target.value }))}
-                placeholder="مثال: تلف أثناء مرحلة الكي، عينات لعميل تصدير، فرق جرد دوري..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
               <FieldError error={errors.reason} />
+              <p className="text-xs text-gray-500 mt-1">مثال: تلف أثناء مرحلة الكي، عينات لعميل تصدير، فرق جرد دوري</p>
             </div>
 
             {/* Notes */}

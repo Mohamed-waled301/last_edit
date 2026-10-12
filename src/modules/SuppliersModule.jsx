@@ -543,7 +543,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
               <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="بحث باسم المورد أو رقم الهاتف..."
+                aria-label="بحث باسم المورد أو رقم الهاتف"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full h-10 pr-9 pl-3 rounded-md border border-gray-300 text-sm focus:border-[#1F3A5F] focus:outline-none"
@@ -951,11 +951,11 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: مصنع النصر للغزل والنسيج"
                   value={newSupplier.name}
                   onChange={e => setNewSupplier({ ...newSupplier, name: e.target.value })}
                   className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">مثال: مصنع النصر للغزل والنسيج</p>
                 <FieldError error={supplierFormErrors.name} />
               </div>
 
@@ -967,7 +967,6 @@ export default function SuppliersModule({ onBack, onNotify }) {
                     inputMode="numeric"
                     dir="ltr"
                     maxLength={11}
-                    placeholder="01xxxxxxxxx"
                     value={newSupplier.phone}
                     onChange={e => {
                       const digits = sanitizeEgyptianPhoneInput(e.target.value);
@@ -975,17 +974,18 @@ export default function SuppliersModule({ onBack, onNotify }) {
                     }}
                     className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-mono text-left focus:border-[#1F3A5F] focus:outline-none"
                   />
+                  <p className="text-[11px] text-gray-500 mt-1">مثال: 01012345678</p>
                   <FieldError error={supplierFormErrors.phone} />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">السجل الضريبي</label>
                   <input
                     type="text"
-                    placeholder="رقم التسجيل"
                     value={newSupplier.tax_number}
                     onChange={e => setNewSupplier({ ...newSupplier, tax_number: e.target.value })}
                     className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-mono focus:border-[#1F3A5F] focus:outline-none"
                   />
+                  <p className="text-[11px] text-gray-500 mt-1">رقم التسجيل الضريبي</p>
                 </div>
               </div>
 
@@ -993,11 +993,11 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">العنوان أو موقع المستودع</label>
                 <input
                   type="text"
-                  placeholder="مثال: المحلة الكبرى، المنطقة الصناعية"
                   value={newSupplier.address}
                   onChange={e => setNewSupplier({ ...newSupplier, address: e.target.value })}
                   className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm focus:border-[#1F3A5F] focus:outline-none"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">مثال: المحلة الكبرى، المنطقة الصناعية</p>
               </div>
 
               <div>
@@ -1022,9 +1022,9 @@ export default function SuppliersModule({ onBack, onNotify }) {
                     dir="ltr"
                     value={newSupplier.opening_balance}
                     onChange={e => setNewSupplier({ ...newSupplier, opening_balance: e.target.value })}
-                    placeholder="0"
                     className="w-full h-11 rounded-md border border-blue-300 px-3 text-sm font-mono font-bold text-left bg-white focus:border-[#1F3A5F] focus:outline-none"
                   />
+                  <p className="text-[11px] text-blue-800 mt-1">القيمة الافتراضية: 0</p>
                   <FieldError error={supplierFormErrors.opening_balance} />
                 </div>
                 <div>
@@ -1080,11 +1080,11 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: قماش جبردين قطن أسود"
                   value={newQuickMaterial.name}
                   onChange={e => setNewQuickMaterial({ ...newQuickMaterial, name: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm focus:border-[#1F3A5F] focus:outline-none"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">مثال: قماش جبردين قطن أسود</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1277,7 +1277,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                           min="0.01"
                           step="any"
                           required
-                          placeholder="الكمية"
+                          aria-label="الكمية المطلوبة"
                           value={item.quantity_ordered}
                           onChange={e => {
                             const updated = [...newPO.items];
@@ -1295,7 +1295,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                           min="0.01"
                           step="any"
                           required
-                          placeholder="سعر التكلفة"
+                          aria-label="سعر التكلفة"
                           value={item.unit_price}
                           onChange={e => {
                             const updated = [...newPO.items];
@@ -1353,10 +1353,10 @@ export default function SuppliersModule({ onBack, onNotify }) {
                       min="0"
                       max="100"
                       step="any"
+                      aria-label="نسبة الخصم"
                       value={newPO.discount_percent}
                       onChange={e => handleDiscountPercentChange(e.target.value)}
                       className="w-full h-8 rounded border border-gray-300 px-2 text-xs font-bold bg-white"
-                      placeholder="0%"
                     />
                   </div>
                   <div>
@@ -1365,10 +1365,10 @@ export default function SuppliersModule({ onBack, onNotify }) {
                       type="number"
                       min="0"
                       step="any"
+                      aria-label="قيمة الخصم بالجنيه"
                       value={newPO.discount_amount}
                       onChange={e => handleDiscountAmountChange(e.target.value)}
                       className="w-full h-8 rounded border border-gray-300 px-2 text-xs font-bold bg-white text-green-700"
-                      placeholder="0.00"
                     />
                   </div>
                 </div>
@@ -1379,10 +1379,10 @@ export default function SuppliersModule({ onBack, onNotify }) {
                     type="number"
                     min="0"
                     step="any"
+                    aria-label="مصاريف إضافية بالجنيه"
                     value={newPO.additional_expenses}
                     onChange={e => setNewPO({ ...newPO, additional_expenses: parseFloat(e.target.value) || 0 })}
                     className="w-full h-8 rounded border border-gray-300 px-2 text-xs font-bold bg-white"
-                    placeholder="0.00"
                   />
                 </div>
 
@@ -1396,11 +1396,11 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 <label className="block text-xs font-semibold text-gray-700 mb-1">ملاحظات وشروط التوريد</label>
                 <input
                   type="text"
-                  placeholder="مثال: الاستلام بمخزن المصنع بعد فحص عينات الأقمشة"
                   value={newPO.notes}
                   onChange={e => setNewPO({ ...newPO, notes: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs focus:border-[#1F3A5F] focus:outline-none"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">مثال: الاستلام بمخزن المصنع بعد فحص عينات الأقمشة</p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
@@ -1501,7 +1501,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                         min="0.01"
                         step="any"
                         required
-                        placeholder="الكمية المستلمة"
+                        aria-label="الكمية المستلمة"
                         value={item.quantity_received}
                         onChange={e => {
                           const items = [...newGRN.items];
@@ -1517,7 +1517,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                         min="0"
                         step="any"
                         required
-                        placeholder="سعر التكلفة"
+                        aria-label="سعر التكلفة بالجنيه"
                         value={item.unit_cost}
                         onChange={e => {
                           const items = [...newGRN.items];
@@ -1535,11 +1535,11 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 <label className="block text-xs font-semibold text-gray-700 mb-1">ملاحظات الفحص والاستلام</label>
                 <input
                   type="text"
-                  placeholder="مطابقة العينة ومستوى الجودة"
                   value={newGRN.notes}
                   onChange={e => setNewGRN({ ...newGRN, notes: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">مثال: مطابقة العينة ومستوى الجودة</p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
@@ -1594,11 +1594,11 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="الرقم المطبوع على فاتورة المورد"
                   value={newInvoice.invoice_number}
                   onChange={e => setNewInvoice({ ...newInvoice, invoice_number: e.target.value })}
                   className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-mono focus:border-[#1F3A5F] focus:outline-none"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">الرقم المطبوع على أصل فاتورة المورد</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1631,7 +1631,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                     min="1"
                     step="any"
                     required
-                    placeholder="قيمة الفاتورة"
+                    aria-label="المبلغ المطلوب بالجنيه"
                     value={newInvoice.subtotal}
                     onChange={e => setNewInvoice({ ...newInvoice, subtotal: e.target.value })}
                     className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm font-bold"
@@ -1643,7 +1643,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                     type="number"
                     min="0"
                     step="any"
-                    placeholder="0"
+                    aria-label="ضريبة القيمة المضافة"
                     value={newInvoice.tax_amount}
                     onChange={e => setNewInvoice({ ...newInvoice, tax_amount: e.target.value })}
                     className="w-full h-11 rounded-md border border-gray-300 px-3 text-sm"
@@ -1710,7 +1710,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   min="1"
                   step="any"
                   required
-                  placeholder="المبلغ المدفوع"
+                  aria-label="المبلغ المراد سداده بالجنيه"
                   value={paymentForm.amount}
                   onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })}
                   className="w-full h-11 rounded-md border border-gray-300 px-3 text-base font-bold text-green-700 focus:border-[#1F3A5F] focus:outline-none"
@@ -1745,11 +1745,11 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 <label className="block text-xs font-semibold text-gray-700 mb-1">البيان / ملاحظات السند</label>
                 <input
                   type="text"
-                  placeholder="مثال: دفعة تحت الحساب توريد خامات جبردين"
                   value={paymentForm.notes}
                   onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">مثال: دفعة تحت الحساب توريد خامات جبردين</p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
@@ -1904,7 +1904,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                     min="0.1"
                     step="any"
                     required
-                    placeholder="الكمية"
+                    aria-label="الكمية المرتجعة"
                     value={returnForm.quantity}
                     onChange={e => setReturnForm({ ...returnForm, quantity: e.target.value })}
                     className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs"
@@ -1916,11 +1916,12 @@ export default function SuppliersModule({ onBack, onNotify }) {
                     type="number"
                     min="0"
                     step="any"
-                    placeholder="فارغ = متوسط التكلفة"
+                    aria-label="سعر التكلفة المرتجع"
                     value={returnForm.unit_cost}
                     onChange={e => setReturnForm({ ...returnForm, unit_cost: e.target.value })}
                     className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs"
                   />
+                  <p className="text-[11px] text-gray-500 mt-1">اتركه فارغاً لاعتماد متوسط التكلفة الحالي</p>
                 </div>
               </div>
 
@@ -1929,11 +1930,11 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 <input
                   type="text"
                   required
-                  placeholder="مثال: عيوب صباغة في القماش / عدم مطابقة العينة"
                   value={returnForm.reason}
                   onChange={e => setReturnForm({ ...returnForm, reason: e.target.value })}
                   className="w-full h-10 rounded-md border border-gray-300 px-3 text-xs"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">مثال: عيوب صباغة في القماش أو عدم مطابقة العينة</p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">

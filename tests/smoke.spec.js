@@ -184,7 +184,7 @@ test.describe('Apex Apparel ERP Smoke Tests', () => {
     expect(directCallRejected, 'Direct call to createDataRecord by non-CEO must be rejected').toBe(true);
   });
 
-  test('party form: cash type hides credit limit, credit type shows it, and saving cash customer succeeds', async ({ page }) => {
+  test('party form: credit limit field is always visible for customer, and saving customer succeeds', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await ensureSetup(page);
 
@@ -192,37 +192,24 @@ test.describe('Apex Apparel ERP Smoke Tests', () => {
     await page.goto('#/customers/new');
     await page.waitForTimeout(600);
 
-    // Verify "نوع التعامل" selector is present and defaults to "نقدي" (cash)
-    const dealTypeSelect = page.locator('#customer-deal-type-select');
-    await expect(dealTypeSelect).toBeVisible();
-    await expect(dealTypeSelect).toHaveValue('cash');
-
-    // Credit limit input and container must NOT be in the DOM
+    // Credit limit input is always visible for customer
     const creditLimitInput = page.locator('#party-credit-limit-input');
-    await expect(creditLimitInput).toHaveCount(0);
-
-    // Switch to "آجل" (credit)
-    await dealTypeSelect.selectOption('credit');
     await expect(creditLimitInput).toBeVisible();
 
     // Check exact Arabic helper text
-    const helperText = page.locator('text=يطبق على فواتير المبيعات الآجلة فقط، ويمنع حفظ الفاتورة عند تجاوز المديونية لهذا الحد.');
+    const helperText = page.locator('text=اختياري؛ اتركه فارغاً أو 0 لعدم تحديد سقف ائتماني. يطبق فقط على الفواتير الآجلة.');
     await expect(helperText).toBeVisible();
 
     // Fill a value and check thousand separator formatting
     await creditLimitInput.fill('250000');
     await expect(creditLimitInput).toHaveValue('250,000');
 
-    // Switch back to "نقدي" (cash)
-    await dealTypeSelect.selectOption('cash');
-    await expect(creditLimitInput).toHaveCount(0);
-
     // Fill customer name and save
-    const nameInput = page.locator('input[placeholder*="شركة النيل"]');
+    const nameInput = page.locator('#party-name-input');
     await nameInput.fill('شركة الأناقة النقدية للاختبار');
 
     // Click Save button
-    const saveButton = page.locator('button:has-text("حفظ جهة التعامل")');
+    const saveButton = page.locator('button:has-text("حفظ جهة التعامل")').first();
     await expect(saveButton).toBeEnabled();
     await saveButton.click();
 

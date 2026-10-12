@@ -4,13 +4,15 @@ import {
   Plus, 
   Trash2, 
   Layers, 
-  Image as ImageIcon,
   DollarSign, 
   Percent, 
-  AlertCircle,
-  Sparkles,
-  Palette,
-  Check
+  AlertCircle, 
+  Palette, 
+  Lock,
+  ArrowRight,
+  Save,
+  FolderTree,
+  X
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
@@ -19,96 +21,138 @@ import { compressImageToBase64 } from '../../utils/imageCompressor';
 import { Validators, FieldError } from '../../utils/validation';
 import { calculateProfitMargin, calculateSellingPriceFromMargin } from '../../logic/costCalculator';
 
-export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotify }) {
+export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotify, onBack }) {
   const isEdit = Boolean(itemId);
 
   const [form, setForm] = useState({
     code: '',
     name: '',
-    item_group: 'ملابس صيفية كاجوال',
-    item_department: 'قسم التيشيرتات والبولو',
+    item_group: '',
+    item_department: '',
     item_type: 'finished', // 'finished' | 'raw_material'
     unit: 'قطعة',
     cost_price: '',
     selling_price: '',
-    margin_percent: '35',
+    margin_percent: '0',
     margin_value: '0',
     image: '',
-    min_issue_qty: '50',
+    min_issue_qty: '1',
     opening_balance: '0',
+    opening_cost: '',
     location_id: 'loc-main',
     notes: '',
+    has_variants: false,
     variants: []
   });
 
   const [errors, setErrors] = useState({});
   const [existingItems, setExistingItems] = useState([]);
+  const [groupsList, setGroupsList] = useState([]);
+  const [sectionsList, setSectionsList] = useState([]);
   const [sizesList, setSizesList] = useState([]);
   const [colorsList, setColorsList] = useState([]);
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
+  const [hasOperationalMovements, setHasOperationalMovements] = useState(false);
+  const [variantToggleError, setVariantToggleError] = useState('');
+
+  // Quick inline add modals/panels for Group and Section
+  const [quickAddGroupOpen, setQuickAddGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [quickAddSectionOpen, setQuickAddSectionOpen] = useState(false);
+  const [newSectionName, setNewSectionName] = useState('');
 
   // Variant helper input states
   const [newVariant, setNewVariant] = useState({
     size: 'L (كبير)',
     color: 'أبيض ناصع',
-    opening_balance: '10'
+    opening_balance: '0'
   });
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else if (onCancel) {
+      onCancel();
+    } else {
+      window.location.hash = '#/items';
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
-        const [itemsRes, sizesRes, colorsRes, locsRes] = await Promise.all([
+        const [itemsRes, groupsRes, sectionsRes, sizesRes, colorsRes, locsRes] = await Promise.all([
           api.getItems(),
+          api.getItemGroups(),
+          api.getItemSections(),
           api.getItemSizes(),
           api.getItemColors(),
           api.getStorageLocations()
         ]);
 
-        const allItems = Array.isArray(itemsRes.data) ? itemsRes.data : [];
+        const allItems = Array.isArray(itemsRes.data) ? itemsRes.data : (itemsRes.items || []);
+        const grps = Array.isArray(groupsRes.data) ? groupsRes.data : (groupsRes.groups || []);
+        const secs = Array.isArray(sectionsRes.data) ? sectionsRes.data : (sectionsRes.sections || []);
+
         setExistingItems(allItems);
+        setGroupsList(grps);
+        setSectionsList(secs);
         setSizesList(Array.isArray(sizesRes.data) ? sizesRes.data : []);
         setColorsList(Array.isArray(colorsRes.data) ? colorsRes.data : []);
         setLocations(Array.isArray(locsRes.data) ? locsRes.data : []);
 
         if (isEdit && itemId) {
-          const itemRes = await api.getItem(itemId);
+          const [itemRes, opsCheck] = await Promise.all([
+            api.getItem(itemId),
+            api.hasItemOperationalMovements(itemId)
+          ]);
+
+          setHasOperationalMovements(Boolean(opsCheck?.hasOperationalMovements));
+
           if (itemRes && itemRes.data) {
             const itm = itemRes.data;
             const cost = Number(itm.cost_price) || 0;
             const sell = Number(itm.selling_price) || 0;
             const { marginValue, marginPercent } = calculateProfitMargin(cost, sell);
 
+            const hasVar = Boolean(itm.has_variants || (Array.isArray(itm.variants) && itm.variants.length > 0));
+
             setForm({
               code: itm.code || '',
               name: itm.name || '',
-              item_group: itm.item_group || 'عام',
-              item_department: itm.item_department || 'عام',
+              item_group: itm.item_group || (grps[0]?.name || 'ملابس جاهزة'),
+              item_department: itm.item_department || (secs[0]?.name || 'عام'),
               item_type: itm.item_type || 'finished',
               unit: itm.unit || 'قطعة',
-              cost_price: itm.cost_price ? String(itm.cost_price) : '',
-              selling_price: itm.selling_price ? String(itm.selling_price) : '',
-              margin_percent: String(marginPercent),
-              margin_value: String(marginValue),
+              cost_price: itm.cost_price !== undefined ? String(itm.cost_price) : '',
+              selling_price: itm.selling_price !== undefined ? String(itm.selling_price) : '',
+              margin_percent: String(marginPercent || 0),
+              margin_value: String(marginValue || 0),
               image: itm.image || '',
               min_issue_qty: String(itm.min_issue_qty || 1),
               opening_balance: String(itm.opening_balance || 0),
+              opening_cost: itm.opening_cost !== undefined ? String(itm.opening_cost) : String(cost),
               location_id: itm.location_id || 'loc-main',
               notes: itm.notes || '',
+              has_variants: hasVar,
               variants: Array.isArray(itm.variants) ? itm.variants : []
             });
             setImagePreview(itm.image || null);
           }
         } else {
-          // Dynamic auto-increment code continues from highest existing code
           const nextCodeRes = await api.getNextItemCode();
           const nextCode = nextCodeRes?.code || '1001';
-          setForm(prev => ({
+          setForm((prev) => ({
             ...prev,
-            code: nextCode
+            code: nextCode,
+            item_group: grps.length > 0 ? grps[0].name : 'ملابس صيفية كاجوال',
+            item_department: secs.length > 0 ? secs[0].name : 'قسم التيشيرتات والبولو',
+            margin_percent: '0',
+            margin_value: '0'
           }));
         }
       } catch (err) {
@@ -127,7 +171,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
 
     try {
       const compressed = await compressImageToBase64(file, 600, 600, 0.8);
-      setForm(prev => ({ ...prev, image: compressed }));
+      setForm((prev) => ({ ...prev, image: compressed }));
       setImagePreview(compressed);
       if (onNotify) onNotify('تم ضغط وتحميل صورة الصنف بنجاح');
     } catch (err) {
@@ -137,38 +181,36 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
 
   // Bidirectional Cost & Selling Price Live Calculation
   const handleCostPriceChange = (val) => {
-    const cost = Number(val) || 0;
-    const sell = Number(form.selling_price) || 0;
+    const cost = Math.max(0, Number(val) || 0);
     const marginPct = Number(form.margin_percent) || 0;
 
     let newSell = form.selling_price;
     let newMarginVal = form.margin_value;
-    let newMarginPct = form.margin_percent;
 
-    if (cost > 0 && marginPct > 0) {
+    if (marginPct === 0) {
+      // With margin 0, selling price equals cost price until changed
+      newSell = String(cost);
+      newMarginVal = '0';
+    } else if (cost > 0) {
       newSell = String(calculateSellingPriceFromMargin(cost, marginPct));
       newMarginVal = String((Number(newSell) - cost).toFixed(2));
-    } else if (cost > 0 && sell > 0) {
-      const calc = calculateProfitMargin(cost, sell);
-      newMarginVal = String(calc.marginValue);
-      newMarginPct = String(calc.marginPercent);
     }
 
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
       cost_price: val,
       selling_price: newSell,
       margin_value: newMarginVal,
-      margin_percent: newMarginPct
+      opening_cost: prev.opening_cost ? prev.opening_cost : val
     }));
   };
 
   const handleSellingPriceChange = (val) => {
-    const sell = Number(val) || 0;
-    const cost = Number(form.cost_price) || 0;
+    const sell = Math.max(0, Number(val) || 0);
+    const cost = Math.max(0, Number(form.cost_price) || 0);
     const { marginValue, marginPercent } = calculateProfitMargin(cost, sell);
 
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
       selling_price: val,
       margin_value: String(marginValue),
@@ -178,11 +220,20 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
 
   const handleMarginPercentChange = (val) => {
     const marginPct = Number(val) || 0;
-    const cost = Number(form.cost_price) || 0;
-    const newSell = cost > 0 ? calculateSellingPriceFromMargin(cost, marginPct) : 0;
-    const marginVal = newSell > cost ? Number((newSell - cost).toFixed(2)) : 0;
+    const cost = Math.max(0, Number(form.cost_price) || 0);
 
-    setForm(prev => ({
+    let newSell = cost;
+    let marginVal = 0;
+
+    if (marginPct === 0) {
+      newSell = cost;
+      marginVal = 0;
+    } else if (cost > 0) {
+      newSell = calculateSellingPriceFromMargin(cost, marginPct);
+      marginVal = newSell > cost ? Number((newSell - cost).toFixed(2)) : 0;
+    }
+
+    setForm((prev) => ({
       ...prev,
       margin_percent: val,
       selling_price: String(newSell),
@@ -190,11 +241,40 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     }));
   };
 
+  // Clothing Variants Toggle Switch
+  const handleToggleVariants = () => {
+    setVariantToggleError('');
+    if (form.has_variants) {
+      // Switching ON to OFF: verify no variant stock exists
+      const hasVariantStock = form.variants.some(
+        (v) => (Number(v.current_stock) || 0) > 0 || (Number(v.opening_balance) || 0) > 0
+      );
+
+      if (hasVariantStock) {
+        setVariantToggleError(
+          'لا يمكن إلغاء تفعيل متغيرات الصنف لوجود أرصدة مسجلة على مقاسات وألوان هذا الصنف. يرجى تصفية أو تسوية أرصدة المتغيرات أولاً.'
+        );
+        return;
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        has_variants: false
+      }));
+    } else {
+      // Switching OFF to ON
+      setForm((prev) => ({
+        ...prev,
+        has_variants: true
+      }));
+    }
+  };
+
   // Add Variant to Table
   const handleAddVariant = () => {
     if (!newVariant.size || !newVariant.color) return;
     const existing = form.variants.find(
-      v => v.size === newVariant.size && v.color === newVariant.color
+      (v) => v.size === newVariant.size && v.color === newVariant.color
     );
     if (existing) {
       alert('هذا المتغير (المقاس واللون) مضاف بالفعل في قائمة المتغيرات');
@@ -215,7 +295,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     const updated = [...form.variants, added];
     const totalOpening = updated.reduce((s, v) => s + v.opening_balance, 0);
 
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
       variants: updated,
       opening_balance: String(totalOpening)
@@ -223,13 +303,52 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
   };
 
   const handleRemoveVariant = (index) => {
+    const target = form.variants[index];
+    if (target && ((Number(target.current_stock) || 0) > 0 || (Number(target.opening_balance) || 0) > 0)) {
+      if (hasOperationalMovements) {
+        alert('لا يمكن حذف متغير مقاس/لون مسجل عليه رصيد وحركات مخزنية');
+        return;
+      }
+    }
     const updated = form.variants.filter((_, idx) => idx !== index);
-    const totalOpening = updated.reduce((s, v) => s + v.opening_balance, 0);
-    setForm(prev => ({
+    const totalOpening = updated.reduce((s, v) => s + (Number(v.opening_balance) || 0), 0);
+    setForm((prev) => ({
       ...prev,
       variants: updated,
       opening_balance: String(totalOpening)
     }));
+  };
+
+  // Quick Add Group
+  const handleQuickAddGroup = async () => {
+    if (!newGroupName.trim()) return;
+    try {
+      const res = await api.createItemGroup({ name: newGroupName.trim() });
+      const created = res.data || res.group;
+      setGroupsList((prev) => [...prev, created]);
+      setForm((prev) => ({ ...prev, item_group: created.name }));
+      setNewGroupName('');
+      setQuickAddGroupOpen(false);
+      if (onNotify) onNotify(`تم إضافة مجموعة "${created.name}" بنجاح`);
+    } catch (err) {
+      alert(err.message || 'تعذر إضافة مجموعة الصنف');
+    }
+  };
+
+  // Quick Add Section
+  const handleQuickAddSection = async () => {
+    if (!newSectionName.trim()) return;
+    try {
+      const res = await api.createItemSection({ name: newSectionName.trim() });
+      const created = res.data || res.section;
+      setSectionsList((prev) => [...prev, created]);
+      setForm((prev) => ({ ...prev, item_department: created.name }));
+      setNewSectionName('');
+      setQuickAddSectionOpen(false);
+      if (onNotify) onNotify(`تم إضافة قسم "${created.name}" بنجاح`);
+    } catch (err) {
+      alert(err.message || 'تعذر إضافة قسم الصنف');
+    }
   };
 
   // Validate form
@@ -283,11 +402,14 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
         unit: form.unit,
         cost_price: Number(form.cost_price) || 0,
         selling_price: form.item_type === 'finished' ? (Number(form.selling_price) || 0) : 0,
+        margin_percent: Number(form.margin_percent) || 0,
         min_issue_qty: Number(form.min_issue_qty) || 1,
         opening_balance: Number(form.opening_balance) || 0,
-        variants: form.variants,
+        opening_cost: Number(form.opening_cost || form.cost_price) || 0,
         location_id: form.location_id,
-        notes: form.notes
+        notes: form.notes,
+        has_variants: Boolean(form.has_variants),
+        variants: form.has_variants ? form.variants : []
       };
 
       if (isEdit) {
@@ -301,7 +423,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
       if (onSaved) {
         onSaved();
       } else {
-        window.location.hash = '#/items';
+        handleBack();
       }
     } catch (err) {
       alert(err.message || 'حدث خطأ أثناء حفظ الصنف');
@@ -310,148 +432,247 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     }
   };
 
-  const isFormValid = Boolean(form.name && form.code && form.cost_price && Number(form.cost_price) > 0);
+  const isFormValid = Boolean(form.name && form.code && form.cost_price && Number(form.cost_price) >= 0);
+
+  if (loading) {
+    return (
+      <PageContainer title="بيانات الصنف">
+        <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500">
+          جاري تحميل بيانات الصنف...
+        </div>
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer
       title={isEdit ? `تعديل صنف: ${form.name || form.code}` : 'إضافة صنف جديد'}
-      subtitle="تسجيل بيانات الصنف مع تكويد آلي، هامش الربح الحي، صور الصنف، ومتغيرات المقاس واللون"
-      breadcrumbs={[
-        { label: 'الأصناف', href: '#/items' },
-        { label: isEdit ? 'تعديل الصنف' : 'إضافة صنف جديد' }
-      ]}
-      hasBottomBar={true}
-      onSave={handleSubmit}
-      onCancel={() => { window.location.hash = '#/items'; }}
-      isSaving={saving}
-      saveDisabled={!isFormValid || saving}
-      saveText={isEdit ? 'حفظ التعديلات' : 'حفظ الصنف'}
-      extraBottomContent={
-        form.item_type === 'finished' && Number(form.cost_price) > 0 && Number(form.selling_price) > 0 ? (
-          <div className="flex items-center gap-4 text-xs font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200">
-            <span>سعر التكلفة: <span className="font-mono text-[#1F3A5F]">{formatCurrency(form.cost_price)}</span></span>
-            <span className="text-gray-300">|</span>
-            <span>سعر البيع: <span className="font-mono text-green-700">{formatCurrency(form.selling_price)}</span></span>
-            <span className="text-gray-300">|</span>
-            <span>هامش الربح: <span className="font-mono text-emerald-600 font-bold">{form.margin_percent}% ({formatCurrency(form.margin_value)})</span></span>
-          </div>
-        ) : null
+      subtitle="تسجيل بطاقة الصنف، ربط المجموعات والأقسام، التسعير بهامش الربح، ومتغيرات المقاسات والألوان"
+      actions={
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-xs"
+          >
+            <ArrowRight className="w-4 h-4" />
+            <span>رجوع للأصناف</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!isFormValid || saving}
+            className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            <span>{saving ? 'جاري الحفظ...' : isEdit ? 'حفظ التعديلات' : 'حفظ الصنف'}</span>
+          </button>
+        </div>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Section 1: Main Identification & Image */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
-          <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
-            <Layers className="w-5 h-5 text-[#1F3A5F]" />
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+          <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+            <Layers className="w-5 h-5 text-blue-600" />
             البيانات الأساسية وتوصيف الصنف
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Item Code */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                كود الصنف <span className="text-red-500">*</span>
+              <label htmlFor="item-code-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                كود الصنف *
               </label>
-              <div className="relative">
-                <input
-                  id="code"
-                  type="text"
-                  value={form.code}
-                  onChange={(e) => setForm(prev => ({ ...prev, code: e.target.value }))}
-                  placeholder="مثال: 1001 أو 01"
-                  className={`w-full px-3 py-2 border rounded-md text-sm font-mono focus:outline-none focus:ring-1 ${
-                    errors.code ? 'border-red-500 focus:ring-red-500 bg-red-50/30' : 'border-gray-300 focus:ring-[#1F3A5F]'
-                  }`}
-                  required
-                />
-              </div>
-              <span className="text-[11px] text-gray-400 mt-0.5 block">
-                تكويد آلي مستمر من أعلى رقم، وقابل للتعديل اليدوي بشرط عدم التكرار
+              <input
+                id="item-code-input"
+                type="text"
+                value={form.code}
+                onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))}
+                className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50 text-slate-800 ${
+                  errors.code ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
+                }`}
+                required
+              />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                تكويد آلي متسلسل من أعلى رقم، وقابل للتعديل اليدوي بشرط عدم التكرار
               </span>
               <FieldError error={errors.code} />
             </div>
 
             {/* Item Name / Description */}
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                اسم الصنف - توصيف الصنف <span className="text-red-500">*</span>
+              <label htmlFor="item-name-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                اسم وتوصيف الصنف *
               </label>
               <input
-                id="name"
+                id="item-name-input"
                 type="text"
                 value={form.name}
-                onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="مثال: تيشيرت بولو رجالي قطن 100% مطرز أو قماش سنجل جيرسي 180 جم"
-                className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${
-                  errors.name ? 'border-red-500 focus:ring-red-500 bg-red-50/30' : 'border-gray-300 focus:ring-[#1F3A5F]'
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                className={`w-full px-3.5 py-2 border rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50 text-slate-800 ${
+                  errors.name ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
                 }`}
                 required
               />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                توصيف الصنف الكامل (مثال: تيشيرت بولو رجالي قطن 100% مطرز أو قماش سنجل جيرسي 180 جم)
+              </span>
               <FieldError error={errors.name} />
             </div>
 
             {/* Item Type */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                نوع الصنف <span className="text-red-500">*</span>
+              <label htmlFor="item-type-select" className="block text-xs font-semibold text-slate-700 mb-1">
+                نوع الصنف *
               </label>
               <select
+                id="item-type-select"
                 value={form.item_type}
-                onChange={(e) => setForm(prev => ({ ...prev, item_type: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-semibold bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                onChange={(e) => setForm((prev) => ({ ...prev, item_type: e.target.value }))}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-medium bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
               >
                 <option value="finished">منتج تام (ملابس جاهزة للبيع)</option>
                 <option value="raw_material">مادة خام / مستلزم إنتاج (أقمشة وإكسسوارات)</option>
               </select>
             </div>
 
-            {/* Item Group */}
+            {/* Item Group with Quick-Add shortcut */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                مجموعة الصنف <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="item_group"
-                type="text"
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="item-group-select" className="block text-xs font-semibold text-slate-700">
+                  مجموعة الصنف *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setQuickAddGroupOpen((prev) => !prev)}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-0.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>إضافة مجموعة</span>
+                </button>
+              </div>
+
+              {quickAddGroupOpen && (
+                <div className="p-2 mb-2 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                  <label htmlFor="quick-group-name" className="block text-[11px] font-semibold text-blue-900">
+                    اسم المجموعة الجديدة
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      id="quick-group-name"
+                      type="text"
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      className="flex-1 px-2.5 py-1 text-xs bg-white border border-blue-300 rounded-md"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleQuickAddGroup}
+                      className="px-2.5 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                      حفظ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuickAddGroupOpen(false)}
+                      className="p-1 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <select
+                id="item-group-select"
                 value={form.item_group}
-                onChange={(e) => setForm(prev => ({ ...prev, item_group: e.target.value }))}
-                placeholder="مثال: ملابس صيفية، أقمشة قطنية"
-                className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${
-                  errors.item_group ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-[#1F3A5F]'
-                }`}
+                onChange={(e) => setForm((prev) => ({ ...prev, item_group: e.target.value }))}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
                 required
-              />
+              >
+                {groupsList.map((g) => (
+                  <option key={g.id} value={g.name}>
+                    {g.name} ({g.code})
+                  </option>
+                ))}
+              </select>
               <FieldError error={errors.item_group} />
             </div>
 
-            {/* Item Department */}
+            {/* Item Department/Section with Quick-Add shortcut */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                قسم الصنف <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="item_department"
-                type="text"
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="item-section-select" className="block text-xs font-semibold text-slate-700">
+                  قسم الصنف *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setQuickAddSectionOpen((prev) => !prev)}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-0.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>إضافة قسم</span>
+                </button>
+              </div>
+
+              {quickAddSectionOpen && (
+                <div className="p-2 mb-2 bg-emerald-50 border border-emerald-200 rounded-lg space-y-2">
+                  <label htmlFor="quick-section-name" className="block text-[11px] font-semibold text-emerald-900">
+                    اسم القسم الجديد
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      id="quick-section-name"
+                      type="text"
+                      value={newSectionName}
+                      onChange={(e) => setNewSectionName(e.target.value)}
+                      className="flex-1 px-2.5 py-1 text-xs bg-white border border-emerald-300 rounded-md"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleQuickAddSection}
+                      className="px-2.5 py-1 text-xs bg-emerald-600 text-white rounded-md hover:bg-emerald-700"
+                    >
+                      حفظ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuickAddSectionOpen(false)}
+                      className="p-1 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <select
+                id="item-section-select"
                 value={form.item_department}
-                onChange={(e) => setForm(prev => ({ ...prev, item_department: e.target.value }))}
-                placeholder="مثال: قسم البولو، قسم الجينز، قسم القص"
-                className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 ${
-                  errors.item_department ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-[#1F3A5F]'
-                }`}
+                onChange={(e) => setForm((prev) => ({ ...prev, item_department: e.target.value }))}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
                 required
-              />
+              >
+                {sectionsList.map((s) => (
+                  <option key={s.id} value={s.name}>
+                    {s.name} ({s.code})
+                  </option>
+                ))}
+              </select>
               <FieldError error={errors.item_department} />
             </div>
 
             {/* Unit */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                وحدة القياس <span className="text-red-500">*</span>
+              <label htmlFor="item-unit-select" className="block text-xs font-semibold text-slate-700 mb-1">
+                وحدة القياس *
               </label>
               <select
+                id="item-unit-select"
                 value={form.unit}
-                onChange={(e) => setForm(prev => ({ ...prev, unit: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                onChange={(e) => setForm((prev) => ({ ...prev, unit: e.target.value }))}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
               >
                 <option value="قطعة">قطعة</option>
                 <option value="دريزن">دريزن (12 قطعة)</option>
@@ -465,34 +686,34 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
 
             {/* Minimum Issue / Manufacturing Qty */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                الحد الأدنى للصرف / أمر التصنيع <span className="text-red-500">*</span>
+              <label htmlFor="min-issue-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                الحد الأدنى للصرف / أمر التصنيع *
               </label>
               <input
-                id="min_issue_qty"
+                id="min-issue-input"
                 type="number"
                 min="1"
                 value={form.min_issue_qty}
-                onChange={(e) => setForm(prev => ({ ...prev, min_issue_qty: e.target.value }))}
-                className={`w-full px-3 py-2 border rounded-md text-sm font-mono focus:outline-none focus:ring-1 ${
-                  errors.min_issue_qty ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-[#1F3A5F]'
+                onChange={(e) => setForm((prev) => ({ ...prev, min_issue_qty: e.target.value }))}
+                className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50 text-slate-800 ${
+                  errors.min_issue_qty ? 'border-red-500' : 'border-slate-300'
                 }`}
                 required
               />
-              <span className="text-[11px] text-gray-400 mt-0.5 block">
+              <span className="text-[11px] text-slate-500 mt-1 block">
                 تنبيه تحذيري في أمر التصنيع إذا قلت الكمية عن هذا الحد
               </span>
               <FieldError error={errors.min_issue_qty} />
             </div>
 
-            {/* Image Upload with Canvas Base64 Compression */}
+            {/* Image Upload */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 صورة الصنف (ضغط تلقائي للحجم)
               </label>
               <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-md cursor-pointer text-xs font-bold text-gray-700 transition-colors">
-                  <Upload className="w-4 h-4 text-[#1F3A5F]" />
+                <label className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg cursor-pointer text-xs font-semibold text-slate-700 transition-colors">
+                  <Upload className="w-4 h-4 text-blue-600" />
                   <span>اختر صورة</span>
                   <input
                     type="file"
@@ -502,11 +723,11 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                   />
                 </label>
                 {imagePreview ? (
-                  <div className="relative group w-12 h-12 rounded-md overflow-hidden border border-gray-300 shadow-2xs">
-                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                  <div className="relative group w-11 h-11 rounded-lg overflow-hidden border border-slate-300 shadow-2xs">
+                    <img src={imagePreview} alt="معاينة الصنف" className="w-full h-full object-cover" />
                     <button
                       type="button"
-                      onClick={() => { setForm(p => ({ ...p, image: '' })); setImagePreview(null); }}
+                      onClick={() => { setForm((p) => ({ ...p, image: '' })); setImagePreview(null); }}
                       className="absolute inset-0 bg-red-600/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       title="حذف الصورة"
                     >
@@ -514,285 +735,408 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                     </button>
                   </div>
                 ) : (
-                  <span className="text-xs text-gray-400">لا توجد صورة محملة</span>
+                  <span className="text-xs text-slate-400">لا توجد صورة محملة</span>
                 )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Section 2: Pricing, Cost Price & Profit Margin Live Calculation */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+        {/* Section 2: Pricing & Profit Margin & Opening Balance */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-emerald-600" />
-              التسعير، سعر التكلفة، وهامش الربح
+              التسعير، هوامش الربحية، والرصيد الافتتاحي
             </h2>
             <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-              احتساب حي متبادل للأسعار والربحية
+              ربط حي متبادل بين التكلفة وهامش الربح وسعر البيع
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Cost Price (سعر التكلفة) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
+            {/* Cost Price */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                سعر التكلفة (ج.م) <span className="text-red-500">*</span>
+              <label htmlFor="cost-price-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                سعر التكلفة (ج.م) *
               </label>
-              <div className="relative">
-                <input
-                  id="cost_price"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.cost_price}
-                  onChange={(e) => handleCostPriceChange(e.target.value)}
-                  placeholder="0.00"
-                  className={`w-full px-3 py-2 border rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 ${
-                    errors.cost_price ? 'border-red-500 focus:ring-red-500 bg-red-50/30' : 'border-gray-300 focus:ring-[#1F3A5F]'
-                  }`}
-                  required
-                />
-              </div>
-              <span className="text-[11px] text-gray-400 mt-0.5 block">
+              <input
+                id="cost-price-input"
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.cost_price}
+                onChange={(e) => handleCostPriceChange(e.target.value)}
+                className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50 text-slate-800 ${
+                  errors.cost_price ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
+                }`}
+                required
+              />
+              <span className="text-[11px] text-slate-500 mt-1 block">
                 تكلفة الشراء أو تصنيع القطعة
               </span>
               <FieldError error={errors.cost_price} />
             </div>
 
-            {/* Profit Margin Percentage */}
+            {/* Base Profit Margin % (Default 0) */}
             {form.item_type === 'finished' && (
               <>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                  <label htmlFor="margin-pct-input" className="block text-xs font-semibold text-slate-700 mb-1">
                     نسبة هامش الربح (%)
                   </label>
                   <div className="relative">
                     <input
+                      id="margin-pct-input"
                       type="number"
                       step="0.1"
                       min="0"
                       value={form.margin_percent}
                       onChange={(e) => handleMarginPercentChange(e.target.value)}
-                      placeholder="35"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                      className="w-full pr-3.5 pl-9 py-2 border border-slate-300 rounded-lg text-sm font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50 text-slate-800"
                     />
-                    <Percent className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                    <Percent className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   </div>
-                  <span className="text-[11px] text-gray-400 mt-0.5 block">
-                    كتابة النسبة تحسب سعر البيع تلقائياً
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    القيمة الافتراضية 0 (سعر البيع = سعر التكلفة)
                   </span>
                 </div>
 
                 {/* Selling Price */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
-                    سعر البيع (ج.م) <span className="text-red-500">*</span>
+                  <label htmlFor="selling-price-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                    سعر البيع (ج.م) *
                   </label>
-                  <div className="relative">
-                    <input
-                      id="selling_price"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={form.selling_price}
-                      onChange={(e) => handleSellingPriceChange(e.target.value)}
-                      placeholder="0.00"
-                      className={`w-full px-3 py-2 border rounded-md text-sm font-mono font-bold text-green-700 focus:outline-none focus:ring-1 ${
-                        errors.selling_price ? 'border-red-500 focus:ring-red-500 bg-red-50/30' : 'border-gray-300 focus:ring-[#1F3A5F]'
-                      }`}
-                      required={form.item_type === 'finished'}
-                    />
-                  </div>
-                  <span className="text-[11px] text-gray-400 mt-0.5 block">
-                    كتابة سعر البيع تحسب نسبة الربح
+                  <input
+                    id="selling-price-input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.selling_price}
+                    onChange={(e) => handleSellingPriceChange(e.target.value)}
+                    className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono font-bold text-emerald-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50 ${
+                      errors.selling_price ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
+                    }`}
+                    required={form.item_type === 'finished'}
+                  />
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    تعديل سعر البيع يعيد حساب نسبة الربح
                   </span>
                   <FieldError error={errors.selling_price} />
                 </div>
 
-                {/* Profit Margin Value */}
+                {/* Margin Value */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     قيمة الربح للقطعة (ج.م)
                   </label>
-                  <div className="px-3 py-2 border border-gray-200 bg-gray-50 rounded-md text-sm font-mono font-bold text-emerald-700">
+                  <div className="px-3.5 py-2 border border-slate-200 bg-slate-50 rounded-lg text-sm font-mono font-bold text-emerald-700">
                     {formatCurrency(form.margin_value)}
                   </div>
-                  <span className="text-[11px] text-gray-400 mt-0.5 block">
+                  <span className="text-[11px] text-slate-500 mt-1 block">
                     سعر البيع - سعر التكلفة
                   </span>
                 </div>
               </>
             )}
-          </div>
-        </div>
 
-        {/* Section 3: Clothing Variants Matrix (المقاسات والألوان) */}
-        {form.item_type === 'finished' && (
-          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-2">
-              <div>
-                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                  <Palette className="w-5 h-5 text-indigo-600" />
-                  متغيرات الملابس (المقاسات والألوان ورصيد كل متغير)
-                </h2>
-                <span className="text-xs text-gray-500 font-medium">
-                  لكل مقاس ولون باركود ورصيد مخزني منفصل
-                </span>
-              </div>
-            </div>
-
-            {/* Add Variant Form Row */}
-            <div className="bg-gray-50 border border-gray-200 rounded-md p-3.5 flex flex-wrap items-end gap-3">
-              <div className="flex-1 min-w-[140px]">
-                <label className="block text-xs font-bold text-gray-700 mb-1">المقاس</label>
-                <select
-                  value={newVariant.size}
-                  onChange={(e) => setNewVariant(p => ({ ...p, size: e.target.value }))}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md text-xs font-bold bg-white"
-                >
-                  <option value="صغير">صغير</option>
-                  <option value="وسط">وسط</option>
-                  <option value="كبير">كبير</option>
-                  <option value="كبير جداً">كبير جداً</option>
-                  <option value="كبير مضاعف">كبير مضاعف</option>
-                  <option value="30 (بنطلون)">30 (بنطلون)</option>
-                  <option value="32 (بنطلون)">32 (بنطلون)</option>
-                  <option value="34 (بنطلون)">34 (بنطلون)</option>
-                  <option value="36 (بنطلون)">36 (بنطلون)</option>
-                  <option value="38 (بنطلون)">38 (بنطلون)</option>
-                </select>
-              </div>
-
-              <div className="flex-1 min-w-[140px]">
-                <label className="block text-xs font-bold text-gray-700 mb-1">اللون</label>
-                <select
-                  value={newVariant.color}
-                  onChange={(e) => setNewVariant(p => ({ ...p, color: e.target.value }))}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md text-xs font-bold bg-white"
-                >
-                  <option value="أبيض ناصع">أبيض ناصع</option>
-                  <option value="أسود فحمي">أسود فحمي</option>
-                  <option value="كحلي داكن">كحلي داكن</option>
-                  <option value="رمادي ميلانج">رمادي ميلانج</option>
-                  <option value="زيتي عسكري">زيتي عسكري</option>
-                  <option value="أزرق جينز كلاسيك">أزرق جينز كلاسيك</option>
-                  <option value="نبيتي داكن">نبيتي داكن</option>
-                </select>
-              </div>
-
-              <div className="w-28">
-                <label className="block text-xs font-bold text-gray-700 mb-1">الرصيد الافتتاحي</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={newVariant.opening_balance}
-                  onChange={(e) => setNewVariant(p => ({ ...p, opening_balance: e.target.value }))}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md text-xs font-mono font-bold bg-white"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleAddVariant}
-                className="px-4 py-2 bg-[#1F3A5F] text-white rounded-md text-xs font-bold hover:bg-[#162a45] transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>إضافة المتغير</span>
-              </button>
-            </div>
-
-            {/* Variants Table */}
-            {form.variants.length > 0 ? (
-              <div className="overflow-x-auto border border-gray-200 rounded-md">
-                <table className="w-full text-right border-collapse text-xs">
-                  <thead className="bg-gray-100 border-b border-gray-200 text-gray-700 font-bold sticky top-0">
-                    <tr>
-                      <th className="p-2.5">#</th>
-                      <th className="p-2.5">المقاس</th>
-                      <th className="p-2.5">اللون</th>
-                      <th className="p-2.5">كود الباركود والتتبع</th>
-                      <th className="p-2.5 text-center">الرصيد الافتتاحي</th>
-                      <th className="p-2.5 text-center">الرصيد الفعلي</th>
-                      <th className="p-2.5 text-center">إجراء</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {form.variants.map((v, idx) => (
-                      <tr key={v.id || idx} className="hover:bg-gray-50">
-                        <td className="p-2.5 font-bold text-gray-400">{idx + 1}</td>
-                        <td className="p-2.5 font-bold text-gray-800">{v.size}</td>
-                        <td className="p-2.5 font-bold text-gray-800">{v.color}</td>
-                        <td className="p-2.5 font-mono text-gray-600">{v.sku}</td>
-                        <td className="p-2.5 text-center font-mono font-bold text-blue-700">{v.opening_balance}</td>
-                        <td className="p-2.5 text-center font-mono font-bold text-green-700">{v.current_stock ?? v.opening_balance}</td>
-                        <td className="p-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveVariant(idx)}
-                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded cursor-pointer"
-                            title="حذف المتغير"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-gray-50 border-t border-gray-200 font-bold">
-                    <tr>
-                      <td colSpan="4" className="p-2.5 text-left text-gray-700">إجمالي الأرصدة للمتغيرات:</td>
-                      <td className="p-2.5 text-center font-mono text-blue-700">{form.opening_balance}</td>
-                      <td className="p-2.5 text-center font-mono text-green-700">{form.opening_balance}</td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            ) : (
-              <div className="p-6 text-center text-gray-400 text-xs border border-dashed border-gray-200 rounded-md">
-                لم يتم إضافة متغيرات مقاس ولون بعد. يمكنك إضافة مقاسات وألوان بالأعلى، أو الاحتفاظ بالصنف كقطعة موحدة.
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Section 4: Notes and Initial Stock Location */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
-          <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2">
-            موقع التخزين والملاحظات
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Opening Balance - moved to Pricing Section */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                موقع التخزين الافتراضي
+              <label htmlFor="opening-balance-input" className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                <span>الرصيد الافتتاحي</span>
+                {hasOperationalMovements && (
+                  <span className="inline-flex items-center text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-sm border border-amber-200">
+                    <Lock className="w-3 h-3 mr-1" />
+                    مقفل
+                  </span>
+                )}
+              </label>
+              <input
+                id="opening-balance-input"
+                type="number"
+                min="0"
+                disabled={hasOperationalMovements || form.has_variants}
+                value={form.opening_balance}
+                onChange={(e) => setForm((prev) => ({ ...prev, opening_balance: e.target.value }))}
+                className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono font-bold text-slate-800 ${
+                  hasOperationalMovements || form.has_variants
+                    ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
+                    : 'bg-slate-50 border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500'
+                }`}
+              />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                {form.has_variants
+                  ? 'يتم احتسابه تلقائياً من مجموع أرصدة المقاسات والألوان بالأسفل'
+                  : hasOperationalMovements
+                  ? 'تم قفل تعديل الرصيد الافتتاحي لوجود حركات مخزنية مسجلة على الصنف'
+                  : 'قابل للتعديل حتى تسجيل أول حركة مخزنية أو أمر توريد'}
+              </span>
+            </div>
+
+            {/* Opening Cost */}
+            <div>
+              <label htmlFor="opening-cost-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                تكلفة الرصيد الافتتاحي (ج.م)
+              </label>
+              <input
+                id="opening-cost-input"
+                type="number"
+                step="0.01"
+                min="0"
+                disabled={hasOperationalMovements}
+                value={form.opening_cost || form.cost_price}
+                onChange={(e) => setForm((prev) => ({ ...prev, opening_cost: e.target.value }))}
+                className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono font-bold text-slate-800 ${
+                  hasOperationalMovements
+                    ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
+                    : 'bg-slate-50 border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500'
+                }`}
+              />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                تكلفة تقييم بضاعة أول المدة
+              </span>
+            </div>
+
+            {/* Storage Location */}
+            <div>
+              <label htmlFor="storage-location-select" className="block text-xs font-semibold text-slate-700 mb-1">
+                موقع التخزين المعتمد
               </label>
               <select
+                id="storage-location-select"
                 value={form.location_id}
-                onChange={(e) => setForm(prev => ({ ...prev, location_id: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                onChange={(e) => setForm((prev) => ({ ...prev, location_id: e.target.value }))}
+                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
               >
-                {locations.map(loc => (
+                {locations.map((loc) => (
                   <option key={loc.id} value={loc.id}>
                     {loc.name} ({loc.code || loc.id})
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                ملاحظات الصنف
-              </label>
-              <input
-                type="text"
-                value={form.notes}
-                onChange={(e) => setForm(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="أي مواصفات فنية إضافية..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
-              />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                مستودع إيداع الرصيد الافتتاحي
+              </span>
             </div>
           </div>
+        </div>
+
+        {/* Section 3: Clothing Variants ON/OFF Switch (Size / Color) */}
+        {form.item_type === 'finished' && (
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-indigo-600" />
+                  متغيرات الملابس (المقاسات والألوان)
+                </h2>
+                <span className="text-xs text-slate-500 font-medium">
+                  تفعيل المقاسات والألوان يتيح مصفوفة المخزون والباركود لكل مقاس ولون
+                </span>
+              </div>
+
+              {/* ON / OFF Switch */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-slate-700">
+                  {form.has_variants ? 'المتغيرات مفعلة (ON)' : 'المتغيرات معطلة (OFF)'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleToggleVariants}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                    form.has_variants ? 'bg-indigo-600' : 'bg-slate-300'
+                  }`}
+                  role="switch"
+                  aria-checked={form.has_variants}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                      form.has_variants ? '-translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {variantToggleError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 font-semibold flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span>{variantToggleError}</span>
+              </div>
+            )}
+
+            {!form.has_variants ? (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600">
+                الصنف مسجل كوحدة موحدة بدون تفريد للمقاسات والألوان. يتم إدارة رصيده كبند مفرد بالرصيد الافتتاحي أعلاه.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Add Variant Form Row */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-end gap-3">
+                  <div className="flex-1 min-w-[140px]">
+                    <label htmlFor="variant-size-select" className="block text-xs font-semibold text-slate-700 mb-1">
+                      المقاس
+                    </label>
+                    <select
+                      id="variant-size-select"
+                      value={newVariant.size}
+                      onChange={(e) => setNewVariant((p) => ({ ...p, size: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold bg-white text-slate-800"
+                    >
+                      <option value="صغير">صغير (S)</option>
+                      <option value="وسط">وسط (M)</option>
+                      <option value="كبير">كبير (L)</option>
+                      <option value="كبير جداً">كبير جداً (XL)</option>
+                      <option value="كبير مضاعف">كبير مضاعف (XXL)</option>
+                      <option value="30 (بنطلون)">30 (بنطلون)</option>
+                      <option value="32 (بنطلون)">32 (بنطلون)</option>
+                      <option value="34 (بنطلون)">34 (بنطلون)</option>
+                      <option value="36 (بنطلون)">36 (بنطلون)</option>
+                      <option value="38 (بنطلون)">38 (بنطلون)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex-1 min-w-[140px]">
+                    <label htmlFor="variant-color-select" className="block text-xs font-semibold text-slate-700 mb-1">
+                      اللون
+                    </label>
+                    <select
+                      id="variant-color-select"
+                      value={newVariant.color}
+                      onChange={(e) => setNewVariant((p) => ({ ...p, color: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold bg-white text-slate-800"
+                    >
+                      <option value="أبيض ناصع">أبيض ناصع</option>
+                      <option value="أسود فحمي">أسود فحمي</option>
+                      <option value="كحلي داكن">كحلي داكن</option>
+                      <option value="رمادي ميلانج">رمادي ميلانج</option>
+                      <option value="زيتي عسكري">زيتي عسكري</option>
+                      <option value="أزرق جينز كلاسيك">أزرق جينز كلاسيك</option>
+                      <option value="نبيتي داكن">نبيتي داكن</option>
+                    </select>
+                  </div>
+
+                  <div className="w-32">
+                    <label htmlFor="variant-opening-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                      الرصيد الافتتاحي
+                    </label>
+                    <input
+                      id="variant-opening-input"
+                      type="number"
+                      min="0"
+                      value={newVariant.opening_balance}
+                      onChange={(e) => setNewVariant((p) => ({ ...p, opening_balance: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-bold bg-white text-slate-800"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddVariant}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors flex items-center gap-1.5 shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة المتغير</span>
+                  </button>
+                </div>
+
+                {/* Variants Table */}
+                {form.variants.length > 0 ? (
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-xs">
+                    <table className="w-full text-right border-collapse text-xs">
+                      <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-semibold">
+                        <tr>
+                          <th className="p-3">#</th>
+                          <th className="p-3">المقاس</th>
+                          <th className="p-3">اللون</th>
+                          <th className="p-3">كود الباركود والتتبع</th>
+                          <th className="p-3 text-center">الرصيد الافتتاحي</th>
+                          <th className="p-3 text-center">الرصيد الفعلي</th>
+                          <th className="p-3 text-center">إجراء</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {form.variants.map((v, idx) => (
+                          <tr key={v.id || idx} className="hover:bg-slate-50">
+                            <td className="p-3 font-medium text-slate-400">{idx + 1}</td>
+                            <td className="p-3 font-bold text-slate-800">{v.size}</td>
+                            <td className="p-3 font-bold text-slate-800">{v.color}</td>
+                            <td className="p-3 font-mono text-slate-600">{v.sku}</td>
+                            <td className="p-3 text-center font-mono font-bold text-blue-700">{v.opening_balance}</td>
+                            <td className="p-3 text-center font-mono font-bold text-emerald-700">
+                              {v.current_stock !== undefined ? v.current_stock : v.opening_balance}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveVariant(idx)}
+                                className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md"
+                                title="حذف المتغير"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-slate-50 border-t border-slate-200 font-bold">
+                        <tr>
+                          <td colSpan="4" className="p-3 text-left text-slate-700">
+                            إجمالي الأرصدة للمتغيرات:
+                          </td>
+                          <td className="p-3 text-center font-mono text-blue-700">{form.opening_balance}</td>
+                          <td className="p-3 text-center font-mono text-emerald-700">{form.opening_balance}</td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-xl">
+                    تم تفعيل المتغيرات ولكن لم يتم إضافة مقاسات وألوان بعد. استخدم النموذج بالأعلى لإضافة المقاسات والألوان.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Section 4: Notes */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+          <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
+            الملاحظات والمواصفات الفنية
+          </h2>
+          <div>
+            <label htmlFor="item-notes-input" className="block text-xs font-semibold text-slate-700 mb-1">
+              ملاحظات الصنف والمواصفات الفنية
+            </label>
+            <textarea
+              id="item-notes-input"
+              rows={3}
+              value={form.notes}
+              onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+              className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
+            />
+          </div>
+        </div>
+
+        {/* Bottom Actions */}
+        <div className="flex items-center justify-end gap-3 pt-4">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="px-5 py-2.5 text-sm text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-xs"
+          >
+            إلغاء
+          </button>
+          <button
+            type="submit"
+            disabled={!isFormValid || saving}
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            <span>{saving ? 'جاري الحفظ...' : isEdit ? 'حفظ التعديلات' : 'حفظ الصنف'}</span>
+          </button>
         </div>
       </form>
     </PageContainer>

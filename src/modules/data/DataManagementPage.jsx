@@ -248,8 +248,8 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
     }
   };
 
-  // If not logged in, reject
-  if (!isAuthorized) {
+  // If not logged in or non-CEO, reject with access denied
+  if (!isAuthorized || currentUser?.role !== 'owner') {
     return (
       <PageContainer
         title="إدارة البيانات الشاملة"
@@ -261,9 +261,9 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
           <div className="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
             <Shield className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-bold text-red-900">يرجى تسجيل الدخول أولاً</h2>
+          <h2 className="text-xl font-bold text-red-900">غير مصرح لك بالوصول</h2>
           <p className="text-sm text-red-700 leading-relaxed">
-            يجب تسجيل الدخول بحساب نشط للوصول إلى إدارة البيانات الشاملة للنظام.
+            هذه الشاشة والعمليات مخصصة للإدارة العليا والرئيس التنفيذي (CEO) فقط.
           </p>
           <button
             type="button"
@@ -287,6 +287,24 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
       onBack={() => onNavigate('home')}
       actions={
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await api.recomputeStockBalances();
+                if (onNotify) onNotify(res.message || 'تم إعادة احتساب أرصدة المخزون بالكامل بنجاح', 'success');
+                if (activeTab) loadTableData(activeTab);
+              } catch (e) {
+                alert(e.message || 'فشل في إعادة احتساب الأرصدة');
+              }
+            }}
+            className="px-3.5 py-2 rounded-md border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+            title="إعادة احتساب وتدقيق أرصدة المخزون ومطابقتها مع الحركات"
+          >
+            <RefreshCw className="w-4 h-4 text-indigo-600" />
+            <span>إعادة احتساب الأرصدة</span>
+          </button>
+
           <button
             type="button"
             onClick={handleExport}
@@ -454,7 +472,7 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
             loading={loading}
             pageSize={15}
             searchable={true}
-            searchPlaceholder={`بحث في ${activeMeta.label}...`}
+            searchLabel={`بحث في ${activeMeta.label}`}
             emptyMessage={`لا توجد سجلات مسجلة في جدول (${activeMeta.label})`}
             emptyAction={
               activeTab !== 'audit_log'
@@ -507,9 +525,9 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
                 type="text"
                 value={deleteReason}
                 onChange={(e) => setDeleteReason(e.target.value)}
-                placeholder="أدخل سبب الحذف..."
                 className="w-full text-xs h-9 px-3 border border-gray-300 rounded focus:border-red-600 focus:outline-none"
               />
+              <p className="text-xs text-gray-500 mt-1">أدخل سبب الحذف</p>
             </div>
 
             <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-gray-200">
