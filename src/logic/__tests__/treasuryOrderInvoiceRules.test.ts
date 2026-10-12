@@ -5,8 +5,8 @@ import { suppliersRepo } from '../../data/repositories/suppliersRepo';
 import { salesRepo } from '../../data/repositories/salesRepo';
 import { itemsRepo } from '../../data/repositories/itemsRepo';
 import { partiesRepo } from '../../data/repositories/partiesRepo';
-import { api } from '../../services/api';
-import BalanceCalculator, { resolveOpeningBalance } from '../balances';
+import BalanceCalculator from '../balances';
+import { getTodayDateString } from '../../utils/formatters';
 
 describe('Treasury, Order Deletion, and Invoice Cancellation Rules', () => {
   beforeEach(async () => {
@@ -48,7 +48,7 @@ describe('Treasury, Order Deletion, and Invoice Cancellation Rules', () => {
     const poData = {
       supplier_id: sup.id,
       payment_terms: 'cash',
-      order_date: '2026-10-12',
+      order_date: getTodayDateString(),
       subtotal: 1500,
       items: [
         { material_id: 'mat-raw-cotton', quantity_ordered: 15, unit_price: 100 }
@@ -89,7 +89,7 @@ describe('Treasury, Order Deletion, and Invoice Cancellation Rules', () => {
     const saleData = {
       customer_id: cust.id,
       payment_terms: 'cash',
-      invoice_date: '2026-10-12',
+      invoice_date: getTodayDateString(),
       items: [
         { product_id: 'prd-shirt-01', quantity: 3, unit_selling_price: 250, unit_cost: 150 }
       ],
@@ -142,7 +142,7 @@ describe('Treasury, Order Deletion, and Invoice Cancellation Rules', () => {
     const po = await suppliersRepo.createPurchaseOrder({
       supplier_id: sup.id,
       payment_terms: 'credit',
-      order_date: '2026-10-12',
+      order_date: getTodayDateString(),
       items: [
         { material_id: itemId, quantity_ordered: 20, unit_price: 120 }
       ]
@@ -196,7 +196,7 @@ describe('Treasury, Order Deletion, and Invoice Cancellation Rules', () => {
       supplier_id: sup.id,
       payment_terms: 'credit',
       receive_now: true,
-      order_date: '2026-10-12',
+      order_date: getTodayDateString(),
       items: [
         { material_id: item.id, quantity_ordered: 10, unit_price: 200 } // 2000 total
       ],
@@ -271,7 +271,7 @@ describe('Treasury, Order Deletion, and Invoice Cancellation Rules', () => {
       supplier_id: sup.id,
       payment_terms: 'cash',
       receive_now: true,
-      order_date: '2026-10-12',
+      order_date: getTodayDateString(),
       items: [
         { material_id: item.id, quantity_ordered: 100, unit_price: 5 } // 500 LE
       ]
@@ -338,7 +338,7 @@ describe('Treasury, Order Deletion, and Invoice Cancellation Rules', () => {
       supplier_id: sup.id,
       payment_terms: 'cash',
       receive_now: true,
-      order_date: '2026-10-12',
+      order_date: getTodayDateString(),
       items: [
         { material_id: item.id, quantity_ordered: 10, unit_price: 20 } // 200 LE
       ]
@@ -388,7 +388,7 @@ describe('Treasury, Order Deletion, and Invoice Cancellation Rules', () => {
     const po = await suppliersRepo.createPurchaseOrder({
       supplier_id: sup.id,
       payment_terms: 'cash',
-      order_date: '2026-10-12',
+      order_date: getTodayDateString(),
       items: [
         { material_id: 'mat-thread', quantity_ordered: 20, unit_price: 20 }
       ]

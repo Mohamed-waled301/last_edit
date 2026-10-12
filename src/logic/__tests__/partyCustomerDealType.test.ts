@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto';
 import db from '../../data/db';
 import { partiesRepo } from '../../data/repositories/partiesRepo';
 import { salesRepo } from '../../data/repositories/salesRepo';
+import { getTodayDateString } from '../../utils/formatters';
 
 describe('Customer Credit Limit & Document-Only Deal Type (الضوابط المالية للعميل والحد الائتماني)', () => {
   beforeEach(async () => {
@@ -138,7 +139,7 @@ describe('Customer Credit Limit & Document-Only Deal Type (الضوابط الم
       // Cash invoice of 50,000 should NOT be blocked by credit limit
       const inv = await salesRepo.createSalesInvoice({
         customer_id: customer.id,
-        invoice_date: '2026-10-12',
+        invoice_date: getTodayDateString(),
         payment_terms: 'cash',
         items: [
           { product_id: 'prod-1', quantity: 100, unit_selling_price: 500, unit_cost: 300 }
@@ -161,7 +162,7 @@ describe('Customer Credit Limit & Document-Only Deal Type (الضوابط الم
 
       const inv = await salesRepo.createSalesInvoice({
         customer_id: unlimCustomer.id,
-        invoice_date: '2026-10-12',
+        invoice_date: getTodayDateString(),
         payment_terms: 'credit',
         paid_amount: 0,
         items: [
@@ -187,7 +188,7 @@ describe('Customer Credit Limit & Document-Only Deal Type (الضوابط الم
       await expect(
         salesRepo.createSalesInvoice({
           customer_id: creditCustomer.id,
-          invoice_date: '2026-10-12',
+          invoice_date: getTodayDateString(),
           payment_terms: 'credit',
           paid_amount: 0,
           items: [
@@ -210,7 +211,7 @@ describe('Customer Credit Limit & Document-Only Deal Type (الضوابط الم
       // New invoice of 5,000 makes total debt 13,000 <= 15,000 limit -> MUST SUCCEED
       const inv = await salesRepo.createSalesInvoice({
         customer_id: creditCustomer.id,
-        invoice_date: '2026-10-12',
+        invoice_date: getTodayDateString(),
         payment_terms: 'credit',
         paid_amount: 0,
         items: [
@@ -237,7 +238,7 @@ describe('Customer Credit Limit & Document-Only Deal Type (الضوابط الم
       // Invoice of 3,000: Net debt becomes 8,000 + 3,000 = 11,000 <= 12,000 limit -> MUST SUCCEED
       const okInv = await salesRepo.createSalesInvoice({
         customer_id: bothParty.id,
-        invoice_date: '2026-10-12',
+        invoice_date: getTodayDateString(),
         payment_terms: 'credit',
         paid_amount: 0,
         items: [
@@ -250,7 +251,7 @@ describe('Customer Credit Limit & Document-Only Deal Type (الضوابط الم
       await expect(
         salesRepo.createSalesInvoice({
           customer_id: bothParty.id,
-          invoice_date: '2026-10-12',
+          invoice_date: getTodayDateString(),
           payment_terms: 'credit',
           paid_amount: 0,
           items: [

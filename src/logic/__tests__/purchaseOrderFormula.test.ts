@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { calculatePurchaseOrderTotals } from '../purchaseOrderCalculations';
 import { db } from '../../data/db';
 import { suppliersRepo, partiesRepo } from '../../data';
+import { getTodayDateString } from '../../utils/formatters';
 
 describe('Purchase Order Formula & Validations (Requirement D)', () => {
   describe('Pure Calculation: calculatePurchaseOrderTotals', () => {
@@ -123,7 +124,7 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
         supplier_id: supplierId,
         payment_terms: 'credit',
         receive_now: true,
-        order_date: '2026-10-12',
+        order_date: getTodayDateString(),
         subtotal: 10000,
         discount_percent: 5,
         discount_amount: 500,
@@ -159,7 +160,7 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
       const poData = {
         supplier_id: supplierId,
         payment_terms: 'cash',
-        order_date: '2026-10-12',
+        order_date: getTodayDateString(),
         subtotal: 2000,
         discount_amount: 500, // remaining 1500
         additional_expenses: 1800, // expenses > remaining!
@@ -177,7 +178,7 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
       const poData = {
         supplier_id: supplierId,
         payment_terms: 'credit',
-        order_date: '2026-10-12',
+        order_date: getTodayDateString(),
         subtotal: 5000,
         discount_amount: 200,
         additional_expenses: 300, // net = 4500
