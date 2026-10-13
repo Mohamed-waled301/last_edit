@@ -793,6 +793,35 @@ export const backupRepo = {
       }
     }
     return false;
+  },
+
+  /**
+   * 7. Native Local SQLite Database Backup (Electron)
+   */
+  async backupSqliteDatabase() {
+    if (typeof window !== 'undefined' && window.electronAPI?.db) {
+      const targetPath = await window.electronAPI.db.chooseBackupLocation();
+      if (!targetPath) return { canceled: true };
+      const res = await window.electronAPI.db.backup(targetPath);
+      if (!res.success) throw new Error(res.error || 'فشل حفظ النسخة الاحتياطية لقاعدة البيانات');
+      await settingsRepo.recordBackupTime();
+      return { success: true, targetPath };
+    }
+    return this.exportAllData();
+  },
+
+  /**
+   * 8. Native Local SQLite Database Restore (Electron)
+   */
+  async restoreSqliteDatabase() {
+    if (typeof window !== 'undefined' && window.electronAPI?.db) {
+      const sourcePath = await window.electronAPI.db.chooseRestoreFile();
+      if (!sourcePath) return { canceled: true };
+      const res = await window.electronAPI.db.restore(sourcePath);
+      if (!res.success) throw new Error(res.error || 'فشل استرجاع قاعدة البيانات من الملف المحدد');
+      return { success: true, ...res };
+    }
+    throw new Error('الاسترجاع المباشر متاح داخل تطبيق سطح المكتب');
   }
 };
 

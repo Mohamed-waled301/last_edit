@@ -80,6 +80,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeUserRole, setActiveUserRole] = useState(getActiveUser().role);
   const [toast, setToast] = useState({ message: '', type: 'success' });
+  const [dbIntegrityError, setDbIntegrityError] = useState(null);
 
   // Sidebar Pinned State (persisted in localStorage)
   const [isSidebarPinned, setIsSidebarPinned] = useState(() => {
@@ -149,6 +150,24 @@ export default function App() {
       }
     }
     checkSystemState();
+
+    // Check Local SQLite Database Integrity (Desktop Mode)
+    if (typeof window !== 'undefined' && window.electronAPI?.db) {
+      window.electronAPI.db
+        .checkIntegrity()
+        .then((res) => {
+          if (res && !res.ok) {
+            setDbIntegrityError(res);
+          }
+        })
+        .catch(() => {});
+
+      if (window.electronAPI.db.onIntegrityWarning) {
+        window.electronAPI.db.onIntegrityWarning((info) => {
+          setDbIntegrityError(info);
+        });
+      }
+    }
 
     // Full-Page SPA Safe Hash Routing Sync
     const handleHashChange = () => {
@@ -566,6 +585,27 @@ export default function App() {
           isSidebarPinned ? 'mr-0 lg:mr-[260px]' : 'mr-0 lg:mr-[72px]'
         }`}
       >
+        {/* Database Integrity Warning Banner (Requirement 5) */}
+        {dbIntegrityError && (
+          <div className="bg-red-700 text-white p-3.5 px-6 flex items-center justify-between shadow-md border-b border-red-800 z-40">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-red-800 flex items-center justify-center shrink-0 font-bold text-lg">!</div>
+              <div>
+                <div className="font-bold text-sm">تنبيه سلامة قاعدة البيانات المحلية (Database Integrity Error)</div>
+                <div className="text-xs text-red-100">
+                  تم اكتشاف عدم تكامل في بنية قاعدة البيانات المحلية (SQLite). يرجى استرجاع أحدث نسخة احتياطية سليمة لضمان سلامة العمليات.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => navigateTo('settings')}
+              className="px-4 py-1.5 bg-white text-red-700 font-bold rounded hover:bg-red-50 text-xs shrink-0 cursor-pointer"
+            >
+              استرجاع نسخة احتياطية
+            </button>
+          </div>
+        )}
+
         {/* 14-Day Expiry Warning Banner */}
         {licenseStatus?.isExpiringSoon && (
           <div className="bg-amber-600 text-white px-4 py-2.5 text-center text-xs md:text-sm font-bold flex items-center justify-center gap-2 shadow-sm">

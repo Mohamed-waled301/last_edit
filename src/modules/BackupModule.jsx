@@ -159,15 +159,15 @@ export const BackupModule = ({ onBack, onNotify }) => {
         <div className="flex items-start gap-3">
           <ShieldCheck className="w-6 h-6 text-[#1F3A5F] shrink-0 mt-0.5" />
           <div className="text-sm">
-            <h3 className="font-bold text-[#1F2937] mb-1">الربط المركزي بقاعدة البيانات السحابية</h3>
+            <h3 className="font-bold text-[#1F2937] mb-1">قاعدة البيانات المحلية الآمنة (SQLite)</h3>
             <p className="text-gray-600 leading-relaxed">
-              بيانات النظام مربوطة مركزياً ومحفوظة على خادم قاعدة البيانات السحابية. يمكنك في أي وقت تنزيل نسخة احتياطية إضافية كاملة من بياناتك كأرشيف محلي إضافي أو استرجاعها عند الحاجة.
+              بيانات النظام محفوظة محلياً بالكامل على جهازك داخل قاعدة بيانات SQLite مشفرة ومؤمنة في مجلد بيانات التطبيق. يمكنك في أي وقت إنشاء نسخة احتياطية آمنة أو استرجاعها مباشرة.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Two Main Big Action Buttons (Prompt Requirement 4.1) */}
+      {/* Two Main Big Action Buttons (Prompt Requirement 5) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 1. Export Action Card */}
         <div className="bg-white border border-gray-200 rounded-md p-6 flex flex-col justify-between hover:border-[#1F3A5F] transition-colors">
@@ -177,7 +177,7 @@ export const BackupModule = ({ onBack, onNotify }) => {
             </div>
             <h2 className="text-xl font-bold text-[#1F2937] mb-2">1. حفظ نسخة احتياطية</h2>
             <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              تصدير وحفظ كامل بيانات المؤسسة (الموردين، سلاسل الإمداد، شجرة مكونات المنتجات، أوامر التصنيع، فواتير المبيعات، والتدفقات النقدية) في ملف مستقل يحمل تاريخ اليوم.
+              نسخ احتياطي فوري لقاعدة البيانات المحلية بالكامل (الموردين، العملاء، الأصناف، أوامر التشغيل، فواتير المبيعات، والخزائن) باستخدام آلية النسخ الاحتياطي الآمنة لـ SQLite.
             </p>
           </div>
 
@@ -190,12 +190,29 @@ export const BackupModule = ({ onBack, onNotify }) => {
               )}
             </div>
             <button
-              onClick={handleExportBackup}
+              onClick={async () => {
+                setIsExporting(true);
+                try {
+                  if (typeof window !== 'undefined' && window.electronAPI?.db) {
+                    const res = await backupRepo.backupSqliteDatabase();
+                    if (!res.canceled) {
+                      onNotify('تم حفظ النسخة الاحتياطية لقاعدة البيانات بنجاح', 'success');
+                      await loadBackupInfo();
+                    }
+                  } else {
+                    await handleExportBackup();
+                  }
+                } catch (err) {
+                  onNotify(err.message || 'حدث خطأ أثناء حفظ النسخة الاحتياطية', 'error');
+                } finally {
+                  setIsExporting(false);
+                }
+              }}
               disabled={isExporting}
               className="px-6 h-12 bg-[#1F3A5F] hover:bg-[#162a45] text-white font-bold rounded-md transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Download className="w-5 h-5" />
-              <span>{isExporting ? 'جاري التصدير...' : 'حفظ نسخة احتياطية الآن'}</span>
+              <span>{isExporting ? 'جاري الحفظ...' : 'نسخة احتياطية'}</span>
             </button>
           </div>
         </div>
@@ -208,7 +225,7 @@ export const BackupModule = ({ onBack, onNotify }) => {
             </div>
             <h2 className="text-xl font-bold text-[#1F2937] mb-2">2. استرجاع نسخة</h2>
             <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              استيراد ملف نسخة احتياطية سابقة واسترجاع جميع السجلات والحسابات. سيتم عرض شاشة تأكيد وفحص الملف قبل اعتماد الاستبدال.
+              استرجاع قاعدة البيانات من ملف نسخة احتياطية سابقة. يقوم النظام آلياً بإنشاء نسخة أمان احتياطية قبل الاستبدال لتأمين بياناتك.
             </p>
           </div>
 
@@ -216,20 +233,46 @@ export const BackupModule = ({ onBack, onNotify }) => {
             <input
               type="file"
               ref={fileInputRef}
-              accept=".json"
+              accept=".json,.db,.sqlite"
               onChange={handleFileSelected}
               className="hidden"
             />
             <div className="text-xs text-gray-500">
-              الملف المطلوب: <span className="font-bold">ملف بيانات النظام</span>
+              الملف المطلوب: <span className="font-bold">ملف قاعدة البيانات (.db)</span>
             </div>
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={async () => {
+                if (typeof window !== 'undefined' && window.electronAPI?.db) {
+                  if (
+                    !window.confirm(
+                      'تنبيه هام: سيتم استرجاع قاعدة البيانات بالكامل واستبدال البيانات الحالية. سيقوم النظام بحفظ نسخة أمان تلقائية قبل البدء. هل ترغب بالاستمرار؟'
+                    )
+                  ) {
+                    return;
+                  }
+                  setIsImporting(true);
+                  try {
+                    const res = await backupRepo.restoreSqliteDatabase();
+                    if (!res.canceled) {
+                      onNotify('تم استرجاع قاعدة البيانات بنجاح! جاري تحديث التطبيق...', 'success');
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 1500);
+                    }
+                  } catch (err) {
+                    onNotify(err.message || 'فشل استرجاع قاعدة البيانات', 'error');
+                  } finally {
+                    setIsImporting(false);
+                  }
+                } else {
+                  fileInputRef.current?.click();
+                }
+              }}
               disabled={isImporting}
               className="px-6 h-12 bg-white hover:bg-gray-50 text-[#1F3A5F] border border-[#1F3A5F] font-bold rounded-md transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Upload className="w-5 h-5" />
-              <span>اختيار ملف واسترجاع نسخة</span>
+              <span>استرجاع نسخة</span>
             </button>
           </div>
         </div>
