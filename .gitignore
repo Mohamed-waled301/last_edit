@@ -44,3 +44,14 @@ builder-debug.yml
 # Licensing Security - Never commit private keys
 tools/license-generator/keys/
 *.pem
+
+# Local Database & Migration Dumps - Never commit local databases
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite*
+*.dump
+dumps/
+exports/
+backups/
