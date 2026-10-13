@@ -85,8 +85,9 @@ export default function ManufacturingListPage({ onNotify }) {
                 <th className="p-3">تاريخ البدء</th>
                 <th className="p-3 text-center font-mono">كمية الدفعة</th>
                 <th className="p-3 text-left font-mono">تكلفة الخامات</th>
-                <th className="p-3 text-left font-mono">أجور المراحل</th>
-                <th className="p-3 text-left font-mono">إجمالي تكلفة المرحلة</th>
+                <th className="p-3 text-left font-mono">تكاليف إضافية</th>
+                <th className="p-3 text-left font-mono">إجمالي تكلفة المنتج</th>
+                <th className="p-3 text-left font-mono">تكلفة الوحدة</th>
                 <th className="p-3 text-center">الحالة</th>
                 <th className="p-3 text-center">إجراء</th>
               </tr>
@@ -94,19 +95,23 @@ export default function ManufacturingListPage({ onNotify }) {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="p-10 text-center text-gray-500 font-bold">
+                  <td colSpan="10" className="p-10 text-center text-gray-500 font-bold">
                     جاري تحميل أوامر الإنتاج...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="p-10 text-center text-gray-400">
+                  <td colSpan="10" className="p-10 text-center text-gray-400">
                     لا توجد أوامر تشغيل مسجلة
                   </td>
                 </tr>
               ) : (
                 filtered.map((o, idx) => {
                   const isCompleted = o.status === 'completed' || o.status === 'ready_for_stage2';
+                  const addCost = o.total_additional_cost !== undefined ? o.total_additional_cost : (o.labor_cost || 0);
+                  const totalCost = o.total_product_cost !== undefined ? o.total_product_cost : (o.total_stage1_cost || 0);
+                  const uCost = o.unit_cost !== undefined ? o.unit_cost : (o.unit_stage1_cost || 0);
+
                   return (
                     <tr key={o.id || idx} className="hover:bg-gray-50">
                       <td className="p-3 font-mono font-bold text-[#1F3A5F]">{o.order_number}</td>
@@ -114,13 +119,14 @@ export default function ManufacturingListPage({ onNotify }) {
                       <td className="p-3 text-gray-600 font-mono">{formatDate(o.start_date)}</td>
                       <td className="p-3 text-center font-mono font-bold text-gray-900">{o.batch_quantity} قطعة</td>
                       <td className="p-3 text-left font-mono font-bold text-gray-800">{formatCurrency(o.total_material_cost || 0)}</td>
-                      <td className="p-3 text-left font-mono font-bold text-blue-700">{formatCurrency(o.labor_cost || 0)}</td>
-                      <td className="p-3 text-left font-mono font-bold text-emerald-700">{formatCurrency(o.total_stage1_cost || 0)}</td>
+                      <td className="p-3 text-left font-mono font-bold text-indigo-700">{formatCurrency(addCost)}</td>
+                      <td className="p-3 text-left font-mono font-bold text-emerald-700">{formatCurrency(totalCost)}</td>
+                      <td className="p-3 text-left font-mono font-bold text-emerald-800">{formatCurrency(uCost)}</td>
                       <td className="p-3 text-center">
                         <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
                           isCompleted ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
                         }`}>
-                          {isCompleted ? 'مكتمل المرحلة 1' : 'قيد التشغيل'}
+                          {isCompleted ? 'مكتمل' : 'قيد التشغيل'}
                         </span>
                       </td>
                       <td className="p-3 text-center">

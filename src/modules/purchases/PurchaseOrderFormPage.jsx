@@ -33,6 +33,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
   const [itemsList, setItemsList] = useState([]);
   const [groupsList, setGroupsList] = useState([]);
   const [sectionsList, setSectionsList] = useState([]);
+  const [treasuries, setTreasuries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -59,10 +60,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
   const [form, setForm] = useState({
     po_number: '',
     supplier_id: '',
+    account_id: '',
     order_date: today,
-    expected_date: today, // Defaults to today's date
     payment_terms: 'cash', // 'cash' | 'credit'
-    receive_now: true, // Default checked for cash, unchecked for credit
     discount_percent: '0',
     discount_value: '0',
     additional_expenses: '0',
@@ -101,39 +101,50 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     async function loadData() {
       try {
         setLoading(true);
-        const [supRes, itemsRes, groupsRes, sectionsRes] = await Promise.all([
+        const [supRes, itemsRes, groupsRes, sectionsRes, trRes] = await Promise.all([
           api.getSuppliers(),
           api.getItems(),
           api.getItemGroups(),
-          api.getItemSections()
+          api.getItemSections(),
+          api.getTreasuries ? api.getTreasuries() : api.getAccounts()
         ]);
 
         const sups = Array.isArray(supRes.data) ? supRes.data : (supRes.suppliers || []);
         const itms = Array.isArray(itemsRes.data) ? itemsRes.data : (itemsRes.items || []);
         const grps = Array.isArray(groupsRes.data) ? groupsRes.data : (groupsRes.groups || []);
         const secs = Array.isArray(sectionsRes.data) ? sectionsRes.data : (sectionsRes.sections || []);
+        const tList = Array.isArray(trRes?.treasuries)
+          ? trRes.treasuries
+          : Array.isArray(trRes?.data)
+            ? trRes.data
+            : Array.isArray(trRes?.accounts)
+              ? trRes.accounts
+              : Array.isArray(trRes)
+                ? trRes
+                : [];
 
         setSuppliers(sups);
         setItemsList(itms);
         setGroupsList(grps);
         setSectionsList(secs);
+        setTreasuries(tList);
 
         const poNum = `PO-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+        const mainT = tList.find((t) => t.is_main === 1 || t.is_main === true) || tList[0];
 
         setForm((prev) => ({
           ...prev,
           po_number: poNum,
           supplier_id: '',
+          account_id: mainT ? mainT.id : 'acc-main',
           order_date: today,
-          expected_date: today,
-          payment_terms: 'cash',
-          receive_now: true
+          payment_terms: 'cash'
         }));
 
         // Prep quick add defaults
         const nextCodeRes = await api.getNextItemCode();
         setQuickItemForm({
-          code: nextCodeRes?.code || '1001',
+          code: nextCodeRes?.code || '1000',
           name: '',
           item_group: '',
           item_department: '',
@@ -152,6 +163,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
 
   // Selected supplier details
   const selectedSupplier = suppliers.find((s) => s.id === form.supplier_id);
+  const selectedTreasury = treasuries.find((t) => t.id === form.account_id) || treasuries.find((t) => t.is_main === 1) || treasuries[0];
 
   // Filter items by supplier links
   const availableItems = itemsList.filter((itm) => {
@@ -178,9 +190,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
   const handlePaymentTermsChange = (terms) => {
     setForm((prev) => ({
       ...prev,
-      payment_terms: terms,
-      // Default unchecked for credit, checked for cash
-      receive_now: terms === 'cash'
+      payment_terms: terms
     }));
   };
 
@@ -468,9 +478,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         po_number: form.po_number,
         supplier_id: form.supplier_id,
         order_date: form.order_date,
-        expected_date: form.expected_date,
+        expected_date: form.order_date,
+        account_id: form.payment_terms === 'cash' ? form.account_id : null,
         payment_terms: form.payment_terms,
-        receive_now: form.receive_now,
         subtotal,
         discount_percent: Number(form.discount_percent) || 0,
         discount_value: discountValue,
@@ -493,11 +503,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
 
       await api.createPurchaseOrder(payload);
       if (onNotify) {
-        onNotify(
-          form.receive_now
-            ? 'تم حفظ أمر الشراء واعتماد استلام المخزون وحساب المورد بنجاح'
-            : 'تم إصدار أمر الشراء بنجاح (قيد التوريد - بانتظار الاستلام)'
-        );
+        onNotify('تم حفظ فاتورة الشراء واعتماد استلام المخزون وحساب المورد بنجاح');
       }
 
       if (onSaved) {
@@ -556,10 +562,10 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
             بيانات أمر الشراء والمورد
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
             <div>
               <label htmlFor="po-number-input" className="block text-xs font-semibold text-slate-700 mb-1">
-                رقم أمر التوريد
+                رقم فاتورة / أمر الشراء
               </label>
               <input
                 id="po-number-input"
@@ -593,7 +599,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
 
             <div>
               <label htmlFor="order-date-input" className="block text-xs font-semibold text-slate-700 mb-1">
-                تاريخ الطلب *
+                تاريخ الفاتورة والاستلام *
               </label>
               <input
                 id="order-date-input"
@@ -603,32 +609,18 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                 className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
                 required
               />
-            </div>
-
-            {/* Expected receipt date: defaults to today, editable */}
-            <div>
-              <label htmlFor="expected-date-input" className="block text-xs font-semibold text-slate-700 mb-1">
-                تاريخ الاستلام المتوقع
-              </label>
-              <input
-                id="expected-date-input"
-                type="date"
-                value={form.expected_date}
-                onChange={(e) => setForm((prev) => ({ ...prev, expected_date: e.target.value }))}
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
-              />
               <span className="text-[11px] text-slate-500 mt-1 block">
-                تاريخ التوريد المتوقع بالمخازن
+                تاريخ أمر الشراء والاستلام الفوري بالمخازن
               </span>
             </div>
           </div>
 
-          {/* Payment Terms and Immediate Goods Receipt */}
+          {/* Payment Terms and Treasury Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3 border-t border-slate-100">
             {/* Payment Terms (Cash / Credit) */}
             <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
               <span className="block text-xs font-bold text-slate-800">
-                طريقة ونوع السداد
+                نوع وشروط السداد *
               </span>
               <div className="flex items-center gap-6">
                 <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-800">
@@ -640,7 +632,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                     onChange={() => handlePaymentTermsChange('cash')}
                     className="text-blue-600 focus:ring-blue-500"
                   />
-                  <span>نقدي (سداد فوري بدون أقساط)</span>
+                  <span>نقدي (خصم فوري من الخزينة)</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-800">
                   <input
@@ -651,28 +643,51 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                     onChange={() => handlePaymentTermsChange('credit')}
                     className="text-blue-600 focus:ring-blue-500"
                   />
-                  <span>آجل (أقساط وجدول استحقاق)</span>
+                  <span>آجل (قيد على حساب المورد وأقساط)</span>
                 </label>
               </div>
             </div>
 
-            {/* Immediate Receipt Option */}
-            <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1">
-              <label className="flex items-center gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.receive_now}
-                  onChange={(e) => setForm((prev) => ({ ...prev, receive_now: e.target.checked }))}
-                  className="w-4 h-4 text-emerald-600 rounded-sm focus:ring-emerald-500"
-                />
-                <span className="font-bold text-sm text-emerald-950">
-                  تم الاستلام الآن (إنشاء إذن استلام فوري)
+            {/* Treasury Selector for Cash Orders */}
+            {form.payment_terms === 'cash' ? (
+              <div className="p-3.5 bg-blue-50/50 border border-blue-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="treasury-select" className="block text-xs font-bold text-slate-800">
+                    الخزينة المحددة للصرف *
+                  </label>
+                  {selectedTreasury && (
+                    <span className={`text-xs font-mono font-bold ${Number(selectedTreasury.current_balance || 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                      الرصيد: {formatCurrency(selectedTreasury.current_balance || 0)}
+                    </span>
+                  )}
+                </div>
+                <select
+                  id="treasury-select"
+                  value={form.account_id}
+                  onChange={(e) => setForm((prev) => ({ ...prev, account_id: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold"
+                  required
+                >
+                  {treasuries.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} {t.is_main ? '(الرئيسية)' : ''} — رصيد: {formatCurrency(t.current_balance || 0)}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500">
+                  يتم خصم الصافي من الخزينة تلقائياً. يُسمح للرصيد بأن يصبح سالباً ويظهر بالأحمر.
+                </p>
+              </div>
+            ) : (
+              <div className="p-3.5 bg-amber-50/50 border border-amber-200 rounded-xl space-y-1">
+                <span className="block text-xs font-bold text-amber-900">
+                  حسابات المورد والمديونية الآجلة
                 </span>
-              </label>
-              <p className="text-xs text-emerald-800 mr-6.5">
-                عند التحديد، يؤدي حفظ أمر التوريد إلى زيادة أرصدة المخزون وقيد فاتورة المورد تلقائياً في معاملة واحدة.
-              </p>
-            </div>
+                <p className="text-xs text-amber-800">
+                  لا توجد حركة على الخزينة. يتم قيد إجمالي الفاتورة كمديونية على حساب المورد، مع ضبط جدول الأقساط بالأسفل.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

@@ -25,10 +25,6 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  // Full Receipt action modal state
-  const [receiveCandidate, setReceiveCandidate] = useState(null);
-  const [receiving, setReceiving] = useState(false);
-
   // Cancel order modal state
   const [cancelCandidate, setCancelCandidate] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -54,22 +50,6 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
   useEffect(() => {
     loadOrders();
   }, []);
-
-  const handleFullReceipt = async () => {
-    if (!receiveCandidate) return;
-    try {
-      setReceiving(true);
-      const res = await api.receivePurchaseOrderFull(receiveCandidate.id);
-      if (onNotify) onNotify(res.message || 'تم استلام أمر التوريد بالكامل وتحديث أرصدة المخزون وحساب المورد بنجاح');
-      setReceiveCandidate(null);
-      loadOrders();
-    } catch (err) {
-      console.error('Full receipt error:', err);
-      alert(err.message || 'تعذر استلام أمر التوريد');
-    } finally {
-      setReceiving(false);
-    }
-  };
 
   const handleCancelOrder = async () => {
     if (!cancelCandidate) return;
@@ -113,7 +93,9 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
 
     if (!matchesSearch) return false;
     if (statusFilter === 'all') return true;
-    return o.status === statusFilter;
+    if (statusFilter === 'received') return o.status !== 'cancelled';
+    if (statusFilter === 'cancelled') return o.status === 'cancelled';
+    return true;
   });
 
   const handleExport = () => {
@@ -121,7 +103,6 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
       'رقم أمر التوريد': o.po_number,
       'اسم المورد': o.supplier_name,
       'تاريخ الطلب': o.order_date,
-      'تاريخ الاستلام المتوقع': o.expected_date || '-',
       'شروط الدفع': o.payment_terms === 'credit' ? 'آجل' : 'نقدي',
       'تاريخ الاستحقاق': o.due_date || '-',
       'عدد البنود': Array.isArray(o.items) ? o.items.length : 0,
@@ -133,47 +114,24 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'received':
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            <span>تم الاستلام</span>
-          </span>
-        );
-      case 'partially_received':
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-            <Clock className="w-3.5 h-3.5 text-blue-600" />
-            <span>استلام جزئي</span>
-          </span>
-        );
-      case 'cancelled':
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-800 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200">
-            <Ban className="w-3.5 h-3.5 text-red-600" />
-            <span>ملغي</span>
-          </span>
-        );
-      case 'ordered':
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-            <Clock className="w-3.5 h-3.5 text-amber-600" />
-            <span>تم الطلب</span>
-          </span>
-        );
+    if (status === 'cancelled') {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-800 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200">
+          <Ban className="w-3.5 h-3.5 text-red-600" />
+          <span>ملغي</span>
+        </span>
+      );
     }
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+        <span>تم الاستلام</span>
+      </span>
+    );
   };
 
   const getStatusLabel = (status) => {
-    switch (status) {
-      case 'received': return 'تم الاستلام';
-      case 'partially_received': return 'استلام جزئي';
-      case 'cancelled': return 'ملغي';
-      case 'ordered':
-      default: return 'تم الطلب';
-    }
+    return status === 'cancelled' ? 'ملغي' : 'تم الاستلام';
   };
 
   return (
@@ -242,21 +200,12 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStatusFilter('ordered')}
-                  className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
-                    statusFilter === 'ordered' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  تم الطلب ({orders.filter((o) => o.status === 'ordered').length})
-                </button>
-                <button
-                  type="button"
                   onClick={() => setStatusFilter('received')}
                   className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
                     statusFilter === 'received' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  تم الاستلام ({orders.filter((o) => o.status === 'received').length})
+                  تم الاستلام ({orders.filter((o) => o.status !== 'cancelled').length})
                 </button>
                 <button
                   type="button"
@@ -280,8 +229,7 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                 <tr>
                   <th className="p-3">رقم الأمر</th>
                   <th className="p-3">المورد</th>
-                  <th className="p-3">تاريخ الطلب</th>
-                  <th className="p-3">الاستلام المتوقع</th>
+                  <th className="p-3">تاريخ الطلب والاستلام</th>
                   <th className="p-3 text-center">شروط الدفع</th>
                   <th className="p-3 text-center">الاستحقاق / الأقساط</th>
                   <th className="p-3 text-center">البنود</th>
@@ -293,13 +241,13 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan="10" className="p-10 text-center text-slate-500 font-semibold">
+                    <td colSpan="9" className="p-10 text-center text-slate-500 font-semibold">
                       جاري تحميل أوامر التوريد...
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="p-12 text-center">
+                    <td colSpan="9" className="p-12 text-center">
                       <div className="flex flex-col items-center justify-center space-y-3">
                         <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
                           <ShoppingCart className="w-6 h-6" />
@@ -324,7 +272,6 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                     const total = Number(o.total_amount ?? o.grand_total ?? 0);
                     const itemsCount = Array.isArray(o.items) ? o.items.length : 0;
                     const installmentsCount = Array.isArray(o.installments) ? o.installments.length : 0;
-                    const canReceive = o.status !== 'received' && o.status !== 'cancelled';
                     const canCancel = o.status !== 'cancelled';
 
                     return (
@@ -342,10 +289,6 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
 
                         <td className="p-3 text-slate-600 font-mono">
                           {formatDate(o.order_date)}
-                        </td>
-
-                        <td className="p-3 text-slate-600 font-mono">
-                          {o.expected_date ? formatDate(o.expected_date) : '-'}
                         </td>
 
                         <td className="p-3 text-center">
@@ -388,18 +331,6 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
 
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            {canReceive && (
-                              <button
-                                type="button"
-                                onClick={() => setReceiveCandidate(o)}
-                                className="px-2.5 py-1 text-xs text-white bg-emerald-600 hover:bg-emerald-700 rounded-md font-semibold transition-colors inline-flex items-center gap-1 shadow-2xs"
-                                title="استلام كامل البضاعة وتحديث المخزون بنقرة واحدة"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>استلام كامل</span>
-                              </button>
-                            )}
-
                             {canCancel && (
                               <button
                                 type="button"
@@ -407,7 +338,7 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                                   setCancelCandidate(o);
                                   setCancelReason('');
                                 }}
-                                className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded-md font-semibold transition-colors inline-flex items-center gap-1 border border-slate-200"
+                                className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded-md font-semibold transition-colors inline-flex items-center gap-1 border border-slate-200 cursor-pointer"
                                 title="إلغاء أمر التوريد وعكس الحركات إن وجدت"
                               >
                                 <Ban className="w-3.5 h-3.5" />
@@ -419,7 +350,7 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                               <button
                                 type="button"
                                 onClick={() => setDeleteCandidate(o)}
-                                className="px-2 py-1 text-xs text-rose-700 hover:bg-rose-50 rounded-md font-semibold transition-colors inline-flex items-center gap-1 border border-slate-200"
+                                className="px-2 py-1 text-xs text-rose-700 hover:bg-rose-50 rounded-md font-semibold transition-colors inline-flex items-center gap-1 border border-slate-200 cursor-pointer"
                                 title="حذف أمر التوريد وبنوده دون حذف الأصناف"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -437,63 +368,6 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
           </div>
         </div>
       </div>
-
-      {/* Full Goods Receipt Confirmation Modal */}
-      {receiveCandidate && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-6 text-right space-y-4" dir="rtl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-base text-slate-900">
-                  تأكيد استلام كامل البضاعة
-                </h3>
-                <p className="text-xs text-slate-500">
-                  أمر الشراء رقم {receiveCandidate.po_number} - المورد: {receiveCandidate.supplier_name}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-lg text-xs space-y-1.5 border border-slate-200">
-              <p className="text-slate-700 font-semibold">
-                سيتم تنفيذ العمليات التالية في معاملة واحدة فورية:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-slate-600 mr-2">
-                <li>إنشاء إذن استلام مخزني رسمي بكامل الكميات المطلوبة.</li>
-                <li>قيد حركات المخزون وزيادة الرصيد الفعلي لكل صنف.</li>
-                <li>قيد فاتورة المورد وتحديث رصيد حسابه بدفتر الأستاذ.</li>
-                <li>تحديث حالة أمر التوريد إلى &quot;تم الاستلام&quot;.</li>
-              </ul>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setReceiveCandidate(null)}
-                disabled={receiving}
-                className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 text-xs font-semibold"
-              >
-                إلغاء
-              </button>
-              <button
-                type="button"
-                onClick={handleFullReceipt}
-                disabled={receiving}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>{receiving ? 'جاري الاستلام وتحديث المخزون...' : 'تأكيد الاستلام الكامل الآن'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Cancel Order Modal */}
       {cancelCandidate && (

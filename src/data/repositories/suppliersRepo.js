@@ -342,9 +342,7 @@ export const suppliersRepo = {
       }));
     }
 
-    const receiveNow = data.receive_now !== undefined
-      ? Boolean(data.receive_now)
-      : (paymentTerms === 'cash'); // Default checked for cash, unchecked for credit
+    const orderDate = data.order_date || today;
 
     const po = {
       id,
@@ -353,21 +351,21 @@ export const suppliersRepo = {
       payment_terms: paymentTerms,
       installments,
       due_date: installments.length > 0 ? installments[0].due_date : (data.due_date || null),
-      order_date: data.order_date || today,
-      expected_date: expectedDate,
+      order_date: orderDate,
+      expected_date: orderDate, // Order date and receipt date are the same (immediate purchase invoice)
       subtotal: Number(subtotal.toFixed(2)),
       discount_percent: discountPercent,
       discount_value: discountValue,
       additional_expenses: additionalExpenses,
       total_amount: grandTotal,
       grand_total: grandTotal,
-      status: receiveNow ? 'received' : 'ordered',
+      status: 'received', // Always immediate received invoice
       notes: data.notes || '',
       created_by: userId,
       created_at: now,
     };
 
-    // Save in Dexie transaction
+    // Save in one Dexie transaction (all or nothing)
     await db.transaction('rw', [
       db.purchase_orders,
       db.purchase_order_items,
@@ -403,130 +401,151 @@ export const suppliersRepo = {
         }
       }
 
-      // 1) Purchase orders -> Treasury deduction (balance allowed to go negative)
-      let treasury = (data.account_id ? await db.treasury_accounts.get(data.account_id) : null) ||
-                     (await db.treasury_accounts.where('is_main').equals(1).first()) ||
-                     (await db.treasury_accounts.where('account_type').equals('treasury').first()) ||
-                     (await db.treasury_accounts.toCollection().first());
-      if (!treasury) {
-        treasury = {
-          id: 'acc-main',
-          name: 'الخزينة الرئيسية',
-          account_type: 'treasury',
-          outlet_id: null,
-          is_main: 1,
-          current_balance: 0,
-          created_at: now
-        };
-        await db.treasury_accounts.put(treasury);
-      }
-
-      const currentBal = Number(treasury.current_balance) || 0;
-      const newBal = Number((currentBal - grandTotal).toFixed(2));
-      // Balance is allowed to go negative: update treasury balance unconditionally
-      await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
-
-      // Log treasury transaction linked to the purchase order
-      await db.cash_transactions.add({
-        id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        tx_number: `TXN-${Date.now().toString().slice(-4)}`,
-        account_id: treasury.id,
-        tx_type: 'outflow',
-        category: 'purchase_orders',
-        amount: grandTotal,
-        balance_after: newBal,
-        reference_type: 'purchase_orders',
-        reference_id: id,
-        description: `صرف أمر شراء ${poNumber} للمورد`,
-        created_by: userId,
-        created_at: now
-      });
-
-      // If "تم الاستلام الآن" is checked: automatically create full goods receipt in this same transaction!
-      if (receiveNow) {
-        const grnId = `grn-${Date.now()}`;
-        const grnNumber = `GRN-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
-        const grn = {
-          id: grnId,
-          grn_number: grnNumber,
-          po_id: id,
-          supplier_id: data.supplier_id,
-          receipt_date: po.order_date,
-          receiver_name: 'استلام فوري مع أمر الشراء',
-          notes: po.notes || 'استلام كامل تلقائي عند إنشاء أمر التوريد',
-          created_by: userId,
-          created_at: now
-        };
-        await db.goods_receipts.add(grn);
-
-        for (let idx = 0; idx < items.length; idx++) {
-          const line = items[idx];
-          await db.goods_receipt_items.add({
-            id: `gri-${Date.now()}-${idx}`,
-            grn_id: grnId,
-            material_id: line.material_id,
-            quantity_received: line.quantity_ordered,
-            unit_cost: line.unit_price,
-            total_cost: line.total_price
-          });
-
-          // Stock movement row
-          await db.stock_movements.add({
-            id: `sm-${Date.now()}-${idx}`,
-            item_id: line.material_id,
-            material_id: line.material_id,
-            location_id: data.location_id || 'loc-main',
-            movement_type: 'purchase_receipt',
-            direction: 'in',
-            quantity: line.quantity_ordered,
-            quantity_change: line.quantity_ordered,
-            unit_cost: line.unit_price,
-            document_id: grnId,
-            reference_type: 'PURCHASE_RECEIPT',
-            reference_id: id,
-            date: po.order_date,
-            movement_date: po.order_date,
-            notes: `وارد مشتريات إذن استلام ${grnNumber} (أمر توريد ${poNumber})`,
-            created_by: userId,
+      // Cash purchase: deduct final net total from selected treasury (balance allowed to go negative)
+      if (paymentTerms === 'cash') {
+        let treasury = (data.account_id ? await db.treasury_accounts.get(data.account_id) : null) ||
+                       (await db.treasury_accounts.where('is_main').equals(1).first()) ||
+                       (await db.treasury_accounts.where('account_type').equals('treasury').first()) ||
+                       (await db.treasury_accounts.toCollection().first());
+        if (!treasury) {
+          treasury = {
+            id: 'acc-main',
+            name: 'الخزينة الرئيسية',
+            account_type: 'treasury',
+            outlet_id: null,
+            is_main: 1,
+            current_balance: 0,
             created_at: now
-          });
-
-          // Update cached item & material stock
-          const itm = await db.items.get(line.material_id);
-          if (itm) {
-            const newStock = Number(((Number(itm.current_stock) || 0) + line.quantity_ordered).toFixed(3));
-            await db.items.update(itm.id, { current_stock: newStock });
-          }
-          const mat = await db.materials.get(line.material_id);
-          if (mat) {
-            const newStock = Number(((Number(mat.current_stock) || 0) + line.quantity_ordered).toFixed(3));
-            await db.materials.update(mat.id, { current_stock: newStock });
-          }
+          };
+          await db.treasury_accounts.put(treasury);
         }
 
-        // Create supplier invoice so supplier balance updates only when receipt exists
-        const sinvId = `sinv-${Date.now()}`;
-        const sinvNumber = `INV-SUP-${poNumber.replace(/^PO-/, '')}`;
-        await db.supplier_invoices.add({
-          id: sinvId,
-          invoice_number: sinvNumber,
-          supplier_id: data.supplier_id,
-          grn_id: grnId,
-          po_id: id,
-          invoice_date: po.order_date,
-          due_date: po.due_date,
-          payment_terms: paymentTerms,
-          installments: po.installments,
-          subtotal: po.subtotal,
-          tax_amount: 0,
-          total_amount: po.total_amount,
-          paid_amount: paymentTerms === 'cash' ? po.total_amount : 0,
-          status: paymentTerms === 'cash' ? 'paid' : 'unpaid',
-          notes: `فاتورة استلام أمر الشراء ${poNumber}`,
+        const currentBal = Number(treasury.current_balance) || 0;
+        const newBal = Number((currentBal - grandTotal).toFixed(2));
+        // Balance is allowed to go negative: update treasury balance unconditionally
+        await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
+
+        // Log treasury transaction linked to the purchase order
+        await db.cash_transactions.add({
+          id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+          account_id: treasury.id,
+          tx_type: 'outflow',
+          category: 'purchase_orders',
+          amount: grandTotal,
+          balance_after: newBal,
+          reference_type: 'purchase_orders',
+          reference_id: id,
+          description: `صرف فاتورة شراء ${poNumber} للمورد`,
           created_by: userId,
           created_at: now
         });
       }
+
+      // Immediate Goods Receipt & Stock Increase in the same transaction
+      const grnId = `grn-${Date.now()}`;
+      const grnNumber = `GRN-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+      const grn = {
+        id: grnId,
+        grn_number: grnNumber,
+        po_id: id,
+        supplier_id: data.supplier_id,
+        receipt_date: po.order_date,
+        receiver_name: 'استلام فوري مع فاتورة الشراء',
+        notes: po.notes || 'استلام فوري تلقائي عند اعتماد فاتورة الشراء',
+        created_by: userId,
+        created_at: now
+      };
+      await db.goods_receipts.add(grn);
+
+      for (let idx = 0; idx < items.length; idx++) {
+        const line = items[idx];
+        await db.goods_receipt_items.add({
+          id: `gri-${Date.now()}-${idx}`,
+          grn_id: grnId,
+          material_id: line.material_id,
+          quantity_received: line.quantity_ordered,
+          unit_cost: line.unit_price,
+          total_cost: line.total_price
+        });
+
+        // Stock movement row (direction: 'in')
+        await db.stock_movements.add({
+          id: `sm-${Date.now()}-${idx}`,
+          item_id: line.material_id,
+          material_id: line.material_id,
+          location_id: data.location_id || 'loc-main',
+          movement_type: 'purchase_receipt',
+          direction: 'in',
+          quantity: line.quantity_ordered,
+          quantity_change: line.quantity_ordered,
+          unit_cost: line.unit_price,
+          document_id: grnId,
+          reference_type: 'PURCHASE_RECEIPT',
+          reference_id: id,
+          date: po.order_date,
+          movement_date: po.order_date,
+          notes: `وارد مشتريات إذن استلام ${grnNumber} (فاتورة شراء ${poNumber})`,
+          created_by: userId,
+          created_at: now
+        });
+
+        // Update cached item & material stock
+        const itm = await db.items.get(line.material_id);
+        if (itm) {
+          const newStock = Number(((Number(itm.current_stock) || 0) + line.quantity_ordered).toFixed(3));
+          await db.items.update(itm.id, { current_stock: newStock });
+        } else {
+          await db.items.put({
+            id: line.material_id,
+            code: line.material_id,
+            name: line.material_id,
+            item_type: 'raw_material',
+            unit: 'وحدة',
+            cost_price: line.unit_price,
+            current_stock: line.quantity_ordered,
+            created_at: now
+          });
+        }
+        const mat = await db.materials.get(line.material_id);
+        if (mat) {
+          const newStock = Number(((Number(mat.current_stock) || 0) + line.quantity_ordered).toFixed(3));
+          await db.materials.update(mat.id, { current_stock: newStock });
+        } else {
+          await db.materials.put({
+            id: line.material_id,
+            code: line.material_id,
+            name: line.material_id,
+            unit: 'وحدة',
+            cost_price: line.unit_price,
+            current_stock: line.quantity_ordered,
+            created_at: now
+          });
+        }
+      }
+
+      // Create supplier invoice: paid for cash, unpaid for credit (adds to supplier payable)
+      const sinvId = `sinv-${Date.now()}`;
+      const sinvNumber = `INV-SUP-${poNumber.replace(/^PO-/, '')}`;
+      await db.supplier_invoices.add({
+        id: sinvId,
+        invoice_number: sinvNumber,
+        supplier_id: data.supplier_id,
+        grn_id: grnId,
+        po_id: id,
+        invoice_date: po.order_date,
+        due_date: po.due_date,
+        payment_terms: paymentTerms,
+        installments: po.installments,
+        subtotal: po.subtotal,
+        tax_amount: 0,
+        total_amount: po.total_amount,
+        paid_amount: paymentTerms === 'cash' ? po.total_amount : 0,
+        status: paymentTerms === 'cash' ? 'paid' : 'unpaid',
+        notes: `فاتورة استلام أمر الشراء ${poNumber}`,
+        created_by: userId,
+        created_at: now
+      });
     });
 
     await auditRepo.log(userId, 'CREATE_PURCHASE_ORDER', 'purchase_orders', id, null, po);
@@ -624,6 +643,21 @@ export const suppliersRepo = {
             quantity: Number(poi.quantity_ordered || poi.quantity || 0),
             unit_cost: Number(poi.unit_price || poi.unit_cost || 0)
           });
+        }
+      }
+
+      // Pre-check stock: Block cancelling when it would make stock negative
+      for (const line of itemsToReverse) {
+        if (line.quantity > 0 && line.material_id) {
+          const itm = await db.items.get(line.material_id);
+          const mat = await db.materials.get(line.material_id);
+          const currentStock = Number(itm?.current_stock ?? mat?.current_stock) || 0;
+          const itemName = itm?.name || mat?.name || line.material_id;
+          if (currentStock < line.quantity) {
+            throw new Error(
+              `لا يمكن إلغاء فاتورة المورد: الكمية المتوفرة بالمخزن من الصنف (${itemName}) هي (${currentStock})، والكمية المراد استرجاعها هي (${line.quantity}). إلغاء الفاتورة سيؤدي إلى رصيد مخزني سالب.`
+            );
+          }
         }
       }
 
@@ -903,6 +937,25 @@ export const suppliersRepo = {
       // If was received, reverse stock movements
       if (po.status === 'received' || po.status === 'partially_received') {
         const grns = await db.goods_receipts.where('po_id').equals(poId).toArray();
+
+        // 1. Pre-check stock: Block cancelling when it would make stock negative!
+        for (const grn of grns) {
+          const grnItems = await db.goods_receipt_items.where('grn_id').equals(grn.id).toArray();
+          for (const itm of grnItems) {
+            const qty = Number(itm.quantity_received) || 0;
+              const itemMaster = await db.items.get(itm.material_id);
+              const matRecord = await db.materials.get(itm.material_id);
+              const currentStock = Number(itemMaster?.current_stock ?? matRecord?.current_stock) || 0;
+              const itemName = itemMaster?.name || matRecord?.name || itm.material_id;
+              if (currentStock < qty) {
+                throw new Error(
+                  `لا يمكن إلغاء أمر التوريد: الكمية المتوفرة بالمخزن من الصنف (${itemName}) هي (${currentStock})، والكمية المراد استرجاعها هي (${qty}). إلغاء الأمر سيؤدي إلى رصيد مخزني سالب.`
+                );
+              }
+          }
+        }
+
+        // 2. Perform reversals
         for (const grn of grns) {
           const grnItems = await db.goods_receipt_items.where('grn_id').equals(grn.id).toArray();
           for (let idx = 0; idx < grnItems.length; idx++) {

@@ -208,12 +208,12 @@ export const itemsRepo = {
     }
 
     if (maxNum === 0) {
-      maxNum = 1000;
-      padLen = 4;
+      return prefix ? `${prefix}-1000` : '1000';
     }
 
-    const nextNum = maxNum + 1;
-    const formattedNum = padLen > 0 ? String(nextNum).padStart(padLen, '0') : String(nextNum);
+    const nextNum = prefix ? (maxNum + 1) : Math.max(1000, maxNum + 1);
+    const finalPadLen = Math.max(padLen, 4);
+    const formattedNum = String(nextNum).padStart(finalPadLen, '0');
     return prefix ? `${prefix}-${formattedNum}` : formattedNum;
   },
 
@@ -517,20 +517,30 @@ export const itemsRepo = {
     }
 
     const movements = await db.stock_movements.toArray();
-    const operationalMovements = movements.filter(m => (m.item_id === id || m.material_id === id) && m.movement_type !== 'opening_balance');
-    if (operationalMovements.length > 0) {
-      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${operationalMovements.length}) حركة مخزنية تشغيلية مسجلة عليه.`);
+    const itemMovs = movements.filter(m => String(m.item_id || m.material_id) === String(id));
+    if (itemMovs.length > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${itemMovs.length}) حركة مخزنية مسجلة عليه.`);
     }
 
-    const itemMovs = movements.filter(m => m.item_id === id || m.material_id === id);
+    const grCount = await db.goods_receipt_items.where('material_id').equals(id).count().catch(() => 0);
+    if (grCount > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${grCount}) بند في أذون استلام بضاعة مرتبطة به.`);
+    }
 
-    await db.transaction('rw', [db.items, db.materials, db.products, db.stock_movements], async () => {
+    const pmuCount = await db.production_material_usage.where('raw_material_id').equals(id).count().catch(() => 0);
+    if (pmuCount > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لدخوله في استهلاك خامات أوامر إنتاج.`);
+    }
+
+    const mfgProdCount = await db.production_orders.where('product_id').equals(id).count().catch(() => 0);
+    if (mfgProdCount > 0) {
+      throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود أوامر تصنيع مرتبطة به.`);
+    }
+
+    await db.transaction('rw', [db.items, db.materials, db.products], async () => {
       await db.items.delete(id);
       await db.materials.delete(id).catch(() => {});
       await db.products.delete(id).catch(() => {});
-      for (const m of itemMovs) {
-        await db.stock_movements.delete(m.id);
-      }
     });
 
     await auditRepo.log(userId, 'DELETE_ITEM', 'items', id, current, null);
