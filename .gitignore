@@ -33,6 +33,10 @@ playwright-report/
 
 # Electron Build Artifacts
 release/
+out/
 dist-electron/
 builder-debug.yml
 *.blockmap
+*.exe
+*.rar
+*.zip

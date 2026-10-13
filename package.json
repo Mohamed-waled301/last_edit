@@ -1,28 +1,25 @@
 {
-  "name": "workshop-erp",
+  "name": "apex-apparel-erp",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "نظام تخطيط موارد المؤسسات المتكامل - Workshop ERP Desktop Application",
-  "author": "Workshop ERP",
-  "main": "electron/main.cjs",
+  "description": "Apex Apparel ERP - نظام تخطيط موارد المؤسسات المتكامل",
+  "author": "Apex Apparel ERP",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "migrate": "node scripts/migrate.js",
+    "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:3000 && electron . --dev\"",
+    "electron:start": "electron .",
+    "electron:build": "npm run build && electron-builder --win --x64",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "lint": "oxlint",
-    "preview": "vite preview",
-    "electron:dev": "concurrently -k \"npm run dev\" \"wait-on tcp:3000 && electron . --dev\"",
-    "electron:start": "electron .",
-    "build:exe": "vite build && electron-builder --win --x64 && node scripts/copy-release.js",
-    "build:exe:portable": "vite build && electron-builder --win portable --x64 && node scripts/copy-release.js",
-    "build:exe:installer": "vite build && electron-builder --win nsis --x64 && node scripts/copy-release.js",
-    "build:exe:dir": "vite build && electron-builder --win --dir --x64 && node scripts/copy-release.js"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "mysql2": "^3.24.5"
+    "@fontsource/cairo": "^5.2.5",
+    "@fontsource/tajawal": "^5.2.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
@@ -33,7 +30,7 @@
     "concurrently": "^10.0.6",
     "cross-env": "^10.1.0",
     "dexie": "^4.4.6",
-    "electron": "33.4.11",
+    "electron": "^31.0.0",
     "electron-builder": "^26.15.3",
     "fake-indexeddb": "^6.2.5",
     "lucide-react": "^1.51.0",
@@ -47,22 +44,23 @@
     "xlsx": "^0.18.5"
   },
   "build": {
-    "appId": "com.workshoperp.app",
-    "productName": "Workshop ERP",
-    "copyright": "Copyright © 2026 Workshop ERP",
+    "appId": "com.apexapparelerp.app",
+    "productName": "Apex Apparel ERP",
+    "copyright": "Copyright © 2026 Apex Apparel ERP",
     "npmRebuild": false,
     "directories": {
-      "output": "C:/Users/kaled/erp-release"
+      "output": "release"
     },
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "api/**/*",
-      "public/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.map",
+      "!**/*.test.*",
+      "!**/*.spec.*"
     ],
     "win": {
-      "icon": "public/icon.ico",
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -84,7 +82,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Workshop ERP"
+      "shortcutName": "نظام Apex Apparel ERP",
+      "artifactName": "Apex-Apparel-ERP-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "Apex-Apparel-ERP-Portable-${version}.exe"
     }
   }
 }
