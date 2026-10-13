@@ -2,6 +2,7 @@ const { app, BrowserWindow, shell, ipcMain, Menu, session } = require('electron'
 const path = require('path');
 const fs = require('fs');
 const { LicenseManager } = require('./licenseManager');
+const { LocalDatabaseManager } = require('./localDatabase');
 
 // 1. Single Instance Lock
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -14,6 +15,7 @@ let mainWindow = null;
 let isQuitting = false;
 let backupFinished = false;
 let licenseManager = null;
+let localDatabaseManager = null;
 
 const isDev =
   process.env.NODE_ENV === 'development' ||
@@ -92,6 +94,15 @@ async function createWindow() {
     try {
       // Trigger backup in renderer through IPC
       mainWindow.webContents.send('app:trigger-auto-backup');
+
+      // Also create an atomic SQLite backup on app close
+      if (localDatabaseManager) {
+        try {
+          await localDatabaseManager.autoBackupOnClose();
+        } catch (sqliteBackupErr) {
+          console.warn('[AutoBackup SQLite] Close backup warning:', sqliteBackupErr);
+        }
+      }
 
       // Allow maximum 2.5s for renderer to complete backup; NEVER block closing if it fails
       await Promise.race([
@@ -257,6 +268,69 @@ ipcMain.handle('backup:save-auto', async (_event, backupData) => {
   }
 });
 
+// 3. Local SQLite Database IPC Handlers
+function getLocalDb() {
+  if (!localDatabaseManager) {
+    localDatabaseManager = new LocalDatabaseManager(app.getPath('userData'));
+  }
+  return localDatabaseManager;
+}
+
+ipcMain.handle('db:query', (_event, sql, params) => {
+  return getLocalDb().query(sql, params);
+});
+
+ipcMain.handle('db:get', (_event, sql, params) => {
+  return getLocalDb().get(sql, params);
+});
+
+ipcMain.handle('db:run', (_event, sql, params) => {
+  return getLocalDb().run(sql, params);
+});
+
+ipcMain.handle('db:exec', (_event, sql) => {
+  return getLocalDb().exec(sql);
+});
+
+ipcMain.handle('db:transaction', (_event, operations) => {
+  return getLocalDb().executeTransaction(operations);
+});
+
+ipcMain.handle('db:check-integrity', () => {
+  return getLocalDb().checkIntegrity();
+});
+
+ipcMain.handle('db:backup', async (_event, targetPath) => {
+  return getLocalDb().backupDatabase(targetPath);
+});
+
+ipcMain.handle('db:restore', async (_event, sourcePath) => {
+  return getLocalDb().restoreDatabase(sourcePath);
+});
+
+ipcMain.handle('db:choose-backup-location', async () => {
+  const { dialog } = require('electron');
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const defaultName = `apex-erp-backup-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.db`;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'تحديد مسار حفظ النسخة الاحتياطية لقاعدة البيانات',
+    defaultPath: defaultName,
+    filters: [{ name: 'Apex ERP Database Backup (*.db)', extensions: ['db'] }],
+  });
+  return result.canceled ? null : result.filePath;
+});
+
+ipcMain.handle('db:choose-restore-file', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'تحديد ملف النسخة الاحتياطية للاسترجاع',
+    properties: ['openFile'],
+    filters: [{ name: 'Apex ERP Database Backup (*.db, *.sqlite)', extensions: ['db', 'sqlite'] }],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
 ipcMain.on('window:minimize', () => mainWindow?.minimize());
 ipcMain.on('window:maximize', () => {
   if (!mainWindow) return;
@@ -271,7 +345,21 @@ ipcMain.on('window:close', () => mainWindow?.close());
 // Lifecycle
 app.whenReady().then(async () => {
   licenseManager = new LicenseManager(app.getPath('userData'));
+  localDatabaseManager = new LocalDatabaseManager(app.getPath('userData'));
+
+  // Run startup integrity check
+  const integrity = localDatabaseManager.checkIntegrity();
+  if (!integrity.ok) {
+    console.error('[Startup DB Integrity Warning]:', integrity.details);
+  }
+
   await createWindow();
+
+  if (!integrity.ok && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      mainWindow.webContents.send('db:integrity-warning', integrity);
+    });
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

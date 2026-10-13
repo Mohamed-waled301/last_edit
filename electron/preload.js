@@ -24,5 +24,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('license:status-changed', handler);
     return () => ipcRenderer.removeListener('license:status-changed', handler);
   },
+
+  // Local SQLite Database IPC
+  db: {
+    query: (sql, params) => ipcRenderer.invoke('db:query', sql, params),
+    get: (sql, params) => ipcRenderer.invoke('db:get', sql, params),
+    run: (sql, params) => ipcRenderer.invoke('db:run', sql, params),
+    exec: (sql) => ipcRenderer.invoke('db:exec', sql),
+    transaction: (operations) => ipcRenderer.invoke('db:transaction', operations),
+    checkIntegrity: () => ipcRenderer.invoke('db:check-integrity'),
+    backup: (targetPath) => ipcRenderer.invoke('db:backup', targetPath),
+    restore: (sourcePath) => ipcRenderer.invoke('db:restore', sourcePath),
+    chooseBackupLocation: () => ipcRenderer.invoke('db:choose-backup-location'),
+    chooseRestoreFile: () => ipcRenderer.invoke('db:choose-restore-file'),
+    onIntegrityWarning: (callback) => {
+      const handler = (_event, info) => callback(info);
+      ipcRenderer.on('db:integrity-warning', handler);
+      return () => ipcRenderer.removeListener('db:integrity-warning', handler);
+    },
+  },
 });
 
