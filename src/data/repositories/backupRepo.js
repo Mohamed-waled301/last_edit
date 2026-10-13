@@ -5,9 +5,9 @@ import auditRepo from './auditRepo';
 
 export const backupRepo = {
   /**
-   * 1. Export ALL Dexie tables into a single JSON file and trigger browser download.
+   * In-memory JSON backup payload object for all Dexie tables
    */
-  async exportAllData() {
+  async getBackupPayload() {
     const tableNames = db.tables.map(t => t.name);
     const backupData = {};
 
@@ -15,13 +15,20 @@ export const backupRepo = {
       backupData[name] = await db.table(name).toArray();
     }
 
-    const payload = {
+    return {
       app: 'ClothingFactoryERP',
       version: 4,
       exportedAt: new Date().toISOString(),
       tablesCount: tableNames.length,
       data: backupData,
     };
+  },
+
+  /**
+   * 1. Export ALL Dexie tables into a single JSON file and trigger browser download.
+   */
+  async exportAllData() {
+    const payload = await this.getBackupPayload();
 
     const jsonString = JSON.stringify(payload, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });

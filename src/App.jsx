@@ -155,6 +155,23 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  // Electron Auto-Backup safeguard listener on app close
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.electronAPI?.onTriggerAutoBackup) {
+      const cleanup = window.electronAPI.onTriggerAutoBackup(async () => {
+        try {
+          const payload = await backupRepo.getBackupPayload();
+          await window.electronAPI.saveAutoBackup(payload);
+        } catch (err) {
+          console.warn('[AutoBackup] Renderer backup collection failed:', err);
+        } finally {
+          window.electronAPI.notifyAutoBackupCompleted();
+        }
+      });
+      return cleanup;
+    }
+  }, []);
+
   const navigateTo = (path) => {
     const formatted = path.startsWith('#') ? path : `#/${path.replace(/^\//, '')}`;
     window.location.hash = formatted;
