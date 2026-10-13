@@ -149,75 +149,68 @@
 
 ---
 
-## 🗄️ إعداد قاعدة البيانات السحابية (Hostinger MySQL Setup)
+---
 
-النظام يدعم الربط المباشر بقاعدة بيانات **Hostinger MySQL** أو أي خادم MySQL سحابي:
+## 🗄️ قاعدة البيانات المحلية الآمنة (Local SQLite Database Architecture)
 
-### 1. تكوين ملف البيئة (`.env` أو `env`)
-قم بنسخ ملف `.env.example` إلى `.env` واملأ بيانات الاتصال:
+النظام يعمل محلياً بنسبة 100% كـ **تطبيق مكتبي مستقل (Windows Desktop Application)** دون الحاجة إلى اتصال بالإنترنت أو خوادم سحابية خارجية:
 
-```env
-# Hostinger MySQL Database Credentials
-MYSQL_HOST=srv000.hstgr.io # أو عنوان IP الخاص بالخادم
-MYSQL_PORT=3306
-MYSQL_USER=u123456789_erp_user
-MYSQL_PASSWORD=YourDatabasePassword
-MYSQL_DATABASE=u123456789_erp_db
-MYSQL_SSL=false
-```
+### 1. مكان تخزين ملف قاعدة البيانات (Database Storage Location)
+- يتم تخزين قاعدة البيانات المحلية بالكامل في ملف SQLite وحيد:
+  ```
+  %APPDATA%\apex-apparel-erp\apex-erp.db
+  ```
+  (في بيئة Windows: `C:\Users\<Username>\AppData\Roaming\apex-apparel-erp\apex-erp.db`).
+- تعمل قاعدة البيانات بنمط **WAL Mode (`PRAGMA journal_mode = WAL`)** لتوفير أعلى سرعة في المعاملات المتزامنة وحماية ضد انقطاع الطاقة.
+- تفعيل كامل للقيود والعلاقات (`PRAGMA foreign_keys = ON`) والتزامن الآمن (`PRAGMA synchronous = NORMAL`).
+- يتم الوصول إلى قاعدة البيانات حصرياً من عملية Electron الرئيسية (`electron/localDatabase.js`) مع عزل تام وتواصل عبر Preload IPC API لضمان أمان البيانات.
 
-> **ملاحظة أمنية**: ملفات `.env` و `env` مدرجة في `.gitignore` لمنع تسريب بيانات الاعتماد وكلمات المرور السرية إلى المستودع العام.
+### 2. النسخ الاحتياطي والاسترجاع (Backup & Restore Safety)
+- **زر "نسخة احتياطية"**: متاح في شاشة النسخ الاحتياطي والإعدادات، يقوم بنسخ قاعدة البيانات بأمان تام عبر SQLite Backup API إلى ملف مؤرخ يختاره المستخدم.
+- **النسخ التلقائي عند الإغلاق**: يقوم التطبيق آلياً بإنشاء نسخة احتياطية مؤرخة عند إغلاق التطبيق في مجلد `%APPDATA%\apex-apparel-erp\backups\` مع الاحتفاظ بآخر 10 نسخ تلقائية فقط لحفظ المساحة.
+- **زر "استرجاع نسخة"**: يتيح استرجاع قاعدة البيانات مع إظهار رسالة تحذير وإنشاء نسخة أمان تلقائية قبل الاسترجاع (`apex-erp.pre-restore-<timestamp>.db`).
+- **فحص السلامة الآلي**: يتم تنفيذ فحص سلامة تلقائي (`PRAGMA integrity_check`) عند إقلاع التطبيق، وفي حال وجود أي خلل يتم إظهار تنبيه فوري باللغة العربية مع إمكانية استرجاع أحدث نسخة سليمة.
 
-### 2. تنفيذ هجرة المخطط وتغذية البيانات (Migration & Seeding)
-لتنفيذ مخطط قاعدة البيانات (`schema.sql`) وإنشاء كافة الجداول الـ 41 والتغذية الأولية النظيفة (`seed.sql`):
-
+### 3. أداة ترحيل البيانات لمرة واحدة (Migration Tool)
+لترحيل بياناتك السابقة بأمان كامل وبدون أي فقدان للبيانات:
 ```bash
-npm run migrate
+# تنفيذ الترحيل من ملف النسخة الاحتياطية المحلي أو اتصال Hostinger
+npm run db:migrate
+
+# أو مع تمرير مسار ملف محدد:
+node tools/migrate-from-hostinger/migrate.js --source=backups/hostinger_export_2026-10-13.json
 ```
+
+للتحقق من سلامة البيانات ومطابقة الأرصدة وعدد السجلات والمفاتيح الأجنبية:
+```bash
+npm run db:verify
+```
+
+### 4. خطة التراجع والأمان (Rollback Plan)
+- **قاعدة بيانات Hostinger تظل كما هي دون أي تغيير**: أداة الترحيل تقرأ البيانات فقط في وضع القراءة الصارم (Read-Only) ولا تقوم بحذف أو تعديل أي سجلات على Hostinger.
+- يتم حفظ ملف تصدير مؤرخ احتياطي في مجلد `backups/hostinger_export_<date>.json` قبل تنفيذ أي خطوة.
+- يوصى بتدوير (Rotate) كلمة مرور قاعدة بيانات Hostinger ومفاتيح الـ API فور الانتهاء من الترحيل.
 
 ---
 
-## 🚀 التشغيل المحلي (Local Development)
+## 🚀 التشغيل المحلي وبناء التطبيق (Run & Build)
 
 ```bash
-# 1. استنساخ المستودع
-git clone https://github.com/Mohamed-waled301/ERP-system.git
-cd ERP-system
-
-# 2. تثبيت الحزم البرمجية
+# 1. تثبيت الحزم البرمجية
 npm install
 
-# 3. إعداد ملف البيئة وترحيل قاعدة البيانات
-# قم بإنشاء ملف .env ببيانات MySQL الخاصة بك ثم نفّذ:
-npm run migrate
+# 2. تشغيل التطبيق المكتبي في وضع التطوير
+npm run electron:dev
 
-# 4. تشغيل خادم التطوير مع الـ API المحلي
-npm run dev
+# 3. تشغيل التطبيق المكتبي العادي
+npm run electron:start
 
-# 5. تشغيل اختبارات النظام الشاملة (Vitest)
+# 4. تشغيل اختبارات النظام الشاملة (150 اختباراً بنسبة نجاح 100%)
 npm test
 
-# 6. بناء حزمة الإنتاج
-npm run build
+# 5. بناء حزمة تطبيق سطح المكتب لنظام Windows (.exe)
+npm run electron:build
 ```
-
----
-
-## 🌐 النشر على منصات الاستضافة (Deployment)
-
-النظام مجهز للنشر المباشر على منصة **Vercel**:
-
-1. **متغيرات البيئة على Vercel (Environment Variables)**:
-   أضف المتغيرات التالية داخل إعدادات المشروع في لوحة تحكم Vercel (`Project Settings -> Environment Variables`):
-   - `MYSQL_HOST`
-   - `MYSQL_PORT`
-   - `MYSQL_USER`
-   - `MYSQL_PASSWORD`
-   - `MYSQL_DATABASE`
-   - `MYSQL_SSL` (القيمة: `false` أو `true`)
-
-2. **ملف `vercel.json`**:
-   مدمج في المشروع لإعادة توجيه مسارات الـ API إلى الدالة السحابية `/api/index.js` وباقي المسارات إلى الـ Frontend SPA.
 
 ```bash
 # البناء والتحقق
