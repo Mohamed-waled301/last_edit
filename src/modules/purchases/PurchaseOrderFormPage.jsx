@@ -590,7 +590,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                 <option value="">-- اختر المورد المطلوب --</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.code || s.id})
+                    {s.name}
                   </option>
                 ))}
               </select>
