@@ -40,3 +40,7 @@ builder-debug.yml
 *.exe
 *.rar
 *.zip
+
+# Licensing Security - Never commit private keys
+tools/license-generator/keys/
+*.pem

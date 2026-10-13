@@ -1,6 +1,7 @@
 const { app, BrowserWindow, shell, ipcMain, Menu, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { LicenseManager } = require('./licenseManager');
 
 // 1. Single Instance Lock
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -12,6 +13,7 @@ if (!gotSingleInstanceLock) {
 let mainWindow = null;
 let isQuitting = false;
 let backupFinished = false;
+let licenseManager = null;
 
 const isDev =
   process.env.NODE_ENV === 'development' ||
@@ -128,6 +130,22 @@ async function createWindow() {
     });
   });
 
+  // Disable DevTools and inspecting shortcuts in production builds
+  if (!isDev) {
+    mainWindow.webContents.on('devtools-opened', () => {
+      mainWindow.webContents.closeDevTools();
+    });
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (
+        (input.control && input.shift && (input.key.toLowerCase() === 'i' || input.key.toLowerCase() === 'j')) ||
+        (input.control && input.key.toLowerCase() === 'r') ||
+        input.key === 'F12'
+      ) {
+        event.preventDefault();
+      }
+    });
+  }
+
   if (isDev) {
     const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:3000';
     console.log(`[Electron] Loading Vite Dev Server: ${devUrl}`);
@@ -149,6 +167,41 @@ app.on('second-instance', () => {
 
 // Register IPC handlers
 ipcMain.handle('app:version', () => app.getVersion());
+
+// 2. Offline Single-Device Licensing IPC Handlers
+ipcMain.handle('license:get-machine-code', () => {
+  if (!licenseManager) {
+    licenseManager = new LicenseManager(app.getPath('userData'));
+  }
+  return licenseManager.getMachineCode();
+});
+
+ipcMain.handle('license:get-status', () => {
+  if (!licenseManager) {
+    licenseManager = new LicenseManager(app.getPath('userData'));
+  }
+  return licenseManager.getStatus();
+});
+
+ipcMain.handle('license:activate', (_event, licenseInput) => {
+  if (!licenseManager) {
+    licenseManager = new LicenseManager(app.getPath('userData'));
+  }
+  const result = licenseManager.activate(licenseInput);
+  if (result.success && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('license:status-changed', licenseManager.getStatus());
+  }
+  return result;
+});
+
+// Re-verify signature and machine hash every 24 hours while running
+const RECHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+setInterval(() => {
+  if (licenseManager && mainWindow && !mainWindow.isDestroyed()) {
+    const status = licenseManager.getStatus();
+    mainWindow.webContents.send('license:status-changed', status);
+  }
+}, RECHECK_INTERVAL_MS);
 
 ipcMain.handle('backup:save-auto', async (_event, backupData) => {
   try {
@@ -217,6 +270,7 @@ ipcMain.on('window:close', () => mainWindow?.close());
 
 // Lifecycle
 app.whenReady().then(async () => {
+  licenseManager = new LicenseManager(app.getPath('userData'));
   await createWindow();
 
   app.on('activate', () => {
@@ -231,3 +285,4 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
