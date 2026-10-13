@@ -30,3 +30,9 @@ env
 # Testing
 test-results/
 playwright-report/
+
+# Electron Build Artifacts
+release/
+dist-electron/
+builder-debug.yml
+*.blockmap

@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "description": "نظام تخطيط موارد المؤسسات المتكامل - Workshop ERP Desktop Application",
+  "author": "Workshop ERP",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -10,26 +13,78 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:dev": "concurrently -k \"npm run dev\" \"wait-on tcp:3000 && electron . --dev\"",
+    "electron:start": "electron .",
+    "build:exe": "vite build && electron-builder --win --x64 && node scripts/copy-release.js",
+    "build:exe:portable": "vite build && electron-builder --win portable --x64 && node scripts/copy-release.js",
+    "build:exe:installer": "vite build && electron-builder --win nsis --x64 && node scripts/copy-release.js",
+    "build:exe:dir": "vite build && electron-builder --win --dir --x64 && node scripts/copy-release.js"
   },
   "dependencies": {
-    "@tailwindcss/vite": "^4.3.3",
-    "dexie": "^4.4.6",
-    "lucide-react": "^1.51.0",
-    "mysql2": "^3.24.5",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "tailwindcss": "^4.3.3",
-    "xlsx": "^0.18.5"
+    "mysql2": "^3.24.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "dexie": "^4.4.6",
+    "electron": "33.4.11",
+    "electron-builder": "^26.15.3",
     "fake-indexeddb": "^6.2.5",
+    "lucide-react": "^1.51.0",
     "oxlint": "^1.81.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.3",
     "vite": "^8.3.0",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wait-on": "^9.5.1",
+    "xlsx": "^0.18.5"
+  },
+  "build": {
+    "appId": "com.workshoperp.app",
+    "productName": "Workshop ERP",
+    "copyright": "Copyright © 2026 Workshop ERP",
+    "npmRebuild": false,
+    "directories": {
+      "output": "C:/Users/kaled/erp-release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "api/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "public/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Workshop ERP"
+    }
   }
 }
