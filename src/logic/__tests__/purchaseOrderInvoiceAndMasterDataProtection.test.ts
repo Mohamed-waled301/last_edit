@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
-import db from '../../data/db';
+import rawDb from '../../data/db';
+const db = rawDb as any;
 import { suppliersRepo } from '../../data/repositories/suppliersRepo';
 import { itemsRepo } from '../../data/repositories/itemsRepo';
 import { partiesRepo } from '../../data/repositories/partiesRepo';

@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
-import db from '../../data/db';
+import rawDb from '../../data/db';
+const db = rawDb as any;
 import { manufacturingRepo } from '../../data/repositories/manufacturingRepo';
 import { itemsRepo } from '../../data/repositories/itemsRepo';
 import {
@@ -157,12 +158,12 @@ describe('Production Order Cost Formulas, Stock Effect, and Constraints (Require
       const movements = await db.stock_movements.where('reference_id').equals(order.id).toArray();
       expect(movements.length).toBe(3); // 2 out, 1 in
 
-      const fabricOut = movements.find(m => m.item_id === rawFabric.id);
+      const fabricOut = movements.find((m: any) => m.item_id === rawFabric.id);
       expect(fabricOut.movement_type).toBe('production_out');
       expect(fabricOut.direction).toBe('out');
       expect(fabricOut.quantity).toBe(30);
 
-      const hoodieIn = movements.find(m => m.item_id === hoodie.id);
+      const hoodieIn = movements.find((m: any) => m.item_id === hoodie.id);
       expect(hoodieIn.movement_type).toBe('production_in');
       expect(hoodieIn.direction).toBe('in');
       expect(hoodieIn.quantity).toBe(20);
