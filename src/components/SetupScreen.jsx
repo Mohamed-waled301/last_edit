@@ -37,22 +37,6 @@ export const SetupScreen = ({ onComplete }) => {
       const user = await usersRepo.createOwner(factoryName.trim(), ownerName.trim(), pin);
       setActiveUser(user.id, user.role, user.full_name);
 
-      // Attempt to sync clean setup to backend if online
-      try {
-        await fetch('/api/setup/init', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            factoryName: factoryName.trim(),
-            ownerName: ownerName.trim(),
-            pinHash: user.pin_hash,
-            pinSalt: user.pin_salt,
-          }),
-        });
-      } catch (backendErr) {
-        // Backend sync failure is non-blocking for local setup
-      }
-
       onComplete();
     } catch (err) {
       setError(err.message || 'حدث خطأ أثناء إعداد النظام');
