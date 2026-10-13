@@ -9,7 +9,8 @@ import {
   AlertTriangle,
   RefreshCw,
   Trash2,
-  HardDrive
+  HardDrive,
+  Key
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import { api } from '../services/api';
@@ -32,6 +33,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
   const [isBackupLoading, setIsBackupLoading] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearConfirmationText, setClearConfirmationText] = useState('');
+  const [licenseInfo, setLicenseInfo] = useState(null);
 
   const loadData = async () => {
     try {
@@ -53,6 +55,18 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
 
   useEffect(() => {
     loadData();
+
+    async function loadLicense() {
+      if (typeof window !== 'undefined' && window.electronAPI?.getLicenseStatus) {
+        try {
+          const status = await window.electronAPI.getLicenseStatus();
+          setLicenseInfo(status);
+        } catch (err) {
+          console.warn('Failed to load license in settings:', err);
+        }
+      }
+    }
+    loadLicense();
   }, []);
 
   const handleSaveSettings = async (e) => {
@@ -301,6 +315,73 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
             قاعدة البيانات متصلة ومحدثة • حفظ آمن للبيانات
           </div>
         </div>
+      </div>
+
+      {/* License Section (الترخيص) - Readonly */}
+      <div className="bg-white rounded-md p-6 border border-gray-200 space-y-4">
+        <div className="border-b border-gray-200 pb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-[#1F3A5F]">
+              <Key className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900">الترخيص</h3>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">
+                بيانات ترخيص النسخة وتوثيق ربط الجهاز الحالي
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>{licenseInfo?.isValid ? 'مرخص ومفعل' : (licenseInfo ? 'غير مفعل' : 'وضع المتصفح')}</span>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">حالة الترخيص</label>
+            <div className="w-full h-11 rounded-md bg-gray-50 border border-gray-200 px-3 flex items-center font-bold text-gray-800">
+              {licenseInfo?.isValid ? 'النسخة مفعلة ومربوطة بهذا الجهاز' : 'النسخة غير مفعلة'}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">اسم العميل والمؤسسة</label>
+            <div className="w-full h-11 rounded-md bg-gray-50 border border-gray-200 px-3 flex items-center font-bold text-gray-800">
+              {licenseInfo?.customerName || 'غير محدد'}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">كود الجهاز (Machine ID)</label>
+            <div className="w-full h-11 rounded-md bg-gray-50 border border-gray-200 px-3 flex items-center font-mono font-bold text-[#1F3A5F]">
+              {licenseInfo?.machineCode || '—'}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">تاريخ انتهاء الترخيص</label>
+            <div className="w-full h-11 rounded-md bg-gray-50 border border-gray-200 px-3 flex items-center font-bold text-gray-800">
+              {licenseInfo?.expiresAt ? formatDate(licenseInfo.expiresAt) : 'ترخيص دائم (غير محدد بأجل)'}
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-xs font-semibold text-gray-500 mb-1">نوع الإصدار</label>
+            <div className="w-full h-11 rounded-md bg-gray-50 border border-gray-200 px-3 flex items-center font-bold text-gray-800">
+              {licenseInfo?.edition || 'Apex Apparel ERP Enterprise'}
+            </div>
+          </div>
+        </div>
+
+        {licenseInfo?.isExpiringSoon && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800 font-bold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              تنبيه: سينتهي هذا الترخيص بعد {licenseInfo.daysRemaining} {licenseInfo.daysRemaining === 1 ? 'يوم' : 'أيام'}. يرجى التواصل مع المطور لتجديده.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Audit Log */}

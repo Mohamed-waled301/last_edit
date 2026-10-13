@@ -7,6 +7,8 @@ import SetupScreen from './components/SetupScreen';
 import LoginScreen from './components/LoginScreen';
 import BackupReminderBanner from './components/BackupReminderBanner';
 import ErrorBoundary from './components/ErrorBoundary';
+import ActivationScreen from './components/ActivationScreen';
+import { AlertTriangle } from 'lucide-react';
 
 // Master Data & Full-Page Modules
 import ItemsListPage from './modules/items/ItemsListPage';
@@ -70,6 +72,8 @@ function parseHash(hash) {
 }
 
 export default function App() {
+  const [licenseStatus, setLicenseStatus] = useState(null); // null = checking, object = status
+  const [machineCode, setMachineCode] = useState('');
   const [hasOwnerUser, setHasOwnerUser] = useState(null); // null = checking, true/false
   const [isLocked, setIsLocked] = useState(false);
   const [route, setRoute] = useState(() => parseHash(window.location.hash));
@@ -172,6 +176,37 @@ export default function App() {
     }
   }, []);
 
+  // Offline Licensing Verification and Realtime 24h Sync
+  useEffect(() => {
+    async function checkLicense() {
+      if (typeof window !== 'undefined' && window.electronAPI?.getLicenseStatus) {
+        try {
+          const [status, code] = await Promise.all([
+            window.electronAPI.getLicenseStatus(),
+            window.electronAPI.getMachineCode ? window.electronAPI.getMachineCode() : Promise.resolve(''),
+          ]);
+          setLicenseStatus(status);
+          if (code) setMachineCode(code);
+        } catch (err) {
+          console.error('License initial check failed:', err);
+          setLicenseStatus({ isValid: false, error: 'تعذر التحقق من ترخيص النظام' });
+        }
+      } else {
+        // Not in Electron desktop (e.g. browser or tests)
+        setLicenseStatus({ isValid: true });
+      }
+    }
+
+    checkLicense();
+
+    if (typeof window !== 'undefined' && window.electronAPI?.onLicenseStatusChanged) {
+      const unsub = window.electronAPI.onLicenseStatusChanged((updatedStatus) => {
+        setLicenseStatus(updatedStatus);
+      });
+      return unsub;
+    }
+  }, []);
+
   const navigateTo = (path) => {
     const formatted = path.startsWith('#') ? path : `#/${path.replace(/^\//, '')}`;
     window.location.hash = formatted;
@@ -221,6 +256,30 @@ export default function App() {
   };
 
   const currentSidebarScreen = getSidebarActiveScreen();
+
+  // 0. License Verification Gate (Strict Desktop Main-Process Enforcement)
+  if (licenseStatus === null) {
+    return (
+      <div className="min-h-screen bg-[#F4F5F7] flex items-center justify-center p-4" dir="rtl">
+        <div className="text-center font-bold text-gray-600 text-lg">
+          جاري التحقق من ترخيص النظام وربط الجهاز...
+        </div>
+      </div>
+    );
+  }
+
+  if (!licenseStatus.isValid) {
+    return (
+      <ActivationScreen
+        initialMachineCode={machineCode}
+        initialStatus={licenseStatus}
+        onActivated={(newStatus) => {
+          setLicenseStatus(newStatus);
+          showNotification('تم تفعيل النظام بنجاح!', 'success');
+        }}
+      />
+    );
+  }
 
   // If system owner check is still in progress
   if (hasOwnerUser === null) {
@@ -507,6 +566,16 @@ export default function App() {
           isSidebarPinned ? 'mr-0 lg:mr-[260px]' : 'mr-0 lg:mr-[72px]'
         }`}
       >
+        {/* 14-Day Expiry Warning Banner */}
+        {licenseStatus?.isExpiringSoon && (
+          <div className="bg-amber-600 text-white px-4 py-2.5 text-center text-xs md:text-sm font-bold flex items-center justify-center gap-2 shadow-sm">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>
+              تنبيه: سينتهي ترخيص النظام بعد {licenseStatus.daysRemaining} {licenseStatus.daysRemaining === 1 ? 'يوم' : 'أيام'} (بتاريخ {licenseStatus.expiresAt ? new Date(licenseStatus.expiresAt).toLocaleDateString('ar-EG') : ''}). يرجى التواصل مع المطور لتجديده.
+            </span>
+          </div>
+        )}
+
         {/* Top Header Bar with Hamburger Toggle */}
         <Header
           currentScreen={currentSidebarScreen}
