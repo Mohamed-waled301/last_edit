@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShoppingCart, 
   Plus, 
@@ -43,6 +43,12 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
   // Selected item index for side-panel stock view
   const [focusedLineIndex, setFocusedLineIndex] = useState(0);
 
+  // Item Search / Picker state & ref
+  const pickerInputRef = useRef(null);
+  const quantityInputRefs = useRef([]);
+  const [pickerQuery, setPickerQuery] = useState('');
+  const [showPickerResults, setShowPickerResults] = useState(false);
+
   // Quick Add Item inline panel state
   const [showQuickAddItem, setShowQuickAddItem] = useState(false);
   const [quickItemForm, setQuickItemForm] = useState({
@@ -50,12 +56,12 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     name: '',
     item_group: '',
     item_department: '',
-    item_type: 'raw_material',
-    unit: 'متر',
+    item_type: '',
+    unit: 'قطعة',
     cost_price: ''
   });
   const [quickItemSaving, setQuickItemSaving] = useState(false);
-  const [quickItemError, setQuickItemError] = useState('');
+  const [quickItemErrors, setQuickItemErrors] = useState({});
 
   const [form, setForm] = useState({
     po_number: '',
@@ -148,8 +154,8 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
           name: '',
           item_group: '',
           item_department: '',
-          item_type: 'raw_material',
-          unit: 'متر',
+          item_type: '',
+          unit: 'قطعة',
           cost_price: ''
         });
       } catch (err) {
@@ -194,7 +200,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     }));
   };
 
-  // Line item change
+  // Line item change from table row select
   const handleItemChange = (index, itemId) => {
     const itm = itemsList.find((i) => String(i.id) === String(itemId));
     const defaultPrice = itm ? Number(itm.cost_price) || 0 : 0;
@@ -202,31 +208,76 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     setForm((prev) => {
       const updated = [...prev.items];
       const cur = updated[index];
-      const qty = Number(cur.quantity_ordered) || 0;
+      const currentQty = cur.quantity_ordered;
+      const qty = currentQty === '' ? 0 : (Number(currentQty) || 0);
       const unitPrice = defaultPrice;
-      const total = Number((qty * unitPrice).toFixed(2));
+      const total = currentQty === '' ? 0 : Number((qty * unitPrice).toFixed(2));
 
       updated[index] = {
         ...cur,
         material_id: itemId,
         unit_price: String(unitPrice),
-        total_price: total
+        quantity_ordered: currentQty,
+        total_price: isNaN(total) ? 0 : total
       };
       return { ...prev, items: updated };
     });
     setFocusedLineIndex(index);
+    if (itemId) {
+      setTimeout(() => {
+        quantityInputRefs.current[index]?.focus();
+      }, 50);
+    }
+  };
+
+  // Pick item from permanent Item Search / Picker
+  const handlePickItem = (item) => {
+    if (!item) return;
+    let targetIdx = 0;
+    setForm((prev) => {
+      const lines = [...prev.items];
+      const last = lines[lines.length - 1];
+
+      if (last && !last.material_id) {
+        targetIdx = lines.length - 1;
+        lines[targetIdx] = {
+          ...last,
+          material_id: item.id,
+          unit_price: String(item.cost_price || 0),
+          quantity_ordered: '', // Empty per requirement 3
+          total_price: 0
+        };
+      } else {
+        lines.push({
+          material_id: item.id,
+          unit_price: String(item.cost_price || 0),
+          quantity_ordered: '', // Empty per requirement 3
+          total_price: 0
+        });
+        targetIdx = lines.length - 1;
+      }
+      return { ...prev, items: lines };
+    });
+
+    setFocusedLineIndex(targetIdx);
+    setPickerQuery('');
+    setShowPickerResults(false);
+    setTimeout(() => {
+      quantityInputRefs.current[targetIdx]?.focus();
+    }, 50);
   };
 
   const handleLineQtyChange = (index, qtyVal) => {
     setForm((prev) => {
       const updated = [...prev.items];
       const cur = updated[index];
-      const qty = Number(qtyVal) || 0;
-      const price = Number(cur.unit_price) || 0;
+      const qty = qtyVal === '' ? 0 : (Number(qtyVal) || 0);
+      const price = cur.unit_price === '' ? 0 : (Number(cur.unit_price) || 0);
+      const total = qtyVal === '' ? 0 : Number((qty * price).toFixed(2));
       updated[index] = {
         ...cur,
         quantity_ordered: qtyVal,
-        total_price: Number((qty * price).toFixed(2))
+        total_price: isNaN(total) ? 0 : total
       };
       return { ...prev, items: updated };
     });
@@ -236,12 +287,13 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     setForm((prev) => {
       const updated = [...prev.items];
       const cur = updated[index];
-      const qty = Number(cur.quantity_ordered) || 0;
-      const price = Number(priceVal) || 0;
+      const qty = cur.quantity_ordered === '' ? 0 : (Number(cur.quantity_ordered) || 0);
+      const price = priceVal === '' ? 0 : (Number(priceVal) || 0);
+      const total = cur.quantity_ordered === '' ? 0 : Number((qty * price).toFixed(2));
       updated[index] = {
         ...cur,
         unit_price: priceVal,
-        total_price: Number((qty * price).toFixed(2))
+        total_price: isNaN(total) ? 0 : total
       };
       return { ...prev, items: updated };
     });
@@ -258,18 +310,22 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     }
   };
 
-  // Strict Line completion rule
+  // Strict Line completion rule: item must be chosen, quantity > 0, price >= 0
   const lastLine = form.items[form.items.length - 1];
   const isLastLineComplete = Boolean(
     lastLine &&
     lastLine.material_id &&
+    lastLine.quantity_ordered !== '' &&
     Number(lastLine.quantity_ordered) > 0 &&
+    !isNaN(Number(lastLine.quantity_ordered)) &&
+    lastLine.unit_price !== '' &&
     Number(lastLine.unit_price) >= 0 &&
-    lastLine.unit_price !== ''
+    !isNaN(Number(lastLine.unit_price))
   );
 
   const handleAddLine = () => {
     if (!isLastLineComplete) return;
+    const newIdx = form.items.length;
     setForm((prev) => ({
       ...prev,
       items: [
@@ -282,11 +338,16 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         }
       ]
     }));
-    setFocusedLineIndex(form.items.length);
+    setFocusedLineIndex(newIdx);
   };
 
-  // Totals Calculation & Linked Discount
-  const subtotal = form.items.reduce((sum, it) => sum + (Number(it.total_price) || 0), 0);
+  // Totals Calculation & Linked Discount - safe against empty quantity and NaN
+  const subtotal = form.items.reduce((sum, it) => {
+    const qty = it.quantity_ordered === '' ? 0 : (Number(it.quantity_ordered) || 0);
+    const price = it.unit_price === '' ? 0 : (Number(it.unit_price) || 0);
+    const lineTotal = it.quantity_ordered === '' ? 0 : (Number(it.total_price) || (qty * price) || 0);
+    return sum + (isNaN(lineTotal) ? 0 : lineTotal);
+  }, 0);
 
   const handleDiscountPercentChange = (pctVal) => {
     const pct = Number(pctVal) || 0;
@@ -356,21 +417,36 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
 
   // Quick Add Item Handler
   const handleSaveQuickItem = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+    const errs = {};
     if (!quickItemForm.name.trim()) {
-      setQuickItemError('اسم الصنف مطلوب');
+      errs.name = 'اسم وتوصيف الصنف مطلوب';
+    }
+    if (!quickItemForm.item_group || !quickItemForm.item_group.trim()) {
+      errs.item_group = 'اختر مجموعة الصنف (مجموعة الصنف مطلوبة)';
+    }
+    if (!quickItemForm.item_department || !quickItemForm.item_department.trim()) {
+      errs.item_department = 'اختر قسم الصنف (قسم الصنف مطلوب)';
+    }
+    if (!quickItemForm.item_type || !quickItemForm.item_type.trim()) {
+      errs.item_type = 'اختر نوع الصنف';
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setQuickItemErrors(errs);
       return;
     }
+
     try {
       setQuickItemSaving(true);
-      setQuickItemError('');
+      setQuickItemErrors({});
       const res = await api.createItem({
         code: quickItemForm.code.trim(),
         name: quickItemForm.name.trim(),
         item_group: quickItemForm.item_group,
         item_department: quickItemForm.item_department,
         item_type: quickItemForm.item_type,
-        unit: quickItemForm.unit,
+        unit: quickItemForm.unit || 'قطعة',
         cost_price: Number(quickItemForm.cost_price) || 0,
         selling_price: Number(quickItemForm.cost_price) || 0,
         margin_percent: 0,
@@ -387,49 +463,75 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       const updatedList = Array.isArray(itemsRes.data) ? itemsRes.data : (itemsRes.items || []);
       setItemsList(updatedList);
 
-      // Auto-add as line in PO
+      // Auto-add as line in PO with EMPTY quantity and 0 total
+      let targetIdx = 0;
       setForm((prev) => {
         const lines = [...prev.items];
-        // If current last line is empty, put it there; else add line
         const last = lines[lines.length - 1];
         if (last && !last.material_id) {
-          lines[lines.length - 1] = {
+          targetIdx = lines.length - 1;
+          lines[targetIdx] = {
             ...last,
             material_id: newItem.id,
             unit_price: String(newItem.cost_price || 0),
-            quantity_ordered: '1',
-            total_price: Number(newItem.cost_price || 0)
+            quantity_ordered: '', // EMPTY per requirement 3
+            total_price: 0
           };
         } else {
           lines.push({
             material_id: newItem.id,
             unit_price: String(newItem.cost_price || 0),
-            quantity_ordered: '1',
-            total_price: Number(newItem.cost_price || 0)
+            quantity_ordered: '', // EMPTY per requirement 3
+            total_price: 0
           });
+          targetIdx = lines.length - 1;
         }
         return { ...prev, items: lines };
       });
+      setFocusedLineIndex(targetIdx);
 
       setShowQuickAddItem(false);
+      setQuickItemErrors({});
+
       // Generate next code for next quick add
       const nextCodeRes = await api.getNextItemCode();
-      setQuickItemForm((prev) => ({
-        ...prev,
+      setQuickItemForm({
         code: nextCodeRes?.code || '1001',
         name: '',
+        item_group: '',
+        item_department: '',
+        item_type: '',
+        unit: 'قطعة',
         cost_price: ''
-      }));
+      });
+
+      // Keep the picker field visible, empty, and focused so user can immediately add next item
+      setPickerQuery('');
+      setShowPickerResults(false);
+      setTimeout(() => {
+        pickerInputRef.current?.focus();
+      }, 50);
     } catch (err) {
       console.error('Quick add item error:', err);
-      setQuickItemError(err.message || 'تعذر إضافة الصنف');
+      setQuickItemErrors({ form: err.message || 'تعذر إضافة الصنف' });
     } finally {
       setQuickItemSaving(false);
     }
   };
 
+  const handleCancelQuickAdd = () => {
+    setShowQuickAddItem(false);
+    setQuickItemErrors({});
+    setTimeout(() => {
+      pickerInputRef.current?.focus();
+    }, 50);
+  };
+
   const validate = () => {
     const errs = {};
+    const lineQtyErrs = {};
+    const incompleteLines = [];
+
     if (!form.supplier_id) errs.supplier_id = 'يرجى اختيار المورد';
     if (!form.order_date) errs.order_date = 'تاريخ أمر التوريد مطلوب';
 
@@ -437,15 +539,26 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       errs.items = 'لا يمكن حفظ أمر التوريد بدون بنود أصناف';
     }
 
-    const lineErrors = [];
     form.items.forEach((line, idx) => {
-      if (!line.material_id || Number(line.quantity_ordered) <= 0 || Number(line.unit_price) < 0 || line.unit_price === '') {
-        lineErrors.push(idx + 1);
+      const isMissingItem = !line.material_id;
+      const isMissingOrZeroQty = line.quantity_ordered === '' || Number(line.quantity_ordered) <= 0 || isNaN(Number(line.quantity_ordered));
+      const isMissingPrice = line.unit_price === '' || Number(line.unit_price) < 0 || isNaN(Number(line.unit_price));
+
+      if (isMissingOrZeroQty) {
+        lineQtyErrs[idx] = 'الكمية مطلوبة ويجب أن تكون أكبر من صفر';
+      }
+
+      if (isMissingItem || isMissingOrZeroQty || isMissingPrice) {
+        incompleteLines.push(idx + 1);
       }
     });
 
-    if (lineErrors.length > 0) {
-      errs.items = `البنود التالية غير مكتملة: (${lineErrors.join(', ')}). يرجى تحديد الصنف وكمية أكبر من صفر وسعر التكلفة.`;
+    if (incompleteLines.length > 0) {
+      errs.items = `البنود التالية غير مكتملة: (${incompleteLines.join(', ')}). يرجى تحديد الصنف وكمية أكبر من صفر وسعر التكلفة.`;
+    }
+
+    if (Object.keys(lineQtyErrs).length > 0) {
+      errs.lineQty = lineQtyErrs;
     }
 
     if (form.payment_terms === 'credit') {
@@ -459,7 +572,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     }
 
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+    return Object.keys(errs).length === 0 && Object.keys(lineQtyErrs).length === 0;
   };
 
   const handleSubmit = async (e) => {
@@ -740,16 +853,17 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                 </span>
                 <button
                   type="button"
-                  onClick={() => setShowQuickAddItem(false)}
+                  onClick={handleCancelQuickAdd}
                   className="text-slate-400 hover:text-slate-600"
+                  aria-label="إغلاق لوحة الصنف السريع"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {quickItemError && (
+              {quickItemErrors.form && (
                 <div className="p-2 text-xs text-red-700 bg-red-100 rounded-md font-medium">
-                  {quickItemError}
+                  {quickItemErrors.form}
                 </div>
               )}
 
@@ -775,56 +889,87 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                     id="quick-item-name"
                     type="text"
                     value={quickItemForm.name}
-                    onChange={(e) => setQuickItemForm({ ...quickItemForm, name: e.target.value })}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
+                    onChange={(e) => {
+                      setQuickItemForm({ ...quickItemForm, name: e.target.value });
+                      if (quickItemErrors.name) setQuickItemErrors((prev) => ({ ...prev, name: '' }));
+                    }}
+                    className={`w-full px-2.5 py-1.5 text-xs bg-white border rounded-md ${
+                      quickItemErrors.name ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
+                    }`}
                   />
+                  <FieldError error={quickItemErrors.name} />
                 </div>
 
                 <div>
                   <label htmlFor="quick-item-group" className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                    مجموعة الصنف
+                    مجموعة الصنف *
                   </label>
                   <select
                     id="quick-item-group"
                     value={quickItemForm.item_group}
-                    onChange={(e) => setQuickItemForm({ ...quickItemForm, item_group: e.target.value })}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
+                    onChange={(e) => {
+                      setQuickItemForm({ ...quickItemForm, item_group: e.target.value });
+                      if (quickItemErrors.item_group) setQuickItemErrors((prev) => ({ ...prev, item_group: '' }));
+                    }}
+                    className={`w-full px-2.5 py-1.5 text-xs bg-white border rounded-md ${
+                      quickItemErrors.item_group ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
+                    }`}
+                    required
                   >
+                    <option value="">-- اختر مجموعة الصنف --</option>
                     {groupsList.map((g) => (
                       <option key={g.id} value={g.name}>{g.name}</option>
                     ))}
                   </select>
+                  <FieldError error={quickItemErrors.item_group} />
                 </div>
 
                 <div>
                   <label htmlFor="quick-item-dept" className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                    قسم الصنف
+                    قسم الصنف *
                   </label>
                   <select
                     id="quick-item-dept"
                     value={quickItemForm.item_department}
-                    onChange={(e) => setQuickItemForm({ ...quickItemForm, item_department: e.target.value })}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
+                    onChange={(e) => {
+                      setQuickItemForm({ ...quickItemForm, item_department: e.target.value });
+                      if (quickItemErrors.item_department) setQuickItemErrors((prev) => ({ ...prev, item_department: '' }));
+                    }}
+                    className={`w-full px-2.5 py-1.5 text-xs bg-white border rounded-md ${
+                      quickItemErrors.item_department ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
+                    }`}
+                    required
                   >
+                    <option value="">-- اختر قسم الصنف --</option>
                     {sectionsList.map((s) => (
                       <option key={s.id} value={s.name}>{s.name}</option>
                     ))}
                   </select>
+                  <FieldError error={quickItemErrors.item_department} />
                 </div>
 
                 <div>
                   <label htmlFor="quick-item-type" className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                    نوع الصنف
+                    نوع الصنف *
                   </label>
                   <select
                     id="quick-item-type"
                     value={quickItemForm.item_type}
-                    onChange={(e) => setQuickItemForm({ ...quickItemForm, item_type: e.target.value })}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
+                    onChange={(e) => {
+                      setQuickItemForm({ ...quickItemForm, item_type: e.target.value });
+                      if (quickItemErrors.item_type) setQuickItemErrors((prev) => ({ ...prev, item_type: '' }));
+                    }}
+                    className={`w-full px-2.5 py-1.5 text-xs bg-white border rounded-md ${
+                      quickItemErrors.item_type ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
+                    }`}
+                    required
                   >
-                    <option value="raw_material">مادة خام / مستلزم إنتاج</option>
-                    <option value="finished">منتج تام ملابس</option>
+                    <option value="">-- اختر نوع الصنف --</option>
+                    <option value="raw_material">مادة خام</option>
+                    <option value="finished">منتج تام</option>
+                    <option value="supplies">مستلزم إنتاج</option>
                   </select>
+                  <FieldError error={quickItemErrors.item_type} />
                 </div>
 
                 <div>
@@ -837,9 +982,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                     onChange={(e) => setQuickItemForm({ ...quickItemForm, unit: e.target.value })}
                     className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-md"
                   >
+                    <option value="قطعة">قطعة</option>
                     <option value="متر">متر</option>
                     <option value="كجم">كيلوجرام</option>
-                    <option value="قطعة">قطعة</option>
                     <option value="بكرة">بكرة</option>
                     <option value="كرتونة">كرتونة</option>
                   </select>
@@ -864,8 +1009,8 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => setShowQuickAddItem(false)}
-                  className="px-3 py-1.5 text-xs text-slate-600 bg-white border border-slate-300 rounded-md"
+                  onClick={handleCancelQuickAdd}
+                  className="px-3 py-1.5 text-xs text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50"
                 >
                   إلغاء
                 </button>
@@ -873,13 +1018,103 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                   type="button"
                   onClick={handleSaveQuickItem}
                   disabled={quickItemSaving}
-                  className="px-4 py-1.5 text-xs text-white bg-emerald-600 rounded-md hover:bg-emerald-700 font-semibold"
+                  className="px-4 py-1.5 text-xs text-white bg-emerald-600 rounded-md hover:bg-emerald-700 font-semibold disabled:opacity-50"
                 >
                   {quickItemSaving ? 'جاري الحفظ...' : 'حفظ وإدراج الصنف'}
                 </button>
               </div>
             </div>
           )}
+
+          {/* Permanent Item Search / Picker Field - Visible for life of invoice */}
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label htmlFor="purchase-item-picker" className="block text-xs font-bold text-slate-800">
+                بحث واختيار الصنف لإضافته مباشرة للبند *
+              </label>
+              <span className="text-[11px] text-slate-500">
+                اختر الصنف لإدراجه فوراً في جدول البنود وكتابة الكمية
+              </span>
+            </div>
+
+            <div className="relative">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    id="purchase-item-picker"
+                    data-testid="purchase-item-picker"
+                    ref={pickerInputRef}
+                    type="text"
+                    value={pickerQuery}
+                    onChange={(e) => {
+                      setPickerQuery(e.target.value);
+                      setShowPickerResults(true);
+                    }}
+                    onFocus={() => setShowPickerResults(true)}
+                    className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-medium"
+                    aria-label="بحث واختيار الصنف"
+                  />
+                  {pickerQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPickerQuery('');
+                        setShowPickerResults(false);
+                        pickerInputRef.current?.focus();
+                      }}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      aria-label="مسح البحث"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPickerResults((prev) => !prev)}
+                  className="px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-semibold shrink-0"
+                >
+                  <span>{showPickerResults ? 'إغلاق القائمة' : 'عرض الأصناف'}</span>
+                </button>
+              </div>
+
+              {showPickerResults && (
+                <div className="absolute z-30 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-100">
+                  {availableItems
+                    .filter((itm) => {
+                      if (!pickerQuery.trim()) return true;
+                      const q = pickerQuery.toLowerCase().trim();
+                      return (
+                        (itm.name && itm.name.toLowerCase().includes(q)) ||
+                        (itm.code && itm.code.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((itm) => (
+                      <div
+                        key={itm.id}
+                        onClick={() => handlePickItem(itm)}
+                        className="p-2.5 hover:bg-blue-50 cursor-pointer flex items-center justify-between text-xs transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-blue-600">[{itm.code}]</span>
+                          <span className="font-semibold text-slate-800">{itm.name}</span>
+                          <span className="text-[11px] text-slate-400">({itm.unit || 'قطعة'})</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-slate-500 font-mono text-[11px]">
+                            التكلفة: {formatCurrency(itm.cost_price || 0)}
+                          </span>
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-semibold">
+                            إدراج للبند
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Grid Layout: Lines Table on Left, Live Stock Side Panel on Right */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
@@ -928,14 +1163,33 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                           <label htmlFor={`po-line-qty-${idx}`} className="sr-only">الكمية للبند {idx + 1}</label>
                           <input
                             id={`po-line-qty-${idx}`}
+                            data-testid={`po-line-qty-${idx}`}
+                            ref={(el) => { quantityInputRefs.current[idx] = el; }}
                             type="number"
                             min="0.001"
                             step="any"
                             value={line.quantity_ordered}
-                            onChange={(e) => handleLineQtyChange(idx, e.target.value)}
+                            onChange={(e) => {
+                              handleLineQtyChange(idx, e.target.value);
+                              if (errors.lineQty?.[idx]) {
+                                setErrors((prev) => ({
+                                  ...prev,
+                                  lineQty: { ...prev.lineQty, [idx]: undefined }
+                                }));
+                              }
+                            }}
                             onFocus={() => setFocusedLineIndex(idx)}
-                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold bg-white text-slate-800"
+                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono font-bold ${
+                              errors.lineQty?.[idx]
+                                ? 'border-red-500 bg-red-50/50 text-red-900 focus:ring-red-400'
+                                : 'border-slate-300 bg-white text-slate-800 focus:ring-blue-500'
+                            }`}
                           />
+                          {errors.lineQty?.[idx] && (
+                            <span className="text-[10px] text-red-600 block mt-1 font-semibold">
+                              {errors.lineQty[idx]}
+                            </span>
+                          )}
                         </td>
                         <td className="p-2">
                           <label htmlFor={`po-line-price-${idx}`} className="sr-only">السعر للبند {idx + 1}</label>
@@ -951,7 +1205,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                           />
                         </td>
                         <td className="p-3 text-left font-mono font-bold text-slate-900">
-                          {formatCurrency(line.total_price)}
+                          {formatCurrency(line.total_price || 0)}
                         </td>
                         <td className="p-2 text-center">
                           <button

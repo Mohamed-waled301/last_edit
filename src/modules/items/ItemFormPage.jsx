@@ -29,7 +29,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     name: '',
     item_group: '',
     item_department: '',
-    item_type: 'finished', // 'finished' | 'raw_material'
+    item_type: '', // Always starts empty
     unit: 'قطعة',
     cost_price: '0',
     selling_price: '0',
@@ -159,6 +159,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
             code: nextCode,
             item_group: '',
             item_department: '',
+            item_type: '',
             unit: 'قطعة',
             cost_price: '0',
             selling_price: '0',
@@ -393,11 +394,15 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     if (nameErr) errs.name = nameErr;
 
     if (!form.item_group || !form.item_group.trim()) {
-      errs.item_group = 'مجموعة الصنف مطلوبة ولا يمكن تركها فارغة';
+      errs.item_group = 'اختر مجموعة الصنف (مجموعة الصنف مطلوبة)';
     }
 
     if (!form.item_department || !form.item_department.trim()) {
-      errs.item_department = 'قسم الصنف مطلوب ولا يمكن تركه فارغاً';
+      errs.item_department = 'اختر قسم الصنف (قسم الصنف مطلوب)';
+    }
+
+    if (!form.item_type || !form.item_type.trim()) {
+      errs.item_type = 'اختر نوع الصنف';
     }
 
     if (form.cost_price === '' || form.cost_price === null || form.cost_price === undefined) {
@@ -568,12 +573,21 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
               <select
                 id="item-type-select"
                 value={form.item_type}
-                onChange={(e) => setForm((prev) => ({ ...prev, item_type: e.target.value }))}
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-medium bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, item_type: e.target.value }));
+                  if (errors.item_type) setErrors((prev) => ({ ...prev, item_type: '' }));
+                }}
+                className={`w-full px-3.5 py-2 border rounded-lg text-sm font-medium bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 ${
+                  errors.item_type ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
+                }`}
+                required
               >
-                <option value="finished">منتج تام (ملابس جاهزة للبيع)</option>
-                <option value="raw_material">مادة خام / مستلزم إنتاج (أقمشة وإكسسوارات)</option>
+                <option value="">-- اختر نوع الصنف --</option>
+                <option value="raw_material">مادة خام</option>
+                <option value="finished">منتج تام</option>
+                <option value="supplies">مستلزم إنتاج</option>
               </select>
+              <FieldError error={errors.item_type} />
             </div>
 
             {/* Item Group with Inline Quick-Add panel */}
