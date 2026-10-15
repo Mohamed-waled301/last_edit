@@ -53,6 +53,7 @@ function detectActiveEdition() {
 const activeEdition = detectActiveEdition();
 process.env.EDITION = activeEdition;
 
+const testUserDataDir = process.env.TEST_USER_DATA_DIR;
 if (testUserDataDir) {
   app.setPath('userData', testUserDataDir);
 } else {
