@@ -41,9 +41,11 @@ builder-debug.yml
 *.rar
 *.zip
 
-# Licensing Security - Never commit private keys
+# Licensing Security - Never commit private keys or state
 tools/license-generator/keys/
 *.pem
+license-state.json
+*.node
 
 # Local Database & Migration Dumps - Never commit local databases
 *.db

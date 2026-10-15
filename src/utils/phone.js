@@ -69,6 +69,71 @@ export function validateEgyptianMobile(value, { required = false, label = 'رق�
   return null;
 }
 
+/**
+ * Normalize number for WhatsApp link:
+ * - Drops spaces, dashes, parentheses and symbols
+ * - Drops leading '+' or '00'
+ * - If Egyptian mobile starting with 01 (11 digits): drops leading '0' and adds '+20' -> '201XXXXXXXXX'
+ * - If already has country code (e.g. starts with 20... or other international code), keeps it
+ * Returns clean digits string or null if invalid/missing.
+ */
+export function normalizePhoneForWhatsApp(phone) {
+  if (!phone) return null;
+  let digits = String(phone).replace(/[^0-9+]/g, '');
+  if (!digits) return null;
+
+  if (digits.startsWith('+')) {
+    digits = digits.slice(1);
+  } else if (digits.startsWith('00')) {
+    digits = digits.slice(2);
+  }
+
+  // Egyptian mobile starting with '01' (11 digits: e.g. 01012345678)
+  if (digits.startsWith('01') && digits.length === 11) {
+    digits = '20' + digits.slice(1);
+  } else if (digits.startsWith('1') && digits.length === 10) {
+    // Missing leading 0
+    digits = '20' + digits;
+  }
+
+  // A valid WhatsApp number should have at least 9-15 digits
+  if (digits.length >= 9 && digits.length <= 15) {
+    return digits;
+  }
+  return null;
+}
+
+/** Check if phone is valid for launching WhatsApp */
+export function isValidPhoneForWhatsApp(phone) {
+  return Boolean(normalizePhoneForWhatsApp(phone));
+}
+
+/**
+ * Open WhatsApp chat with contact:
+ * Supports optional prefilled message.
+ * In Electron, routes via IPC shell.openExternal (restricted to wa.me links).
+ * In Browser, opens new window.
+ */
+export function openWhatsAppChat(phone, message = '') {
+  const normalized = normalizePhoneForWhatsApp(phone);
+  if (!normalized) {
+    alert('رقم الهاتف غير مسجل أو غير صالح لإجراء محادثة واتساب');
+    return false;
+  }
+
+  let url = `https://wa.me/${normalized}`;
+  if (message && typeof message === 'string' && message.trim()) {
+    url += `?text=${encodeURIComponent(message.trim())}`;
+  }
+
+  if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.openExternal === 'function') {
+    window.electronAPI.openExternal(url);
+  } else if (typeof window !== 'undefined') {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+  return true;
+}
+
 export default {
   DEFAULT_PHONE_VALUE,
   EGYPT_MOBILE_LENGTH,
@@ -80,4 +145,8 @@ export default {
   handleEgyptianPhoneChange,
   normalizePhoneForSave,
   validateEgyptianMobile,
+  normalizePhoneForWhatsApp,
+  isValidPhoneForWhatsApp,
+  openWhatsAppChat,
 };
+

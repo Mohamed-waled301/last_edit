@@ -32,6 +32,7 @@ export const SCHEMA_V1 = {
   item_sizes: 'id, name, code, is_active',
   item_colors: 'id, name, hex_code, is_active',
   item_units: 'id, name, code, is_active',
+  item_suppliers: 'id, item_id, supplier_id, is_preferred',
   materials: 'id, code, name, unit, is_active, created_at',
   products: 'id, code, name, category, is_active, created_at',
   bom_items: 'id, product_id, raw_material_id',
@@ -54,8 +55,9 @@ export const SCHEMA_V1 = {
   supplier_returns: 'id, return_number, supplier_id, material_id, return_date, created_at',
 
   // Manufacturing & Outsourcing
-  production_orders: 'id, order_number, product_id, status, start_date, created_at',
+  production_orders: 'id, order_number, cutting_number, product_id, status, start_date, created_at',
   production_material_usage: 'id, production_order_id, raw_material_id',
+  cutting_printing_payments: 'id, production_order_id, payment_date, created_at',
   outsourced_orders: 'id, order_number, production_order_id, supplier_id, status, transfer_date, created_at',
   finishing_orders: 'id, finishing_number, production_order_id, product_id, status, transfer_date, created_at',
   finishing_materials: 'id, finishing_order_id, raw_material_id',
@@ -80,6 +82,12 @@ export class WorkshopDatabase extends Dexie {
     this.version(5).stores(SCHEMA_V1);
     this.version(6).stores(SCHEMA_V1);
     this.version(7).stores(SCHEMA_V1);
+    this.version(8).stores({
+      item_suppliers: 'id, item_id, supplier_id, is_preferred',
+    });
+    this.version(9).stores({
+      cutting_printing_payments: 'id, production_order_id, payment_date, created_at',
+    });
   }
 }
 
@@ -131,6 +139,7 @@ export async function purgeAllMockData() {
     'supplier_returns',
     'production_orders',
     'production_material_usage',
+    'cutting_printing_payments',
     'outsourced_orders',
     'finishing_orders',
     'finishing_materials',
@@ -174,59 +183,6 @@ export async function ensureDatabaseIntegrity() {
   try {
     if (!db.isOpen()) {
       await db.open();
-    }
-    if (typeof window !== 'undefined' && window.indexedDB) {
-      Dexie.delete('ApexEnterpriseERP_DB_v4').catch(() => {});
-      Dexie.delete('ApexEnterpriseERP_DB_v3').catch(() => {});
-    }
-
-    const backend = db.backendDB();
-    if (backend) {
-      const existingStores = backend.objectStoreNames;
-      const allRequired = Object.keys(SCHEMA_V1);
-      const missing = allRequired.filter((s) => !existingStores.contains(s));
-      if (missing.length > 0) {
-        console.warn('Missing object stores detected in IndexedDB, auto-recovering database:', missing);
-        db.close();
-        await Dexie.delete(DB_NAME);
-        await db.open();
-      }
-    }
-
-    // Auto-detect and purge any legacy mock/demo records
-    const hasMockParty = await db.parties.where('id').startsWith('pty-').first().catch(() => null);
-    const hasMockCode = await db.parties.where('code').startsWith('PRT-').first().catch(() => null);
-    const hasMockItem = await db.items.where('id').startsWith('prd-').first().catch(() => null);
-    const hasMockMat = await db.materials.where('id').startsWith('mat-').first().catch(() => null);
-
-    if (hasMockParty || hasMockCode || hasMockItem || hasMockMat) {
-      console.warn('Purging legacy mock records from database...');
-      await purgeAllMockData();
-    }
-
-    // Ensure baseline owner and cashier users exist
-    const usersCount = await db.users.count();
-    if (usersCount === 0) {
-      await db.users.bulkAdd([
-        {
-          id: 'usr-owner',
-          username: 'owner',
-          full_name: 'م. خالد المنشاوي (الرئيس التنفيذي - CEO)',
-          password_hash: '1234',
-          role: 'owner',
-          is_active: 1,
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: 'usr-cashier',
-          username: 'cashier',
-          full_name: 'أحمد محمود (كاشير)',
-          password_hash: '1234',
-          role: 'cashier',
-          is_active: 1,
-          created_at: new Date().toISOString(),
-        },
-      ]);
     }
 
     // Ensure baseline settings with clean defaults
@@ -328,14 +284,7 @@ export async function ensureDatabaseIntegrity() {
       ]);
     }
   } catch (err) {
-    console.error('Database integrity check error, applying auto-recovery:', err);
-    try {
-      db.close();
-      await Dexie.delete(DB_NAME);
-      await db.open();
-    } catch (recoverErr) {
-      console.error('Failed to auto-recover IndexedDB:', recoverErr);
-    }
+    console.warn('Database integrity check warning:', err);
   }
 }
 

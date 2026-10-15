@@ -20,22 +20,19 @@ import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import MoneyInput from '../../components/MoneyInput';
+import { toPiasters, fromPiasters, sanitizeDecimalInput } from '../../utils/money';
 import {
   DEFAULT_PHONE_VALUE,
   sanitizeEgyptianPhoneInput,
   normalizePhoneForSave,
   validateEgyptianMobile,
+  normalizePhoneForWhatsApp,
+  isValidPhoneForWhatsApp,
+  openWhatsAppChat,
 } from '../../utils/phone';
+import { handleFormKeyDown } from '../../utils/formNavigation';
 
-/**
- * Format string/number with thousand separators using Western digits (0-9)
- */
-function formatNumberWithSeparators(val) {
-  if (val === null || val === undefined || val === '') return '';
-  const clean = String(val).replace(/[^0-9]/g, '');
-  if (!clean) return '';
-  return Number(clean).toLocaleString('en-US');
-}
 
 export default function PartyFormPage({ partyId = null, initialRole = null, initialType = null, onSaved, onCancel, onBack, onNotify }) {
   const isEdit = Boolean(partyId);
@@ -208,8 +205,8 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
   };
 
   const handleCreditLimitChange = (e) => {
-    const rawDigits = e.target.value.replace(/[^0-9]/g, '');
-    setForm((prev) => ({ ...prev, credit_limit: rawDigits }));
+    const val = e?.target?.value ?? e;
+    setForm((prev) => ({ ...prev, credit_limit: val }));
   };
 
   const handleExecuteOffset = async () => {
@@ -258,6 +255,10 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
       const supFlag = isBoth ? 1 : (singleType === 'supplier' ? 1 : 0);
       const custFlag = isBoth ? 1 : (singleType === 'customer' ? 1 : 0);
 
+      const parsedLimit = form.credit_limit ? fromPiasters(toPiasters(form.credit_limit)) : 0;
+      const parsedSupOpening = supFlag ? Math.max(0, fromPiasters(toPiasters(form.supplier_opening_balance))) : 0;
+      const parsedCustOpening = custFlag ? Math.max(0, fromPiasters(toPiasters(form.customer_opening_balance))) : 0;
+
       const payload = {
         code: form.code.trim(),
         name: form.name.trim(),
@@ -267,10 +268,10 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
         is_supplier: supFlag,
         is_customer: custFlag,
         supplier_type: form.supplier_type,
-        credit_limit: form.credit_limit ? (Number(form.credit_limit) || 0) : 0,
-        supplier_opening_balance: supFlag ? Math.max(0, Number(form.supplier_opening_balance) || 0) : 0,
+        credit_limit: parsedLimit,
+        supplier_opening_balance: parsedSupOpening,
         supplier_opening_type: form.supplier_opening_type === 'debit' ? 'debit' : 'credit',
-        customer_opening_balance: custFlag ? Math.max(0, Number(form.customer_opening_balance) || 0) : 0,
+        customer_opening_balance: parsedCustOpening,
         customer_opening_type: form.customer_opening_type === 'credit' ? 'credit' : 'debit',
         supplied_all_items: form.supplied_all_items ? 1 : 0,
         supplied_group_ids: form.supplied_group_ids,
@@ -279,12 +280,18 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
         notes: form.notes
       };
 
+      let res;
       if (isEdit) {
-        await api.updateParty(partyId, payload);
+        res = await api.updateParty(partyId, payload);
         if (onNotify) onNotify('تم تحديث بيانات جهة التعامل بنجاح');
       } else {
-        await api.createParty(payload);
+        res = await api.createParty(payload);
         if (onNotify) onNotify('تم إضافة جهة التعامل بنجاح');
+      }
+
+      const savedId = partyId || res?.data?.id || res?.party?.id;
+      if (supFlag && savedId) {
+        await api.setSupplierItems(savedId, form.supplied_item_ids || []).catch(() => {});
       }
 
       if (onSaved) {
@@ -376,7 +383,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={(e) => e.preventDefault()} onKeyDown={handleFormKeyDown} className="space-y-6">
         {/* Section 1: Party Type Selection with Single Both Checkbox */}
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -524,9 +531,35 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
             </div>
 
             <div>
-              <label htmlFor="party-phone-input" className="block text-xs font-semibold text-slate-700 mb-1">
-                رقم الهاتف
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="party-phone-input" className="block text-xs font-semibold text-slate-700">
+                  {isSupplier ? 'رقم التواصل مع المورد' : 'رقم الهاتف'}
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => openWhatsAppChat(form.phone)}
+                    disabled={!isValidPhoneForWhatsApp(form.phone)}
+                    className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                    title={!isValidPhoneForWhatsApp(form.phone) ? 'رقم الهاتف غير مسجل أو غير صالح للواتساب' : 'فتح محادثة واتساب'}
+                  >
+                    <span>واتساب</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const bal = isSupplier ? currentBalances.supplier_balance : currentBalances.customer_balance;
+                      const msg = `السلام عليكم ورحمة الله، كشف حسابكم طرفنا مسجل برصيد: ${formatCurrency(bal)}.`;
+                      openWhatsAppChat(form.phone, msg);
+                    }}
+                    disabled={!isValidPhoneForWhatsApp(form.phone)}
+                    className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                    title={!isValidPhoneForWhatsApp(form.phone) ? 'رقم الهاتف غير مسجل أو غير صالح للواتساب' : 'إرسال كشف الحساب الحالي عبر واتساب'}
+                  >
+                    <span>إرسال كشف الحساب</span>
+                  </button>
+                </div>
+              </div>
               <input
                 id="party-phone-input"
                 type="tel"
@@ -562,12 +595,10 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
                 <label htmlFor="party-credit-limit-input" className="block text-xs font-semibold text-slate-700 mb-1">
                   الحد الائتماني للعميل (ج.م)
                 </label>
-                <input
+                <MoneyInput
                   id="party-credit-limit-input"
-                  type="text"
-                  inputMode="numeric"
                   dir="ltr"
-                  value={formatNumberWithSeparators(form.credit_limit)}
+                  value={form.credit_limit}
                   onChange={handleCreditLimitChange}
                   className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono font-bold text-slate-800 bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-left"
                 />
@@ -759,11 +790,8 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
                     <label htmlFor="sup-opening-bal" className="block text-xs font-semibold text-slate-700 mb-1">
                       المبلغ
                     </label>
-                    <input
+                    <MoneyInput
                       id="sup-opening-bal"
-                      type="number"
-                      min="0"
-                      step="any"
                       dir="ltr"
                       value={form.supplier_opening_balance}
                       onChange={(e) => setForm((prev) => ({ ...prev, supplier_opening_balance: e.target.value }))}
@@ -797,11 +825,8 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
                     <label htmlFor="cust-opening-bal" className="block text-xs font-semibold text-slate-700 mb-1">
                       المبلغ
                     </label>
-                    <input
+                    <MoneyInput
                       id="cust-opening-bal"
-                      type="number"
-                      min="0"
-                      step="any"
                       dir="ltr"
                       value={form.customer_opening_balance}
                       onChange={(e) => setForm((prev) => ({ ...prev, customer_opening_balance: e.target.value }))}
@@ -858,9 +883,10 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
             إلغاء
           </button>
           <button
-            type="submit"
+            type="button"
+            onClick={handleSubmit}
             disabled={!isFormValid || saving}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50 cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>{saving ? 'جاري الحفظ...' : isEdit ? 'حفظ التعديلات' : 'حفظ جهة التعامل'}</span>
@@ -909,14 +935,11 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
               <label htmlFor="offset-amount-input" className="block text-xs font-semibold text-slate-700 mb-1">
                 مبلغ المقاصة المراد تسويته (ج.م) *
               </label>
-              <input
+              <MoneyInput
                 id="offset-amount-input"
-                type="number"
-                min="0.01"
-                max={currentBalances.max_offset}
-                step="any"
                 value={offsetAmount}
-                onChange={(e) => setOffsetAmount(e.target.value)}
+                onChange={(val) => setOffsetAmount(val)}
+                aria-label="مبلغ المقاصة المراد تسويته"
                 className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
               />
               <span className="text-[11px] text-slate-500 mt-1 block">

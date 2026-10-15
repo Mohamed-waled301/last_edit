@@ -29,6 +29,9 @@ import {
   sanitizeEgyptianPhoneInput,
   normalizePhoneForSave,
   validateEgyptianMobile,
+  normalizePhoneForWhatsApp,
+  isValidPhoneForWhatsApp,
+  openWhatsAppChat,
 } from '../utils/phone';
 import { calculatePurchaseOrderTotals } from '../logic/purchaseOrderCalculations';
 
@@ -576,7 +579,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
               <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                aria-label="بحث باسم المورد أو رقم الهاتف"
+                aria-label="بحث باسم المورد أو رقم التواصل مع المورد"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full h-10 pr-9 pl-3 rounded-md border border-gray-300 text-sm focus:border-[#1F3A5F] focus:outline-none"
@@ -584,6 +587,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
             </div>
             <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setShowAddPOModal(true)}
                 className="h-10 px-4 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-md font-bold text-sm flex items-center gap-2 cursor-pointer transition-colors shadow-sm"
               >
@@ -591,6 +595,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                 <span>+ أمر شراء جديد</span>
               </button>
               <button
+                type="button"
                 onClick={() => setShowAddSupplierModal(true)}
                 className="h-10 px-4 bg-white hover:bg-gray-50 text-gray-700 rounded-md font-semibold text-sm border border-gray-300 flex items-center gap-2 cursor-pointer transition-colors"
               >
@@ -608,7 +613,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                   <tr className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200 text-xs">
                     <th className="py-3 px-4">اسم المورد</th>
                     <th className="py-3 px-4">نوع الطرف</th>
-                    <th className="py-3 px-4">الهاتف والعنوان</th>
+                    <th className="py-3 px-4">رقم التواصل مع المورد والعنوان</th>
                     <th className="py-3 px-4">شروط الدفع</th>
                     <th className="py-3 px-4 text-left">الرصيد الدائن المستحق</th>
                     <th className="py-3 px-4 text-center">إجراءات</th>
@@ -641,8 +646,33 @@ export default function SuppliersModule({ onBack, onNotify }) {
                             </div>
                           </td>
                           <td className="py-3 px-4 text-xs text-gray-600">
-                            <div className="font-mono">{s.phone || '-'}</div>
-                            <div className="text-gray-400">{s.address || '-'}</div>
+                            <div className="font-mono font-bold text-gray-800">{s.phone || '-'}</div>
+                            {s.phone && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => openWhatsAppChat(s.phone)}
+                                  disabled={!isValidPhoneForWhatsApp(s.phone)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-0.5 cursor-pointer"
+                                  title={!isValidPhoneForWhatsApp(s.phone) ? 'رقم الهاتف غير مسجل أو غير صالح للواتساب' : 'محادثة واتساب'}
+                                >
+                                  <span>واتساب</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const msg = `السلام عليكم ورحمة الله، كشف حسابكم طرفنا مسجل برصيد: ${formatCurrency(bal)}.`;
+                                    openWhatsAppChat(s.phone, msg);
+                                  }}
+                                  disabled={!isValidPhoneForWhatsApp(s.phone)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-0.5 cursor-pointer"
+                                  title={!isValidPhoneForWhatsApp(s.phone) ? 'رقم الهاتف غير مسجل أو غير صالح للواتساب' : 'إرسال كشف الحساب عبر واتساب'}
+                                >
+                                  <span>إرسال الرصيد</span>
+                                </button>
+                              </div>
+                            )}
+                            <div className="text-gray-400 mt-0.5">{s.address || '-'}</div>
                           </td>
                           <td className="py-3 px-4 text-xs text-gray-700 font-medium">
                             {s.payment_terms === 'cash' ? 'نقدي (كاش)' : 'آجل بالاتفاق'}
@@ -1011,7 +1041,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">رقم الهاتف</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">رقم التواصل مع المورد</label>
                   <input
                     type="tel"
                     inputMode="numeric"

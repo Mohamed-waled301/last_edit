@@ -66,13 +66,17 @@ function normalizePartyOpenings(data = {}, current = null) {
  * Customer Balance (عليه) = amounts they owe us (Opening + Sales - Receipts)
  * Net Balance (الصافي) = Customer Balance - Supplier Balance (عليه - له)
  */
+import { computeAvailableCredit, toPiasters, fromPiasters } from '../../utils/money';
+
 function withComputedBalances(party, bal) {
   const supplierOpening = resolveOpeningBalance(party, 'supplier');
   const customerOpening = resolveOpeningBalance(party, 'customer');
   const finalSup = normalizeOpeningBalance(bal.supplierBalance);
   const finalCust = normalizeOpeningBalance(bal.customerBalance);
-  const finalNet = Number((finalCust - finalSup).toFixed(2));
-  const finalMaxOffset = Math.max(0, Number(Math.min(finalSup, finalCust).toFixed(2)));
+  const finalNet = fromPiasters(toPiasters(finalCust) - toPiasters(finalSup));
+  const finalMaxOffset = Math.max(0, fromPiasters(Math.min(toPiasters(finalSup), toPiasters(finalCust))));
+  const creditLimitVal = party.credit_limit !== undefined ? Number(party.credit_limit) || 0 : 0;
+  const availCredit = computeAvailableCredit(creditLimitVal, finalCust);
 
   return {
     ...party,
@@ -88,6 +92,8 @@ function withComputedBalances(party, bal) {
     customer_balance: finalCust, // عليه
     net_balance: finalNet, // الصافي = عليه - له
     max_offset_amount: finalMaxOffset,
+    available_credit: availCredit.availableEGP,
+    is_credit_limit_exceeded: availCredit.isExceeded,
     is_both: Boolean(party.is_supplier === 1 && party.is_customer === 1)
   };
 }
@@ -112,10 +118,10 @@ export const partiesRepo = {
       const pCustReturns = custReturns.filter(r => r.customer_id === party.id);
 
       const unlinkedSupPaid = payments
-        .filter(p => p.supplier_id === party.id && !p.invoice_id)
+        .filter(p => p.supplier_id === party.id && !p.invoice_id && p.status !== 'cancelled')
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       const unlinkedCustPaid = custPayments
-        .filter(p => p.customer_id === party.id && !p.invoice_id)
+        .filter(p => p.customer_id === party.id && !p.invoice_id && p.status !== 'cancelled')
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
       const supOpening = resolveOpeningBalance(party, 'supplier');
@@ -158,10 +164,10 @@ export const partiesRepo = {
     const custPayments = await db.customer_payments.where('customer_id').equals(id).toArray();
 
     const unlinkedSupPaid = payments
-      .filter(p => !p.invoice_id)
+      .filter(p => !p.invoice_id && p.status !== 'cancelled')
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const unlinkedCustPaid = custPayments
-      .filter(p => !p.invoice_id)
+      .filter(p => !p.invoice_id && p.status !== 'cancelled')
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
     const supOpening = resolveOpeningBalance(party, 'supplier');
@@ -185,12 +191,12 @@ export const partiesRepo = {
    * Create unified party and sync with suppliers/customers tables
    */
   async create(data, userId = 'usr-accountant') {
-    const id = data.id || `pty-${Date.now()}`;
-    const code = data.code || `PRT-${Date.now().toString().slice(-4)}`;
+    const id = data.id || `pty-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const code = data.code || `PRT-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 1000)}`;
     const now = new Date().toISOString();
 
-    const isSupplier = data.is_supplier ? 1 : 0;
-    const isCustomer = data.is_customer ? 1 : 0;
+    const isSupplier = (data.is_supplier || data.type === 'supplier' || data.type === 'both') ? 1 : 0;
+    const isCustomer = (data.is_customer || data.type === 'customer' || data.type === 'both') ? 1 : 0;
     const creditLimit = Math.max(0, Number(data.credit_limit) || 0);
     const openings = normalizePartyOpenings(data, null);
 

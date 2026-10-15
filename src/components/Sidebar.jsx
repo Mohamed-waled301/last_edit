@@ -19,7 +19,9 @@ import {
   Store,
   Pin,
   X,
+  Scissors,
 } from 'lucide-react';
+import { APP_VERSION } from '../version';
 
 export default function Sidebar({
   currentScreen,
@@ -79,14 +81,8 @@ export default function Sidebar({
     },
     {
       id: 'manufacturing',
-      label: 'التصنيع',
-      icon: Cog,
-      allowedRoles: ['owner', 'production', 'storekeeper', 'accountant'],
-    },
-    {
-      id: 'outsourced',
-      label: 'التصنيع لدى الغير',
-      icon: Factory,
+      label: 'شاشة القص',
+      icon: Scissors,
       allowedRoles: ['owner', 'production', 'storekeeper', 'accountant'],
     },
     {
@@ -198,19 +194,24 @@ export default function Sidebar({
         {/* Top Header: Logo + Title + Pin Button */}
         <div className="h-16 border-b border-gray-200 px-3 flex items-center justify-between shrink-0 overflow-hidden">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-md bg-[#1F3A5F] text-white flex items-center justify-center font-bold text-lg shrink-0">
-              A
-            </div>
+            <img
+              src="/logo.png"
+              alt="code systems logo"
+              className="w-10 h-10 rounded-md object-contain shrink-0"
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
+            />
             <div
               className={`overflow-hidden transition-all duration-200 whitespace-nowrap ${
                 isExpanded ? 'opacity-100 max-w-[170px]' : 'opacity-0 max-w-0 pointer-events-none'
               }`}
             >
               <span className="font-bold text-[#1F3A5F] text-base block leading-none truncate">
-                Apex Apparel ERP
+                code systems
               </span>
               <span className="text-[11px] text-gray-500 font-semibold block mt-1 truncate">
-                نظام مصانع الملابس
+                نظام إدارة موارد المنشأة
               </span>
             </div>
           </div>
@@ -338,13 +339,25 @@ export default function Sidebar({
           )}
         </nav>
 
-        {/* Bottom Factory Edition Version */}
-        <div
-          className={`p-3 border-t border-gray-200 text-xs text-gray-400 text-center font-medium shrink-0 transition-opacity duration-200 whitespace-nowrap overflow-hidden ${
-            isExpanded ? 'opacity-100' : 'opacity-0'
-          }`}
-        >
-          Clothing Factory Edition • v3.0
+        {/* Bottom Application Version Display */}
+        <div className="p-3 border-t border-gray-200 shrink-0 text-center select-none bg-slate-50/50">
+          <div
+            className={`transition-all duration-200 whitespace-nowrap overflow-hidden flex flex-col items-center justify-center ${
+              isExpanded ? 'opacity-100' : 'opacity-0 h-0 hidden'
+            }`}
+          >
+            <span className="text-[11px] font-bold text-slate-700 block">
+              code systems
+            </span>
+            <span className="text-[11px] font-mono font-semibold text-slate-500 mt-0.5 block" dir="ltr">
+              الإصدار v{APP_VERSION}
+            </span>
+          </div>
+          {!isExpanded && (
+            <div className="text-[10px] font-mono font-bold text-slate-500 text-center" dir="ltr">
+              v{APP_VERSION}
+            </div>
+          )}
         </div>
       </aside>
     </>

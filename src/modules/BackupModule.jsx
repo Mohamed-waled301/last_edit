@@ -108,16 +108,6 @@ export const BackupModule = ({ onBack, onNotify }) => {
     }
   };
 
-  const handleLoadDemo = async () => {
-    if (!window.confirm('هل تريد استبدال البيانات الحالية بالبيانات الاسترشادية المتكاملة للمؤسسة؟')) return;
-    try {
-      await backupRepo.loadDemoData(currentUser.id);
-      onNotify('تم تحميل البيانات التجريبية للمؤسسة بنجاح!', 'success');
-      await loadBackupInfo();
-    } catch (err) {
-      onNotify(err.message || 'حدث خطأ أثناء تحميل البيانات التجريبية', 'error');
-    }
-  };
 
   const handleClearAll = async () => {
     if (clearConfirmationText !== 'مسح كل البيانات') {

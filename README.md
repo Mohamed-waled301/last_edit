@@ -1,4 +1,4 @@
-# نظام إدارة وتخطيط موارد مصانع الملابس الجاهزة المتكامل (Apex Apparel ERP v4.0) 🏢🧵👗
+# نظام إدارة وتخطيط موارد مصانع الملابس الجاهزة المتكامل (code systems v1.0.4) 🏢🧵👗
 ### الحل السحابي المركزي والمحلي المتكامل لمصانع ومتاجر الملابس الجاهزة (Cloud MySQL & Offline-Ready Apparel ERP)
 
 [![Vite](https://img.shields.io/badge/Vite-8.x-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
@@ -6,7 +6,7 @@
 [![MySQL](https://img.shields.io/badge/MySQL-8.x-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Dexie.js](https://img.shields.io/badge/Dexie.js-IndexedDB%20v4-blue)](https://dexie.com/)
-[![Vitest](https://img.shields.io/badge/Vitest-60%20Passed-green?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-195%20Passed-green?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![License](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE)
 
 نظام ERP متكامل واحترافي موجه خصيصاً لـ **مصانع ومشاغل وتوكيلات الملابس الجاهزة (Clothing Factory & Retail)**. صُمم النظام بالكامل بواجهة عربية تفاعلية حديثة من اليمين إلى اليسار (RTL) وتصميم احترافي متجاوب، ليدير دورة تصنيع وتجارة الملابس المتكاملة: من توريد الأقمشة والإكسسوارات، تتبع مراحل التشغيل (قص $\leftarrow$ خياطة $\leftarrow$ كوي وتعبئة)، والتصنيع لدى الغير (تطريز، طباعة، غسيل جينز)، وصولاً إلى معارض ومنافذ التوزيع، فواتير المبيعات، مرتجعات الكاشير، تقفيل الورديات اليومية، وخزينة مجمعة مركزية.
@@ -235,22 +235,22 @@ npm run electron:dev
 npm run electron:build
 ```
 المخرجات تُحفظ تلقائياً في مجلد `release/`:
-- **مثبّت النظام (NSIS Installer)**: `Apex-Apparel-ERP-Setup-1.0.0.exe` (تثبيت مخصص لكل مستخدم، اختيار مسار التثبيت، واختصارات سطح المكتب وقائمة ابدأ باللغة العربية).
-- **النسخة المحمولة (Portable .exe)**: `Apex-Apparel-ERP-Portable-1.0.0.exe` (تشغيل مباشر بدون تثبيت).
+- **مثبّت النظام (NSIS Installer)**: `code-systems-Setup-1.0.4.exe` (تثبيت مخصص لكل مستخدم، اختيار مسار التثبيت، واختصارات سطح المكتب وقائمة ابدأ باللغة العربية).
+- **النسخة المحمولة (Portable .exe)**: `code-systems-Portable-1.0.4.exe` (تشغيل مباشر بدون تثبيت).
 
 ### 3. نشر إصدار جديد عبر GitHub Actions (Publish a Release)
 ```bash
-git tag v1.0.0
+git tag v1.0.4
 git push origin --tags
 ```
 يقوم سير العمل المؤتمت `.github/workflows/build-windows.yml` ببناء ملفات `.exe` على بيئة Windows النظيفة ورفعها كمرفقات في صفحة **GitHub Releases**.
 
 ### 4. أين تُخزن بيانات المستخدم؟ (Data Storage Location)
 - تُخزن قواعد بيانات IndexedDB محلياً بشكل دائم داخل مجلد بيانات التطبيق:
-  `%APPDATA%\Apex Apparel ERP\IndexedDB`
-  (مسار: `C:\Users\<اسم_المستخدم>\AppData\Roaming\Apex Apparel ERP\IndexedDB`).
+  `%APPDATA%\code systems\IndexedDB`
+  (مسار: `C:\Users\<اسم_المستخدم>\AppData\Roaming\code systems\IndexedDB`).
 - **النسخ الاحتياطي التلقائي الوقائي (Safeguard)**: عند إغلاق التطبيق، يتم تلقائياً حفظ نسخة احتياطية مؤرخة بصيغة JSON داخل:
-  `Documents/ApexERP-Backups/`
+  `Documents/code-systems-Backups/`
   مع الاحتفاظ بآخر 10 نسخ احتياطية فقط تلقائياً وحذف القديم.
 
 ### 5. النسخ الاحتياطي واستعادة البيانات (Backup & Restore)

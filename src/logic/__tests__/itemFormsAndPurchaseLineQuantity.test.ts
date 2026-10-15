@@ -80,19 +80,19 @@ describe('Three Focused Fixes: Item Forms Dropdowns, Quick-Add Picker Focus, and
     });
   });
 
-  describe('Requirement 3: Purchase Line Quantity Starts Empty, Is Required, and Totals Never Show NaN', () => {
-    it('Initial line and newly added lines start with empty quantity_ordered', () => {
+  describe('Requirement 2: Purchase Line Quantity Starts with Default Quantity 1', () => {
+    it('Initial line and newly added lines start with default quantity_ordered 1', () => {
       // Initial state line
-      expect(purchaseOrderFormCode).toMatch(/items:\s*\[[\s\S]*?quantity_ordered:\s*''/);
+      expect(purchaseOrderFormCode).toMatch(/items:\s*\[[\s\S]*?quantity_ordered:\s*'1'/);
 
       // In handleAddLine
-      expect(purchaseOrderFormCode).toMatch(/handleAddLine[\s\S]*?quantity_ordered:\s*''/);
+      expect(purchaseOrderFormCode).toMatch(/handleAddLine[\s\S]*?quantity_ordered:\s*'1'/);
 
       // In handlePickItem from picker
-      expect(purchaseOrderFormCode).toMatch(/handlePickItem[\s\S]*?quantity_ordered:\s*''/);
+      expect(purchaseOrderFormCode).toMatch(/handlePickItem[\s\S]*?quantity_ordered:\s*'1'/);
 
       // In handleSaveQuickItem
-      expect(purchaseOrderFormCode).toMatch(/handleSaveQuickItem[\s\S]*?quantity_ordered:\s*''/);
+      expect(purchaseOrderFormCode).toMatch(/handleSaveQuickItem[\s\S]*?quantity_ordered:\s*'1'/);
     });
 
     it('Selecting an item automatically focuses the quantity field of that line', () => {

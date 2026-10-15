@@ -1,3 +1,5 @@
 {
+  "name": "migrate-from-hostinger",
+  "version": "1.0.2",
   "type": "commonjs"
 }

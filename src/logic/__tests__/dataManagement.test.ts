@@ -13,7 +13,7 @@ describe('Data Management (إدارة البيانات) - CEO Security & Audit',
     await db.treasury_accounts.clear();
     await db.cash_transactions.clear();
     // Default to owner (CEO)
-    setActiveUser('usr-owner', 'owner', 'م. خالد المنشاوي');
+    setActiveUser('usr-owner', 'owner', 'المدير التنفيذي');
   });
 
   it('allows CEO to retrieve dynamic list of all tables from Dexie schema', async () => {
@@ -52,7 +52,7 @@ describe('Data Management (إدارة البيانات) - CEO Security & Audit',
 
   it('STRICTLY rejects non-CEO attempts to modify data and writes security audit log', async () => {
     // Switch to non-CEO role (cashier or storekeeper)
-    setActiveUser('usr-cashier', 'cashier', 'أحمد محمود');
+    setActiveUser('usr-cashier', 'cashier', 'أمين الصندوق');
 
     await expect(
       dataManagementRepo.createRecord('items', {

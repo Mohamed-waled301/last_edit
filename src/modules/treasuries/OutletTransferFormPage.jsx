@@ -4,6 +4,7 @@ import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import { MoneyInput } from '../../components/MoneyInput';
 
 export default function OutletTransferFormPage({ onSaved, onNotify }) {
   const [outletTreasuries, setOutletTreasuries] = useState([]);
@@ -159,12 +160,10 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 مبلغ التوريد (ج.م) <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                min="1"
-                step="0.01"
+              <MoneyInput
                 value={form.amount}
-                onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))}
+                onChange={(val) => setForm(prev => ({ ...prev, amount: val }))}
+                aria-label="مبلغ التوريد"
                 className={`w-full px-3 py-2 border rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 ${
                   isBalanceInsufficient ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-300 focus:ring-[#1F3A5F]'
                 }`}

@@ -18,6 +18,7 @@ import {
   backupRepo 
 } from '../../data';
 import { api } from '../../services/api';
+import { seedTestClothingData } from './fixtures/demoDataFixture';
 
 describe('All Modules Audit: Empty Database and Demo Data (Requirement M5)', () => {
   let consoleErrors: string[] = [];
@@ -146,8 +147,8 @@ describe('All Modules Audit: Empty Database and Demo Data (Requirement M5)', () 
   });
 
   it('2. Operates cleanly with CLOTHING FACTORY DEMO DATA without errors', async () => {
-    // Seed system with clothing factory data
-    await backupRepo.loadDemoData('usr-owner');
+    // Seed system with clothing factory test fixture data
+    await seedTestClothingData('usr-test-owner');
 
     // Fetch and verify loaded data
     const [
@@ -261,6 +262,6 @@ describe('All Modules Audit: Empty Database and Demo Data (Requirement M5)', () 
     expect(Array.isArray(invRes.data)).toBe(true);
 
     // Reset active user to owner
-    api.setActiveUser('usr-owner', 'owner', 'م. خالد المنشاوي');
+    api.setActiveUser('usr-owner', 'owner', 'المدير التنفيذي');
   });
 });

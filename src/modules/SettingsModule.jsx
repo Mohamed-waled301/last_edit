@@ -10,9 +10,12 @@ import {
   RefreshCw,
   Trash2,
   HardDrive,
-  Key
+  Key,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
+import { NumberInput } from '../components/MoneyInput';
 import { api } from '../services/api';
 import { backupRepo, settingsRepo, auditRepo } from '../data';
 import { formatDate } from '../utils/formatters';
@@ -22,6 +25,8 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
     factory_name: '',
     phone: '',
     address: '',
+    company_logo: '',
+    default_credit_days: 30,
     vat_enabled: false,
     vat_rate_percent: 14.00,
     currency_symbol: 'ج.م',
@@ -34,6 +39,8 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearConfirmationText, setClearConfirmationText] = useState('');
   const [licenseInfo, setLicenseInfo] = useState(null);
+  const [logoError, setLogoError] = useState('');
+  const fileInputRef = React.useRef(null);
 
   const loadData = async () => {
     try {
@@ -69,6 +76,66 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
     loadLicense();
   }, []);
 
+  const handleLogoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoError('حجم ملف الشعار يتجاوز الحد الأقصى المسموح (2 ميجابايت)');
+      return;
+    }
+
+    setLogoError('');
+
+    if (file.type === 'image/svg+xml') {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setSettings(prev => ({ ...prev, company_logo: event.target.result }));
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 300;
+        const MAX_HEIGHT = 300;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const compressedDataUrl = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.85);
+        setSettings(prev => ({ ...prev, company_logo: compressedDataUrl }));
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    setSettings(prev => ({ ...prev, company_logo: '' }));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     try {
@@ -90,17 +157,6 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
       alert(err.message);
     } finally {
       setIsBackupLoading(false);
-    }
-  };
-
-  const handleLoadDemo = async () => {
-    if (!window.confirm('هل تريد استبدال البيانات الحالية بالبيانات الاسترشادية للمؤسسة؟')) return;
-    try {
-      await backupRepo.loadDemoData('usr-owner');
-      onNotify('تم تحميل البيانات التجريبية للمؤسسة بنجاح!', 'success');
-      loadData();
-    } catch (err) {
-      alert(err.message);
     }
   };
 
@@ -139,6 +195,67 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
           </div>
 
           <form onSubmit={handleSaveSettings} className="space-y-4">
+            {/* Company Logo Upload (Requirement 5) */}
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+              <label className="block text-sm font-bold text-gray-800">
+                شعار المنشأة (Company Logo)
+              </label>
+              <p className="text-xs text-gray-500">
+                يظهر الشعار بجوار اسم المصنع في الشريط العلوي وعلى جميع المطبوعات والتقارير والفواتير تلقائياً.
+              </p>
+
+              {settings.company_logo ? (
+                <div className="flex items-center gap-4 bg-white p-3 rounded-md border border-gray-200">
+                  <img
+                    src={settings.company_logo}
+                    alt="شعار المنشأة المعين"
+                    className="h-16 w-auto max-w-[120px] object-contain rounded border border-gray-200 bg-gray-50 p-1"
+                  />
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 bg-[#1F3A5F] hover:bg-[#162a45] text-white rounded text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>تغيير الشعار</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveLogo}
+                      className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded text-xs font-bold transition-colors border border-red-200 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>حذف الشعار</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full py-4 border-2 border-dashed border-gray-300 hover:border-[#1F3A5F] bg-white rounded-lg flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-gray-600 hover:text-[#1F3A5F]"
+                  >
+                    <Upload className="w-6 h-6 text-gray-400" />
+                    <span className="text-xs font-bold">انقر لاختيار شعار المنشأة (PNG, JPG, SVG - بحد أقصى 2MB)</span>
+                  </button>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml"
+                onChange={handleLogoUpload}
+                className="hidden"
+                aria-label="رفع شعار المنشأة"
+              />
+              {logoError && (
+                <p className="text-xs text-red-600 font-bold mt-1">{logoError}</p>
+              )}
+            </div>
+
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">اسم الشركة أو المنشأة</label>
               <input
@@ -181,12 +298,24 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
               />
             </div>
 
+            {/* Default Credit Days for Sales Invoices (Requirement 3) */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                فترة الائتمان الافتراضية للفواتير الآجلة (بالأيام)
+              </label>
+              <NumberInput
+                value={settings.default_credit_days !== undefined ? settings.default_credit_days : 30}
+                onChange={e => setSettings({ ...settings, default_credit_days: Math.max(0, parseInt(e.target.value) || 0) })}
+                className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
+              />
+              <span className="text-[11px] text-gray-500 mt-1 block">
+                تضاف هذه الأيام تلقائياً إلى تاريخ فاتورة المبيعات الآجلة لتحديد تاريخ الاستحقاق.
+              </span>
+            </div>
+
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">نسبة هامش الربح الافتراضية (%)</label>
-              <input
-                type="number"
-                min="0"
-                step="any"
+              <NumberInput
                 value={settings.default_profit_margin_percent !== undefined ? settings.default_profit_margin_percent : 0}
                 onChange={e => setSettings({ ...settings, default_profit_margin_percent: Number(e.target.value) || 0 })}
                 className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
@@ -208,13 +337,10 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
               {settings.vat_enabled && (
                 <div className="flex items-center gap-2 pr-6">
                   <span className="text-xs font-semibold text-gray-600">نسبة الضريبة:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
+                  <NumberInput
                     value={settings.vat_rate_percent}
                     onChange={e => setSettings({ ...settings, vat_rate_percent: Number(e.target.value) })}
-                    className="w-20 h-9 rounded border border-gray-300 px-2 text-xs font-bold text-center"
+                    className="w-24 h-9 rounded border border-gray-300 px-2 text-xs font-bold text-center"
                   />
                   <span className="text-xs text-gray-500 font-semibold">% (14% في مصر)</span>
                 </div>
@@ -369,7 +495,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
           <div className="md:col-span-2">
             <label className="block text-xs font-semibold text-gray-500 mb-1">نوع الإصدار</label>
             <div className="w-full h-11 rounded-md bg-gray-50 border border-gray-200 px-3 flex items-center font-bold text-gray-800">
-              {licenseInfo?.edition || 'Apex Apparel ERP Enterprise'}
+              {licenseInfo?.edition || 'code systems Enterprise'}
             </div>
           </div>
         </div>

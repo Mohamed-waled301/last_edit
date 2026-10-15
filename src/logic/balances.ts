@@ -98,11 +98,12 @@ export function resolveOpeningType(
   );
 }
 
+import { toPiasters, fromPiasters } from '../utils/money';
+
 export class BalanceCalculator {
   /**
    * 1. Calculate Supplier Balance (حساب رصيد المورد المستحق - فلوس علينا)
-   * Current Balance = Opening Balance + Credit Purchases (فواتير آجل) - Cash Out / Payments (سندات صرف نقدية)
-   * In invoice terms: Balance = Opening + (Sum of Valid Invoices) - (Sum of Paid Amounts) - (Sum of Balance Deducted Returns)
+   * Computed using exact integer piasters to eliminate floating-point drift.
    */
   static calculateSupplierBalance(
     invoices: InvoiceRecord[] = [],
@@ -110,41 +111,43 @@ export class BalanceCalculator {
     openingBalance: number = 0,
     unlinkedPayments: number = 0
   ): BalanceSummary {
-    let totalInvoiced = 0;
-    let totalPaid = 0;
+    let totalInvoicedPiasters = 0;
+    let totalPaidPiasters = 0;
 
     for (const inv of invoices) {
       if (inv.status !== 'cancelled') {
-        const invTotal = Number(inv.total_amount) || 0;
-        const paid = Number(inv.paid_amount) || 0;
-        totalInvoiced += invTotal;
-        totalPaid += paid;
+        const invTotal = toPiasters(inv.total_amount);
+        const paid = toPiasters(inv.paid_amount);
+        totalInvoicedPiasters += invTotal;
+        totalPaidPiasters += paid;
       }
     }
 
-    let totalReturns = 0;
+    let totalReturnsPiasters = 0;
     for (const ret of returns) {
       if (ret.refund_status === 'deduct_balance') {
-        totalReturns += Number(ret.total_amount) || 0;
+        totalReturnsPiasters += toPiasters(ret.total_amount);
       }
     }
 
-    const unlinked = Math.max(0, Number(unlinkedPayments) || 0);
-    const opening = normalizeOpeningBalance(openingBalance);
-    const balanceDue = Math.max(0, Number((opening + totalInvoiced - totalPaid - totalReturns - unlinked).toFixed(2)));
+    const unlinkedPiasters = Math.max(0, toPiasters(unlinkedPayments));
+    const openingPiasters = Math.max(0, toPiasters(openingBalance));
+    const balanceDuePiasters = Math.max(
+      0,
+      openingPiasters + totalInvoicedPiasters - totalPaidPiasters - totalReturnsPiasters - unlinkedPiasters
+    );
 
     return {
-      totalInvoiced: Number(totalInvoiced.toFixed(2)),
-      totalPaid: Number((totalPaid + unlinked).toFixed(2)),
-      totalReturns: Number(totalReturns.toFixed(2)),
-      balanceDue
+      totalInvoiced: fromPiasters(totalInvoicedPiasters),
+      totalPaid: fromPiasters(totalPaidPiasters + unlinkedPiasters),
+      totalReturns: fromPiasters(totalReturnsPiasters),
+      balanceDue: fromPiasters(balanceDuePiasters)
     };
   }
 
   /**
    * 2. Calculate Customer Balance (حساب رصيد العميل المستحق - فلوس لينا بره)
-   * Current Balance = Opening Balance + Credit Sales (سحب فواتير آجل) - Cash In / Receipts (سندات قبض نقدية)
-   * In invoice terms: Balance = Opening + (Sum of Valid Invoices) - (Sum of Collected Amounts) - (Sum of Balance Deducted Returns)
+   * Computed using exact integer piasters to eliminate floating-point drift.
    */
   static calculateCustomerBalance(
     invoices: InvoiceRecord[] = [],
@@ -152,34 +155,37 @@ export class BalanceCalculator {
     openingBalance: number = 0,
     unlinkedPayments: number = 0
   ): BalanceSummary {
-    let totalInvoiced = 0;
-    let totalPaid = 0;
+    let totalInvoicedPiasters = 0;
+    let totalPaidPiasters = 0;
 
     for (const inv of invoices) {
       if (inv.status !== 'cancelled') {
-        const invTotal = Number(inv.total_invoice_amount ?? inv.total_amount) || 0;
-        const paid = Number(inv.paid_amount) || 0;
-        totalInvoiced += invTotal;
-        totalPaid += paid;
+        const invTotal = toPiasters(inv.total_invoice_amount ?? inv.total_amount);
+        const paid = toPiasters(inv.paid_amount);
+        totalInvoicedPiasters += invTotal;
+        totalPaidPiasters += paid;
       }
     }
 
-    let totalReturns = 0;
+    let totalReturnsPiasters = 0;
     for (const ret of returns) {
       if (ret.refund_method === 'deduct_balance' || ret.refund_status === 'deduct_balance') {
-        totalReturns += Number(ret.refund_amount ?? ret.total_amount) || 0;
+        totalReturnsPiasters += toPiasters(ret.refund_amount ?? ret.total_amount);
       }
     }
 
-    const unlinked = Math.max(0, Number(unlinkedPayments) || 0);
-    const opening = normalizeOpeningBalance(openingBalance);
-    const balanceDue = Math.max(0, Number((opening + totalInvoiced - totalPaid - totalReturns - unlinked).toFixed(2)));
+    const unlinkedPiasters = Math.max(0, toPiasters(unlinkedPayments));
+    const openingPiasters = Math.max(0, toPiasters(openingBalance));
+    const balanceDuePiasters = Math.max(
+      0,
+      openingPiasters + totalInvoicedPiasters - totalPaidPiasters - totalReturnsPiasters - unlinkedPiasters
+    );
 
     return {
-      totalInvoiced: Number(totalInvoiced.toFixed(2)),
-      totalPaid: Number((totalPaid + unlinked).toFixed(2)),
-      totalReturns: Number(totalReturns.toFixed(2)),
-      balanceDue
+      totalInvoiced: fromPiasters(totalInvoicedPiasters),
+      totalPaid: fromPiasters(totalPaidPiasters + unlinkedPiasters),
+      totalReturns: fromPiasters(totalReturnsPiasters),
+      balanceDue: fromPiasters(balanceDuePiasters)
     };
   }
 
@@ -200,16 +206,16 @@ export class BalanceCalculator {
     const supBal = this.calculateSupplierBalance(supplierInvoices, supplierReturns, supplierOpening, supplierUnlinkedPayments);
     const custBal = this.calculateCustomerBalance(customerInvoices, customerReturns, customerOpening, customerUnlinkedPayments);
 
-    const supplierBalance = supBal.balanceDue;
-    const customerBalance = custBal.balanceDue;
-    const netBalance = Number((customerBalance - supplierBalance).toFixed(2));
-    const maxOffsetAmount = Math.max(0, Number(Math.min(supplierBalance, customerBalance).toFixed(2)));
+    const supPiasters = toPiasters(supBal.balanceDue);
+    const custPiasters = toPiasters(custBal.balanceDue);
+    const netPiasters = custPiasters - supPiasters;
+    const maxOffsetPiasters = Math.max(0, Math.min(supPiasters, custPiasters));
 
     return {
-      supplierBalance,
-      customerBalance,
-      netBalance,
-      maxOffsetAmount
+      supplierBalance: fromPiasters(supPiasters),
+      customerBalance: fromPiasters(custPiasters),
+      netBalance: fromPiasters(netPiasters),
+      maxOffsetAmount: fromPiasters(maxOffsetPiasters)
     };
   }
 
@@ -220,16 +226,16 @@ export class BalanceCalculator {
     initialBalance: number,
     transactions: Array<{ tx_type: 'inflow' | 'outflow'; amount: number }> = []
   ): number {
-    let balance = Number(initialBalance) || 0;
+    let balancePiasters = toPiasters(initialBalance);
     for (const tx of transactions) {
-      const amt = Number(tx.amount) || 0;
+      const amtPiasters = toPiasters(tx.amount);
       if (tx.tx_type === 'inflow') {
-        balance += amt;
+        balancePiasters += amtPiasters;
       } else if (tx.tx_type === 'outflow') {
-        balance -= amt;
+        balancePiasters -= amtPiasters;
       }
     }
-    return Number(balance.toFixed(2));
+    return fromPiasters(balancePiasters);
   }
 }
 

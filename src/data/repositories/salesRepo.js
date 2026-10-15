@@ -366,6 +366,19 @@ export const salesRepo = {
     const totalSellingExpenses = Number((shipping + customs + commission).toFixed(2));
     const settings = await db.settings.get(1);
 
+    // Validation: Item type MUST be finished goods only (يقتصر البيع على المنتجات التامة فقط)
+    for (const item of (data.items || [])) {
+      const itemMaster = (await db.items.get(item.product_id)) || (await db.products.get(item.product_id));
+      if (itemMaster) {
+        const itemType = String(itemMaster.item_type || itemMaster.type || '').trim();
+        const isFinished = itemType === 'finished' || itemType === 'تام' || itemType === 'منتج تام';
+        if (!isFinished) {
+          const name = itemMaster.name || item.product_id;
+          throw new Error(`لا يمكن إصدار فاتورة مبيعات لصنف غير تام الصنع: الصنف "${name}" نوعه مادة خام / مستلزم إنتاج. يقتصر البيع على المنتجات التامة فقط.`);
+        }
+      }
+    }
+
     let subtotal = 0;
     let totalCogs = 0;
     const invoiceItems = [];
@@ -815,6 +828,17 @@ export const salesRepo = {
       // If original invoice was Cash and no explicit refund_method given, refund in cash
       if (origInv.payment_terms === 'cash' && !refund_method) {
         actualRefundMethod = 'cash_refund';
+      }
+    }
+
+    // Validation: Return product MUST be finished goods only
+    const itemMaster = (await db.items.get(product_id)) || (await db.products.get(product_id));
+    if (itemMaster) {
+      const itemType = String(itemMaster.item_type || itemMaster.type || '').trim();
+      const isFinished = itemType === 'finished' || itemType === 'تام' || itemType === 'منتج تام';
+      if (!isFinished) {
+        const name = itemMaster.name || product_id;
+        throw new Error(`لا يمكن إضافة الصنف "${name}" في مرتجع المبيعات: يقتصر المرتجع على المنتجات التامة فقط (تام).`);
       }
     }
 

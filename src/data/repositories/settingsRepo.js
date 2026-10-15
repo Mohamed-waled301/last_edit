@@ -10,6 +10,8 @@ export const settingsRepo = {
         factory_name: '',
         phone: '',
         address: '',
+        company_logo: '',
+        default_credit_days: 30,
         vat_enabled: 0,
         vat_rate_percent: 14.0,
         currency_symbol: 'ج.م',
@@ -32,6 +34,10 @@ export const settingsRepo = {
     await db.settings.put(updated);
     await auditRepo.log(userId, 'UPDATE_SETTINGS', 'settings', 1, current, updated);
     return updated;
+  },
+
+  async update(data, userId = 'usr-owner') {
+    return this.updateSettings(data, userId);
   },
 
   async recordBackupTime() {

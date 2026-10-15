@@ -4,6 +4,7 @@ import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import { MoneyInput, NumberInput } from '../../components/MoneyInput';
 
 export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
   const [productionOrders, setProductionOrders] = useState([]);
@@ -192,11 +193,10 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 الكمية المحولة للتشغيل الخارجي <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                min="1"
+              <NumberInput
                 value={form.finishing_quantity}
-                onChange={(e) => setForm(prev => ({ ...prev, finishing_quantity: e.target.value }))}
+                onChange={(val) => setForm(prev => ({ ...prev, finishing_quantity: val }))}
+                aria-label="الكمية المحولة للتشغيل الخارجي"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
@@ -293,12 +293,10 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 أجر خدمة المصنع الخارجي للقطعة
               </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
+              <MoneyInput
                 value={form.service_fee}
-                onChange={(e) => setForm(prev => ({ ...prev, service_fee: e.target.value }))}
+                onChange={(val) => setForm(prev => ({ ...prev, service_fee: val }))}
+                aria-label="أجر خدمة المصنع الخارجي للقطعة"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold text-indigo-700 focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
               <span className="text-[11px] text-gray-400 mt-0.5 block">
@@ -311,12 +309,10 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 تكاليف النقل والشحن ذهاب وعودة
               </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
+              <MoneyInput
                 value={form.transport_cost}
-                onChange={(e) => setForm(prev => ({ ...prev, transport_cost: e.target.value }))}
+                onChange={(val) => setForm(prev => ({ ...prev, transport_cost: val }))}
+                aria-label="تكاليف النقل والشحن ذهاب وعودة"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
             </div>

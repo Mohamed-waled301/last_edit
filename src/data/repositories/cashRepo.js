@@ -203,8 +203,357 @@ export const cashRepo = {
 
     await auditRepo.log(userId, 'DISBURSE_EXPENSE', 'cash_transactions', txId, null, data);
     return { success: true, txId, txNumber };
+  },
+
+  /**
+   * Record Supplier Payment (مدفوعات مورد)
+   * Reduces supplier debt and treasury in ONE atomic transaction.
+   * Treasury may go negative (never blocked).
+   */
+  async recordSupplierPayment(data, userId = 'usr-accountant') {
+    const { supplier_id, amount, payment_date, payment_method, account_id, notes } = data;
+    if (payment_date) validateNotPastDate(payment_date, 'تاريخ سند الصرف للمورد');
+
+    const payAmount = Math.max(0, Number(amount) || 0);
+    if (payAmount <= 0) throw new Error('مبلغ دفعة المورد يجب أن يكون رقماً أكبر من صفر');
+
+    // Retrieve supplier and current balance
+    const party = await db.parties.get(supplier_id);
+    if (!party || !party.is_supplier) throw new Error('المورد المحدد غير موجود بالنظام');
+
+    const { partiesRepo } = await import('./partiesRepo');
+    const fullParty = await partiesRepo.getById(supplier_id);
+    const owedBalance = Number(fullParty?.supplier_balance) || 0;
+
+    if (!data.production_order_id && !data.allowAdvance && payAmount > owedBalance) {
+      throw new Error(`مبلغ دفعة المورد (${payAmount} ج.م) لا يمكن أن يتجاوز رصيد المديونية المستحق له (${owedBalance} ج.م)`);
+    }
+
+    if (data.max_allowed !== undefined && payAmount > Number(data.max_allowed)) {
+      throw new Error(`مبلغ الدفعة (${payAmount} ج.م) لا يمكن أن يتجاوز المبلغ المتبقي للمرحلة (${data.max_allowed} ج.م)`);
+    }
+
+    // Default to main treasury if not provided
+    let targetAccId = account_id;
+    if (!targetAccId) {
+      let mainAcc = (await db.treasury_accounts.where('is_main').equals(1).first()) ||
+                    (await db.treasury_accounts.toCollection().first());
+      if (!mainAcc) {
+        mainAcc = {
+          id: 'treasury-main-auto',
+          code: 'TRS-01',
+          name: 'الخزينة الرئيسية',
+          current_balance: 0,
+          opening_balance: 0,
+          is_main: 1,
+          is_active: 1,
+          created_at: new Date().toISOString()
+        };
+        await db.treasury_accounts.add(mainAcc);
+      }
+      targetAccId = mainAcc.id;
+    }
+
+    const rnd = Math.floor(Math.random() * 100000);
+    const paymentId = `spay-${Date.now()}-${rnd}`;
+    const paymentNumber = `PAY-SUP-${Date.now().toString().slice(-4)}-${rnd.toString().slice(-3)}`;
+    const txId = `tx-${Date.now()}-${rnd}`;
+    const txNumber = `TXN-PAY-${Date.now().toString().slice(-4)}-${rnd.toString().slice(-3)}`;
+    const now = new Date().toISOString();
+
+    let finalAccBal = 0;
+
+    await db.transaction('rw', [
+      db.payments,
+      db.treasury_accounts,
+      db.cash_transactions
+    ], async () => {
+      const account = await db.treasury_accounts.get(targetAccId);
+      if (!account) throw new Error('الخزينة المحددة غير موجودة');
+
+      const currentAccBal = Number(account.current_balance) || 0;
+      // Treasury CAN go negative (never blocked)
+      finalAccBal = Number((currentAccBal - payAmount).toFixed(2));
+      await db.treasury_accounts.update(targetAccId, { current_balance: finalAccBal });
+
+      // Record in payments table (shared supplier payment ledger)
+      await db.payments.add({
+        id: paymentId,
+        payment_number: paymentNumber,
+        supplier_id,
+        invoice_id: null,
+        production_order_id: data.production_order_id || null,
+        stage_type: data.stage_type || null,
+        account_id: targetAccId,
+        amount: payAmount,
+        payment_date: payment_date || now.split('T')[0],
+        payment_method: payment_method || 'نقداً',
+        notes: notes || '',
+        status: 'issued',
+        created_by: userId,
+        created_at: now
+      });
+
+      // Record cash transaction outflow
+      await db.cash_transactions.add({
+        id: txId,
+        tx_number: txNumber,
+        account_id: targetAccId,
+        tx_type: 'outflow',
+        category: 'supplier_payment',
+        amount: payAmount,
+        balance_after: finalAccBal,
+        reference_type: 'SUPPLIER_PAYMENT',
+        reference_id: paymentId,
+        description: `سداد دفعة للمورد: ${party.name}${notes ? ' - ' + notes : ''}`,
+        created_by: userId,
+        created_at: now
+      });
+    });
+
+    await auditRepo.log(userId, 'RECORD_SUPPLIER_PAYMENT', 'payments', paymentId, null, {
+      ...data,
+      paymentNumber,
+      txNumber,
+      balance_after: finalAccBal
+    });
+
+    return {
+      success: true,
+      id: paymentId,
+      paymentId,
+      paymentNumber,
+      amount: data.amount,
+      txNumber,
+      treasuryBalanceAfter: finalAccBal
+    };
+  },
+
+  /**
+   * Record Customer Receipt (استلام نقدية من عميل)
+   * Increases treasury and reduces customer debt in ONE atomic transaction.
+   */
+  async recordCustomerReceipt(data, userId = 'usr-accountant') {
+    const { customer_id, amount, payment_date, payment_method, account_id, notes } = data;
+    if (payment_date) validateNotPastDate(payment_date, 'تاريخ سند استلام النقدية');
+
+    const recAmount = Math.max(0, Number(amount) || 0);
+    if (recAmount <= 0) throw new Error('قيمة الدفعة المستلمة يجب أن تكون أكبر من صفر');
+
+    // Retrieve customer and current balance
+    const party = await db.parties.get(customer_id);
+    if (!party || !party.is_customer) throw new Error('العميل المحدد غير موجود بالنظام');
+
+    const { partiesRepo } = await import('./partiesRepo');
+    const fullParty = await partiesRepo.getById(customer_id);
+    const owedBalance = Number(fullParty?.customer_balance) || 0;
+
+    if (recAmount > owedBalance) {
+      throw new Error(`قيمة الدفعة (${recAmount} ج.م) لا يمكن أن تتجاوز رصيد المديونية المستحق على العميل (${owedBalance} ج.م)`);
+    }
+
+    // Default to main treasury if not provided
+    let targetAccId = account_id;
+    if (!targetAccId) {
+      let mainAcc = (await db.treasury_accounts.where('is_main').equals(1).first()) ||
+                    (await db.treasury_accounts.toCollection().first());
+      if (!mainAcc) {
+        mainAcc = {
+          id: 'treasury-main-auto',
+          code: 'TRS-01',
+          name: 'الخزينة الرئيسية',
+          current_balance: 0,
+          opening_balance: 0,
+          is_main: 1,
+          is_active: 1,
+          created_at: new Date().toISOString()
+        };
+        await db.treasury_accounts.add(mainAcc);
+      }
+      targetAccId = mainAcc.id;
+    }
+
+    const rnd = Math.floor(Math.random() * 100000);
+    const receiptId = `cpay-${Date.now()}-${rnd}`;
+    const receiptNumber = `REC-CUST-${Date.now().toString().slice(-4)}-${rnd.toString().slice(-3)}`;
+    const txId = `tx-${Date.now()}-${rnd}`;
+    const txNumber = `TXN-REC-${Date.now().toString().slice(-4)}-${rnd.toString().slice(-3)}`;
+    const now = new Date().toISOString();
+
+    let finalAccBal = 0;
+
+    await db.transaction('rw', [
+      db.customer_payments,
+      db.treasury_accounts,
+      db.cash_transactions
+    ], async () => {
+      const account = await db.treasury_accounts.get(targetAccId);
+      if (!account) throw new Error('الخزينة المحددة غير موجودة');
+
+      const currentAccBal = Number(account.current_balance) || 0;
+      finalAccBal = Number((currentAccBal + recAmount).toFixed(2));
+      await db.treasury_accounts.update(targetAccId, { current_balance: finalAccBal });
+
+      // Record in customer_payments table
+      await db.customer_payments.add({
+        id: receiptId,
+        receipt_number: receiptNumber,
+        customer_id,
+        invoice_id: null,
+        account_id: targetAccId,
+        amount: recAmount,
+        payment_date: payment_date || now.split('T')[0],
+        payment_method: payment_method || 'نقداً',
+        notes: notes || '',
+        status: 'issued',
+        created_by: userId,
+        created_at: now
+      });
+
+      // Record cash transaction inflow
+      await db.cash_transactions.add({
+        id: txId,
+        tx_number: txNumber,
+        account_id: targetAccId,
+        tx_type: 'inflow',
+        category: 'customer_payment',
+        amount: recAmount,
+        balance_after: finalAccBal,
+        reference_type: 'CUSTOMER_RECEIPT',
+        reference_id: receiptId,
+        description: `استلام دفعة نقدية من العميل: ${party.name}${notes ? ' - ' + notes : ''}`,
+        created_by: userId,
+        created_at: now
+      });
+    });
+
+    await auditRepo.log(userId, 'RECORD_CUSTOMER_RECEIPT', 'customer_payments', receiptId, null, {
+      ...data,
+      receiptNumber,
+      txNumber,
+      balance_after: finalAccBal
+    });
+
+    return {
+      success: true,
+      id: receiptId,
+      receiptId,
+      receiptNumber,
+      amount: data.amount,
+      txNumber,
+      treasuryBalanceAfter: finalAccBal
+    };
+  },
+
+  /**
+   * Cancel Supplier Payment via Reversing Entry (never deleted)
+   */
+  async cancelSupplierPayment(paymentId, reason = '', userId = 'usr-accountant') {
+    const payment = await db.payments.get(paymentId);
+    if (!payment) throw new Error('سند صرف دفعة المورد غير موجود');
+    if (payment.status === 'cancelled') throw new Error('سند الصرف ملغي بالفعل');
+
+    const now = new Date().toISOString();
+    const txId = `tx-rev-${Date.now()}`;
+    const txNumber = `TXN-REV-${Date.now().toString().slice(-4)}`;
+
+    await db.transaction('rw', [
+      db.payments,
+      db.treasury_accounts,
+      db.cash_transactions
+    ], async () => {
+      // 1. Mark payment as cancelled
+      await db.payments.update(paymentId, {
+        status: 'cancelled',
+        cancellation_reason: reason,
+        cancelled_at: now,
+        cancelled_by: userId
+      });
+
+      // 2. Reverse effect on treasury (inflow)
+      const account = await db.treasury_accounts.get(payment.account_id);
+      if (account) {
+        const curBal = Number(account.current_balance) || 0;
+        const newBal = Number((curBal + Number(payment.amount)).toFixed(2));
+        await db.treasury_accounts.update(payment.account_id, { current_balance: newBal });
+
+        // Record reversing cash transaction
+        await db.cash_transactions.add({
+          id: txId,
+          tx_number: txNumber,
+          account_id: payment.account_id,
+          tx_type: 'inflow',
+          category: 'supplier_payment_reversal',
+          amount: Number(payment.amount),
+          balance_after: newBal,
+          reference_type: 'PAYMENT_REVERSAL',
+          reference_id: paymentId,
+          description: `إلغاء وقيد عكسي لسند صرف المورد ${payment.payment_number}: ${reason || 'إلغاء معتمد'}`,
+          created_by: userId,
+          created_at: now
+        });
+      }
+    });
+
+    await auditRepo.log(userId, 'CANCEL_SUPPLIER_PAYMENT', 'payments', paymentId, payment, { status: 'cancelled', reason });
+    return { success: true };
+  },
+
+  /**
+   * Cancel Customer Receipt via Reversing Entry (never deleted)
+   */
+  async cancelCustomerReceipt(receiptId, reason = '', userId = 'usr-accountant') {
+    const receipt = await db.customer_payments.get(receiptId);
+    if (!receipt) throw new Error('سند استلام النقدية غير موجود');
+    if (receipt.status === 'cancelled') throw new Error('سند الاستلام ملغي بالفعل');
+
+    const now = new Date().toISOString();
+    const txId = `tx-rev-${Date.now()}`;
+    const txNumber = `TXN-REV-${Date.now().toString().slice(-4)}`;
+
+    await db.transaction('rw', [
+      db.customer_payments,
+      db.treasury_accounts,
+      db.cash_transactions
+    ], async () => {
+      // 1. Mark receipt as cancelled
+      await db.customer_payments.update(receiptId, {
+        status: 'cancelled',
+        cancellation_reason: reason,
+        cancelled_at: now,
+        cancelled_by: userId
+      });
+
+      // 2. Reverse effect on treasury (outflow)
+      const account = await db.treasury_accounts.get(receipt.account_id);
+      if (account) {
+        const curBal = Number(account.current_balance) || 0;
+        const newBal = Number((curBal - Number(receipt.amount)).toFixed(2));
+        await db.treasury_accounts.update(receipt.account_id, { current_balance: newBal });
+
+        // Record reversing cash transaction
+        await db.cash_transactions.add({
+          id: txId,
+          tx_number: txNumber,
+          account_id: receipt.account_id,
+          tx_type: 'outflow',
+          category: 'customer_receipt_reversal',
+          amount: Number(receipt.amount),
+          balance_after: newBal,
+          reference_type: 'RECEIPT_REVERSAL',
+          reference_id: receiptId,
+          description: `إلغاء وقيد عكسي لسند تحصيل العميل ${receipt.receipt_number}: ${reason || 'إلغاء معتمد'}`,
+          created_by: userId,
+          created_at: now
+        });
+      }
+    });
+
+    await auditRepo.log(userId, 'CANCEL_CUSTOMER_RECEIPT', 'customer_payments', receiptId, receipt, { status: 'cancelled', reason });
+    return { success: true };
   }
 };
 
 export default cashRepo;
+
 

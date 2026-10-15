@@ -28,9 +28,9 @@ import {
 import db from '../data/db';
 import { syncPush, syncFetch, syncHydrateAll } from './apiSync';
 
-let currentUserId = 'usr-owner';
-let currentUserRole = 'owner';
-let currentUserFullName = 'م. خالد المنشاوي';
+let currentUserId = '';
+let currentUserRole = '';
+let currentUserFullName = '';
 let currentUserOutletId = null;
 
 // Initialize session from sessionStorage if available
@@ -94,6 +94,10 @@ export const api = {
     const item = await itemsRepo.getById(id);
     return { success: true, data: item, item };
   },
+  getItemByCode: async (code) => {
+    const item = await itemsRepo.getByCode(code);
+    return { success: Boolean(item), data: item, item };
+  },
   createItem: async (data) => {
     const res = await itemsRepo.create(data, currentUserId);
     syncPush('items', 'insert', res);
@@ -141,6 +145,24 @@ export const api = {
     const res = await itemsRepo.createUnit(data, currentUserId);
     syncPush('item_units', 'insert', res);
     return { success: true, data: res, unit: res, message: 'تم إضافة وحدة القياس بنجاح' };
+  },
+
+  // Item & Supplier Linking (Requirement 6.2)
+  getItemSuppliers: async (itemId) => {
+    const list = await itemsRepo.getItemSuppliers(itemId);
+    return { success: true, data: list, suppliers: list };
+  },
+  setItemSuppliers: async (itemId, suppliersList) => {
+    await itemsRepo.setItemSuppliers(itemId, suppliersList);
+    return { success: true };
+  },
+  getSupplierItems: async (supplierId) => {
+    const list = await itemsRepo.getSupplierItems(supplierId);
+    return { success: true, data: list, items: list };
+  },
+  setSupplierItems: async (supplierId, itemIds) => {
+    await itemsRepo.setSupplierItems(supplierId, itemIds);
+    return { success: true };
   },
 
   // Item Groups
@@ -546,20 +568,65 @@ export const api = {
     return { success: true, data: p, product: p, message: 'تم تحديث بيانات المنتج' };
   },
 
-  // Manufacturing Stage 1
+  // Manufacturing & Cutting Workflow (شاشة القص)
   getProductionOrders: async () => {
     const list = await manufacturingRepo.getAll();
     return { success: true, data: list, production_orders: list };
   },
+  getProductionOrder: async (id) => {
+    const res = await manufacturingRepo.getById(id);
+    return { success: true, data: res, order: res };
+  },
   createProductionOrder: async (data) => {
     const res = await manufacturingRepo.createProductionOrder(data, currentUserId);
     syncPush('production_orders', 'insert', res);
-    return { success: true, data: res, order: res, message: 'تم إصدار أمر التصنيع بنجاح' };
+    return { success: true, data: res, order: res, message: 'تم إصدار أمر القص والتشغيل بنجاح' };
+  },
+  updateProductionOrder: async (id, data) => {
+    const res = await manufacturingRepo.updateProductionOrder(id, data, currentUserId);
+    syncPush('production_orders', 'update', res, id);
+    return { success: true, data: res, order: res, message: 'تم تحديث بيانات أمر القص بنجاح' };
   },
   completeStage1: async (id) => {
     const res = await manufacturingRepo.completeStage1(id, currentUserId);
     syncPush('production_orders', 'update', res, id);
     return { success: true, data: res, order: res, message: 'تم إتمام مرحلة التصنيع والتجميع الأولى بنجاح' };
+  },
+  closeProductionOrder: async (id, reason = '') => {
+    const res = await manufacturingRepo.closeProductionOrder(id, reason, currentUserId);
+    syncPush('production_orders', 'update', res, id);
+    return { success: true, data: res, order: res, message: 'تم إقفال أمر القص بنجاح' };
+  },
+  addStagePayment: async (orderId, stageKey, paymentData) => {
+    const res = await manufacturingRepo.addStagePayment(orderId, stageKey, paymentData, currentUserId);
+    return { success: true, data: res, ...res, message: 'تم تسجيل دفعة المرحلة بنجاح' };
+  },
+  getWorkshopVendors: async (stageKey = null) => {
+    const list = await manufacturingRepo.getWorkshopVendors(stageKey);
+    return { success: true, data: list, vendors: list };
+  },
+  checkCuttingNumberUnique: async (cuttingNumber, excludeId = null) => {
+    await manufacturingRepo.checkCuttingNumberUnique(cuttingNumber, excludeId);
+    return { success: true };
+  },
+  getPrintingPayments: async (orderId) => {
+    const res = await manufacturingRepo.getPrintingPayments(orderId);
+    return { success: true, data: res, ...res };
+  },
+  addPrintingPayment: async (data) => {
+    const res = await manufacturingRepo.addPrintingPayment(data, currentUserId);
+    syncPush('cutting_printing_payments', 'insert', res);
+    return { success: true, data: res, payment: res, message: 'تم تسجيل دفعة المطبعة بنجاح' };
+  },
+  updatePrintingPayment: async (id, data) => {
+    const res = await manufacturingRepo.updatePrintingPayment(id, data, currentUserId);
+    syncPush('cutting_printing_payments', 'update', res, id);
+    return { success: true, data: res, payment: res, message: 'تم تحديث دفعة المطبعة بنجاح' };
+  },
+  deletePrintingPayment: async (id) => {
+    const res = await manufacturingRepo.deletePrintingPayment(id, currentUserId);
+    syncPush('cutting_printing_payments', 'delete', { id });
+    return { success: true, ...res, message: 'تم حذف دفعة المطبعة بنجاح' };
   },
   getOverheads: async () => {
     const list = await manufacturingRepo.getOverheads();
@@ -718,6 +785,61 @@ export const api = {
     if (res.inTx) syncPush('cash_transactions', 'insert', res.inTx);
     return { success: true, data: res, ...res, message: 'تم تحويل النقدية بنجاح' };
   },
+
+  // Supplier Payments & Customer Receipts (Requirement 2)
+  recordSupplierPayment: async (data) => {
+    const res = await cashRepo.recordSupplierPayment(data, currentUserId);
+    syncPush('payments', 'insert', { id: res.paymentId });
+    syncPush('cash_transactions', 'insert', { id: res.txNumber });
+    return { success: true, data: res, ...res, message: 'تم إصدار سند سداد دفعة المورد وتخفيض رصيده والخزينة بنجاح' };
+  },
+  recordCustomerReceipt: async (data) => {
+    const res = await cashRepo.recordCustomerReceipt(data, currentUserId);
+    syncPush('customer_payments', 'insert', { id: res.receiptId });
+    syncPush('cash_transactions', 'insert', { id: res.txNumber });
+    return { success: true, data: res, ...res, message: 'تم إصدار سند استلام نقدية العميل وتوريدها للخزينة بنجاح' };
+  },
+  cancelSupplierPayment: async (paymentId, reason = '') => {
+    const res = await cashRepo.cancelSupplierPayment(paymentId, reason, currentUserId);
+    syncPush('payments', 'update', { id: paymentId, status: 'cancelled' }, paymentId);
+    return { success: true, ...res, message: 'تم إلغاء سند صرف دفعة المورد وقيد العملية العكسية بالخزينة بنجاح' };
+  },
+  cancelCustomerReceipt: async (receiptId, reason = '') => {
+    const res = await cashRepo.cancelCustomerReceipt(receiptId, reason, currentUserId);
+    syncPush('customer_payments', 'update', { id: receiptId, status: 'cancelled' }, receiptId);
+    return { success: true, ...res, message: 'تم إلغاء سند استلام نقدية العميل وقيد العملية العكسية بالخزينة بنجاح' };
+  },
+  getSupplierPayments: async () => {
+    const list = await db.payments.reverse().sortBy('created_at');
+    const parties = await db.parties.toArray();
+    const accounts = await db.treasury_accounts.toArray();
+    const pMap = new Map(parties.map(p => [p.id, p]));
+    const aMap = new Map(accounts.map(a => [a.id, a]));
+
+    const enriched = list.map(p => ({
+      ...p,
+      supplier_name: pMap.get(p.supplier_id)?.name || p.supplier_id,
+      supplier_code: pMap.get(p.supplier_id)?.code || '',
+      account_name: aMap.get(p.account_id)?.name || p.account_id
+    }));
+    return { success: true, data: enriched, payments: enriched };
+  },
+  getCustomerReceipts: async () => {
+    const list = await db.customer_payments.reverse().sortBy('created_at');
+    const parties = await db.parties.toArray();
+    const accounts = await db.treasury_accounts.toArray();
+    const pMap = new Map(parties.map(p => [p.id, p]));
+    const aMap = new Map(accounts.map(a => [a.id, a]));
+
+    const enriched = list.map(p => ({
+      ...p,
+      customer_name: pMap.get(p.customer_id)?.name || p.customer_id,
+      customer_code: pMap.get(p.customer_id)?.code || '',
+      account_name: aMap.get(p.account_id)?.name || p.account_id
+    }));
+    return { success: true, data: enriched, receipts: enriched };
+  },
+
 
   // Reports & Dashboard
   getDashboard: async () => {

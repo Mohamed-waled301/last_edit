@@ -1,6 +1,22 @@
-const { app, BrowserWindow, shell, ipcMain, Menu, session } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Menu, session, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+process.on('uncaughtException', (err) => {
+  console.error('[CRITICAL UNCAUGHT EXCEPTION]:', err);
+  try {
+    const errorLogPath = path.join(app.getPath('userData') || __dirname, 'startup-error.log');
+    fs.appendFileSync(errorLogPath, `[${new Date().toISOString()}] ${err?.stack || err}\n`);
+  } catch {}
+  try {
+    dialog.showErrorBox('خطأ غير متوقع في تشغيل التطبيق', `${err?.message || err}\n\nيرجى التواصل مع الدعم الفني.`);
+  } catch {}
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]:', reason);
+});
+
 const { LicenseManager } = require('./licenseManager');
 const { LocalDatabaseManager } = require('./localDatabase');
 
@@ -10,6 +26,19 @@ if (!gotSingleInstanceLock) {
   app.quit();
   process.exit(0);
 }
+
+// Fixed persistent userData path for code systems with seamless auto-migration
+const oldUserDataPath = path.join(app.getPath('appData'), 'apex-apparel-erp');
+const persistentUserDataPath = path.join(app.getPath('appData'), 'code-systems');
+
+if (fs.existsSync(oldUserDataPath) && !fs.existsSync(persistentUserDataPath)) {
+  try {
+    fs.cpSync(oldUserDataPath, persistentUserDataPath, { recursive: true });
+  } catch (migErr) {
+    console.warn('[UserData Migration Warning]:', migErr);
+  }
+}
+app.setPath('userData', persistentUserDataPath);
 
 let mainWindow = null;
 let isQuitting = false;
@@ -23,16 +52,23 @@ const isDev =
   Boolean(process.env.VITE_DEV_SERVER_URL);
 
 async function createWindow() {
+  const electronIco = path.join(__dirname, 'icon.ico');
   const icoPath = path.join(__dirname, '../build/icon.ico');
   const fallbackIco = path.join(__dirname, '../public/icon.ico');
-  const iconPath = fs.existsSync(icoPath) ? icoPath : (fs.existsSync(fallbackIco) ? fallbackIco : undefined);
+  const iconPath = fs.existsSync(electronIco)
+    ? electronIco
+    : fs.existsSync(icoPath)
+    ? icoPath
+    : fs.existsSync(fallbackIco)
+    ? fallbackIco
+    : undefined;
 
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1280,
     minHeight: 720,
-    title: 'Apex Apparel ERP',
+    title: 'code systems',
     backgroundColor: '#F4F5F7',
     show: false,
     icon: iconPath,
@@ -179,6 +215,27 @@ app.on('second-instance', () => {
 // Register IPC handlers
 ipcMain.handle('app:version', () => app.getVersion());
 
+// Native direct printing handler (fixes Chromium "app doesn't support print preview" error)
+ipcMain.handle('app:print', async (_event, options = {}) => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { success: false, error: 'النافذة غير متاحة' };
+  }
+  return new Promise((resolve) => {
+    mainWindow.webContents.print(
+      {
+        silent: options.silent || false,
+        printBackground: options.printBackground !== false,
+        deviceName: options.deviceName || '',
+        margins: options.margins || { marginType: 'none' },
+        pageSize: options.pageSize || undefined,
+      },
+      (success, failureReason) => {
+        resolve({ success, failureReason });
+      }
+    );
+  });
+});
+
 // 2. Offline Single-Device Licensing IPC Handlers
 ipcMain.handle('license:get-machine-code', () => {
   if (!licenseManager) {
@@ -221,7 +278,7 @@ ipcMain.handle('backup:save-auto', async (_event, backupData) => {
     }
 
     const documentsDir = app.getPath('documents');
-    const backupDir = path.join(documentsDir, 'ApexERP-Backups');
+    const backupDir = path.join(documentsDir, 'code-systems-Backups');
 
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
@@ -230,16 +287,16 @@ ipcMain.handle('backup:save-auto', async (_event, backupData) => {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-    const fileName = `ApexERP-Backup-${dateStr}.json`;
+    const fileName = `code-systems-Backup-${dateStr}.json`;
     const filePath = path.join(backupDir, fileName);
 
     fs.writeFileSync(filePath, JSON.stringify(backupData, null, 2), 'utf-8');
 
-    // Retain only the last 10 backup files
+    // Retain only the last 15 backup files
     try {
       const files = fs
         .readdirSync(backupDir)
-        .filter((f) => f.startsWith('ApexERP-Backup-') && f.endsWith('.json'))
+        .filter((f) => f.startsWith('code-systems-Backup-') && f.endsWith('.json'))
         .map((f) => {
           const fullPath = path.join(backupDir, f);
           const stat = fs.statSync(fullPath);
@@ -247,8 +304,8 @@ ipcMain.handle('backup:save-auto', async (_event, backupData) => {
         })
         .sort((a, b) => b.mtime - a.mtime);
 
-      if (files.length > 10) {
-        const toDelete = files.slice(10);
+      if (files.length > 15) {
+        const toDelete = files.slice(15);
         for (const item of toDelete) {
           try {
             fs.unlinkSync(item.path);
@@ -316,7 +373,7 @@ ipcMain.handle('db:choose-backup-location', async () => {
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'تحديد مسار حفظ النسخة الاحتياطية لقاعدة البيانات',
     defaultPath: defaultName,
-    filters: [{ name: 'Apex ERP Database Backup (*.db)', extensions: ['db'] }],
+    filters: [{ name: 'code systems Database Backup (*.db)', extensions: ['db'] }],
   });
   return result.canceled ? null : result.filePath;
 });
@@ -326,7 +383,7 @@ ipcMain.handle('db:choose-restore-file', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'تحديد ملف النسخة الاحتياطية للاسترجاع',
     properties: ['openFile'],
-    filters: [{ name: 'Apex ERP Database Backup (*.db, *.sqlite)', extensions: ['db', 'sqlite'] }],
+    filters: [{ name: 'code systems Database Backup (*.db, *.sqlite)', extensions: ['db', 'sqlite'] }],
   });
   return result.canceled ? null : result.filePaths[0];
 });
@@ -342,10 +399,74 @@ ipcMain.on('window:maximize', () => {
 });
 ipcMain.on('window:close', () => mainWindow?.close());
 
+// WhatsApp / wa.me External Link Opener (Requirement 6)
+ipcMain.handle('shell:open-external', async (_event, url) => {
+  if (typeof url === 'string' && (url.startsWith('https://wa.me/') || url.startsWith('http://wa.me/'))) {
+    await shell.openExternal(url);
+    return { success: true };
+  }
+  return { success: false, error: 'غير مصرح بفتح هذا الرابط' };
+});
+
+// Native Excel Save As Dialog & File Writing (Requirement 5)
+ipcMain.handle('excel:save', async (_event, { filename, base64Data }) => {
+  try {
+    const { dialog } = require('electron');
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'حفظ ملف إكسيل',
+      defaultPath: filename || 'تقرير.xlsx',
+      filters: [{ name: 'Excel Workbook (*.xlsx)', extensions: ['xlsx'] }],
+    });
+    if (result.canceled || !result.filePath) {
+      return { canceled: true };
+    }
+    const buffer = Buffer.from(base64Data, 'base64');
+    fs.writeFileSync(result.filePath, buffer);
+    return { success: true, filePath: result.filePath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 // Lifecycle
 app.whenReady().then(async () => {
   licenseManager = new LicenseManager(app.getPath('userData'));
+
+  // Auto-import project license.lic if present and not yet activated, then self-clean
+  try {
+    const rootLicPath = path.join(__dirname, '..', 'license.lic');
+    if (fs.existsSync(rootLicPath)) {
+      const licContent = fs.readFileSync(rootLicPath, 'utf8');
+      licenseManager.activate(licContent);
+    }
+  } catch (licErr) {
+    console.warn('[License Auto-Import Warning]:', licErr);
+  }
   localDatabaseManager = new LocalDatabaseManager(app.getPath('userData'));
+
+  // Daily Automated Backup: runs once every day without manual user intervention
+  async function runDailyAutomatedBackup() {
+    try {
+      const documentsDir = app.getPath('documents');
+      const backupDir = path.join(documentsDir, 'code-systems-Backups');
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      const todayStr = new Date().toISOString().split('T')[0];
+      const files = fs.readdirSync(backupDir);
+      const hasToday = files.some((f) => f.includes(todayStr));
+      if (!hasToday && localDatabaseManager) {
+        const dbBackupPath = path.join(backupDir, `code-systems-daily-${todayStr}.db`);
+        await localDatabaseManager.backupDatabase(dbBackupPath);
+        console.log('[AutoBackup] Daily automated database backup created:', dbBackupPath);
+      }
+    } catch (err) {
+      console.warn('[AutoBackup] Daily automated backup error:', err);
+    }
+  }
+
+  await runDailyAutomatedBackup();
+  setInterval(runDailyAutomatedBackup, 6 * 60 * 60 * 1000);
 
   // Run startup integrity check
   const integrity = localDatabaseManager.checkIntegrity();
@@ -366,6 +487,11 @@ app.whenReady().then(async () => {
       createWindow();
     }
   });
+}).catch((readyErr) => {
+  console.error('[CRITICAL ERROR in whenReady]:', readyErr);
+  try {
+    dialog.showErrorBox('خطأ أثناء بدء التشغيل', readyErr?.stack || String(readyErr));
+  } catch {}
 });
 
 app.on('window-all-closed', () => {

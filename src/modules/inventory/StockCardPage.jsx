@@ -34,16 +34,18 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
   const [cardData, setCardData] = useState(null);
   const [recomputing, setRecomputing] = useState(false);
 
-  // Check URL query param for itemId if not provided
+  // Sync initialItemId and hash query param
   useEffect(() => {
-    if (!selectedItemId) {
-      const hash = window.location.hash || '';
-      const match = hash.match(/[?&]itemId=([^&]+)/);
-      if (match && match[1]) {
-        setSelectedItemId(match[1]);
-      }
+    if (initialItemId && String(initialItemId) !== String(selectedItemId)) {
+      setSelectedItemId(initialItemId);
+      return;
     }
-  }, [selectedItemId]);
+    const hash = window.location.hash || '';
+    const match = hash.match(/[?&]itemId=([^&]+)/);
+    if (match && match[1] && String(match[1]) !== String(selectedItemId)) {
+      setSelectedItemId(match[1]);
+    }
+  }, [initialItemId]);
 
   const loadDependencies = async () => {
     try {
@@ -80,7 +82,9 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
         locationId: selectedLocationId || undefined,
         movementType: movementTypeFilter || undefined,
         startDate: startDate || undefined,
-        endDate: endDate || undefined
+        endDate: endDate || undefined,
+        dateFrom: startDate || undefined,
+        dateTo: endDate || undefined
       };
       const res = await api.getItemStockCard(selectedItemId, filters);
       setCardData(res.data || res);
@@ -301,7 +305,7 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
             <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
               <span className="text-xs text-slate-500 block mb-1">رصيد أول المدة:</span>
               <span className="text-xl font-bold font-mono text-slate-800">
-                {formatNumber(cardData.opening_balance)}
+                {formatNumber(cardData.opening_balance ?? cardData.periodOpeningBalance ?? 0)}
               </span>
               <span className="text-[11px] text-slate-400 block mt-0.5">{selectedItem?.unit || 'قطعة'}</span>
             </div>
@@ -312,7 +316,7 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
                 <span>إجمالي الوارد (In):</span>
               </span>
               <span className="text-xl font-bold font-mono text-emerald-800">
-                +{formatNumber(cardData.total_in)}
+                +{formatNumber(cardData.total_in ?? cardData.totalIn ?? 0)}
               </span>
               <span className="text-[11px] text-emerald-600 block mt-0.5">زيادة بالمخزن</span>
             </div>
@@ -323,18 +327,18 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
                 <span>إجمالي المنصرف (Out):</span>
               </span>
               <span className="text-xl font-bold font-mono text-rose-800">
-                -{formatNumber(cardData.total_out)}
+                -{formatNumber(cardData.total_out ?? cardData.totalOut ?? 0)}
               </span>
               <span className="text-[11px] text-rose-600 block mt-0.5">صرف واستخدام</span>
             </div>
 
             <div className={`border rounded-xl p-4 shadow-xs ${
-              cardData.net_change >= 0 
+              (cardData.net_change ?? cardData.netChange ?? 0) >= 0 
                 ? 'bg-emerald-50 border-emerald-300' 
                 : 'bg-rose-50 border-rose-300'
             }`}>
               <span className="text-xs font-semibold flex items-center gap-1 mb-1 text-slate-700">
-                {cardData.net_change >= 0 ? (
+                {(cardData.net_change ?? cardData.netChange ?? 0) >= 0 ? (
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
                 ) : (
                   <TrendingDown className="w-3.5 h-3.5 text-rose-600" />
@@ -342,19 +346,19 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
                 <span>صافي التغير للفترة:</span>
               </span>
               <span className={`text-xl font-bold font-mono ${
-                cardData.net_change >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                (cardData.net_change ?? cardData.netChange ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'
               }`}>
-                {cardData.net_change >= 0 ? `+${formatNumber(cardData.net_change)}` : formatNumber(cardData.net_change)}
+                {(cardData.net_change ?? cardData.netChange ?? 0) >= 0 ? `+${formatNumber(cardData.net_change ?? cardData.netChange ?? 0)}` : formatNumber(cardData.net_change ?? cardData.netChange ?? 0)}
               </span>
               <span className="text-[11px] block mt-0.5 text-slate-500 font-semibold">
-                {cardData.net_change >= 0 ? 'زيادة صافية' : 'نقص صافي'}
+                {(cardData.net_change ?? cardData.netChange ?? 0) >= 0 ? 'زيادة صافية' : 'نقص صافي'}
               </span>
             </div>
 
             <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 shadow-xs">
               <span className="text-xs text-blue-700 font-semibold block mb-1">الرصيد الفعلي الختامي:</span>
               <span className="text-xl font-bold font-mono text-blue-900">
-                {formatNumber(cardData.closing_balance)}
+                {formatNumber(cardData.closing_balance ?? cardData.closingBalance ?? 0)}
               </span>
               <span className="text-[11px] text-blue-600 block mt-0.5 font-semibold">رصيد المخزن الحالي</span>
             </div>

@@ -250,6 +250,7 @@ function verifyLicense(licenseData, currentMachineCode, publicKeyPem = LICENSE_P
 class LicenseManager {
   constructor(userDataPath) {
     this.userDataPath = userDataPath;
+    this.tokenFilePath = path.join(userDataPath, '.sys_activation.dat');
     this.licenseFilePath = path.join(userDataPath, 'license.json');
     this.stateFilePath = path.join(userDataPath, 'license-state.json');
     this._cachedMachineCode = null;
@@ -261,6 +262,50 @@ class LicenseManager {
       this._cachedMachineCode = deriveMachineCode(rawId);
     }
     return this._cachedMachineCode;
+  }
+
+  _deriveDeviceKey() {
+    const rawId = getRawMachineId();
+    return crypto.createHash('sha256').update(`${rawId}:${APP_SALT}:SYS_LOCK_2026`).digest();
+  }
+
+  _encryptRecord(record) {
+    const key = this._deriveDeviceKey();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const jsonStr = JSON.stringify(record);
+    const enc = Buffer.concat([cipher.update(jsonStr, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return Buffer.concat([iv, tag, enc]).toString('base64');
+  }
+
+  _decryptRecord(encBase64) {
+    try {
+      const buf = Buffer.from(encBase64, 'base64');
+      if (buf.length < 28) return null;
+      const iv = buf.subarray(0, 12);
+      const tag = buf.subarray(12, 28);
+      const enc = buf.subarray(28);
+      const key = this._deriveDeviceKey();
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(tag);
+      const dec = Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8');
+      return JSON.parse(dec);
+    } catch {
+      return null;
+    }
+  }
+
+  saveLicense(signedObj) {
+    try {
+      if (!fs.existsSync(this.userDataPath)) {
+        fs.mkdirSync(this.userDataPath, { recursive: true });
+      }
+      fs.writeFileSync(this.licenseFilePath, JSON.stringify(signedObj, null, 2), 'utf8');
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   loadSavedLicense() {
@@ -275,47 +320,145 @@ class LicenseManager {
     return null;
   }
 
-  saveLicense(licenseObj) {
+  saveActivationRecord(payload) {
     try {
       if (!fs.existsSync(this.userDataPath)) {
         fs.mkdirSync(this.userDataPath, { recursive: true });
       }
-      fs.writeFileSync(this.licenseFilePath, JSON.stringify(licenseObj, null, 2), 'utf8');
+      const rawId = getRawMachineId();
+      const hmac = crypto.createHmac('sha256', APP_SALT)
+        .update(`${rawId}:${payload.customerName}:${payload.issuedAt || ''}:${payload.expiresAt || ''}`)
+        .digest('hex');
+
+      const record = {
+        hmac,
+        customerName: payload.customerName,
+        edition: payload.edition || 'Enterprise',
+        expiresAt: payload.expiresAt || null,
+        issuedAt: payload.issuedAt || null,
+        machineCode: this.getMachineCode(),
+        activatedAt: new Date().toISOString()
+      };
+
+      const encrypted = this._encryptRecord(record);
+      fs.writeFileSync(this.tokenFilePath, encrypted, 'utf8');
+
+      // Remove any plaintext license files in userDataPath
+      try {
+        if (fs.existsSync(this.licenseFilePath)) {
+          fs.unlinkSync(this.licenseFilePath);
+        }
+      } catch {}
+
+      // Self-cleanup: remove raw license files and license generator from project directory
+      this._performSelfCleanup();
+
       return true;
     } catch (err) {
-      console.error('[LicenseManager] Failed to save license:', err);
+      console.error('[LicenseManager] Failed to save activation record:', err);
       return false;
+    }
+  }
+
+  _performSelfCleanup() {
+    try {
+      const projectRoot = path.join(__dirname, '..');
+      const rootLic = path.join(projectRoot, 'license.lic');
+      if (fs.existsSync(rootLic)) {
+        try { fs.unlinkSync(rootLic); } catch {}
+      }
+      const rootJson = path.join(projectRoot, 'license.json');
+      if (fs.existsSync(rootJson)) {
+        try { fs.unlinkSync(rootJson); } catch {}
+      }
+      const toolsLicGen = path.join(projectRoot, 'tools', 'license-generator');
+      if (fs.existsSync(toolsLicGen)) {
+        try { fs.rmSync(toolsLicGen, { recursive: true, force: true }); } catch {}
+      }
+    } catch (cleanupErr) {
+      console.warn('[LicenseManager] Self-cleanup warning:', cleanupErr);
     }
   }
 
   getStatus() {
     const machineCode = this.getMachineCode();
-    const saved = this.loadSavedLicense();
+    const rawId = getRawMachineId();
 
-    if (!saved) {
-      return {
-        isValid: false,
-        isActivated: false,
-        machineCode,
-        error: 'التطبيق غير مفعل على هذا الجهاز',
-        code: 'NOT_ACTIVATED',
-      };
+    // 1. Check encrypted activation record first
+    if (fs.existsSync(this.tokenFilePath)) {
+      try {
+        const encData = fs.readFileSync(this.tokenFilePath, 'utf8');
+        const record = this._decryptRecord(encData);
+        if (record && record.hmac) {
+          const expectedHmac = crypto.createHmac('sha256', APP_SALT)
+            .update(`${rawId}:${record.customerName}:${record.issuedAt || ''}:${record.expiresAt || ''}`)
+            .digest('hex');
+
+          if (expectedHmac === record.hmac) {
+            // Check expiry if set
+            if (record.expiresAt) {
+              const expDate = new Date(record.expiresAt);
+              if (!isNaN(expDate.getTime()) && Date.now() > expDate.getTime()) {
+                return {
+                  isValid: false,
+                  isActivated: false,
+                  machineCode,
+                  isExpired: true,
+                  error: 'انتهت صلاحية الترخيص المسجل',
+                  code: 'EXPIRED'
+                };
+              }
+            }
+
+            return {
+              isValid: true,
+              isActivated: true,
+              machineCode,
+              customerName: record.customerName,
+              edition: record.edition || 'Enterprise',
+              expiresAt: record.expiresAt || null,
+              daysRemaining: null,
+              isExpiringSoon: false,
+              isExpired: false,
+              isPermanent: true,
+              error: null,
+              code: null
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('[LicenseManager] Failed to read encrypted token:', err);
+      }
     }
 
-    const verification = verifyLicense(saved, machineCode, LICENSE_PUBLIC_KEY, this.stateFilePath, new Date());
+    // 2. Check legacy saved license and migrate
+    const saved = this.loadSavedLicense();
+    if (saved) {
+      const verification = verifyLicense(saved, machineCode, LICENSE_PUBLIC_KEY, this.stateFilePath, new Date());
+      if (verification.valid) {
+        // Automatically migrate to encrypted one-way token
+        this.saveActivationRecord(saved.payload);
+        return {
+          isValid: true,
+          isActivated: true,
+          machineCode,
+          customerName: verification.customerName || null,
+          edition: verification.edition || 'Enterprise',
+          expiresAt: verification.expiresAt || null,
+          daysRemaining: verification.daysRemaining ?? null,
+          isPermanent: true,
+          error: null,
+          code: null
+        };
+      }
+    }
+
     return {
-      isValid: verification.valid,
-      isActivated: verification.valid,
+      isValid: false,
+      isActivated: false,
       machineCode,
-      customerName: verification.customerName || null,
-      edition: verification.edition || 'Enterprise',
-      expiresAt: verification.expiresAt || null,
-      daysRemaining: verification.daysRemaining ?? null,
-      isExpiringSoon: Boolean(verification.isExpiringSoon),
-      isExpired: Boolean(verification.isExpired),
-      isClockRolledBack: Boolean(verification.isClockRolledBack),
-      error: verification.error || null,
-      code: verification.code || null,
+      error: 'التطبيق غير مفعل على هذا الجهاز',
+      code: 'NOT_ACTIVATED'
     };
   }
 
@@ -326,6 +469,7 @@ class LicenseManager {
     if (!parsed) {
       return {
         success: false,
+        isValid: false,
         error: 'صيغة كود الترخيص غير صالحة',
         code: 'PARSE_ERROR',
       };
@@ -335,22 +479,26 @@ class LicenseManager {
     if (!verification.valid) {
       return {
         success: false,
+        isValid: false,
         error: verification.error,
         code: verification.code,
       };
     }
 
-    const savedOk = this.saveLicense(parsed);
+    const savedOk = this.saveActivationRecord(parsed.payload);
     if (!savedOk) {
       return {
         success: false,
-        error: 'فشل حفظ ملف الترخيص على الجهاز',
+        isValid: false,
+        error: 'فشل حفظ سجل التفعيل المشفر على الجهاز',
         code: 'SAVE_FAILED',
       };
     }
 
     return {
       success: true,
+      isValid: true,
+      isActivated: true,
       customerName: verification.customerName,
       edition: verification.edition,
       expiresAt: verification.expiresAt,

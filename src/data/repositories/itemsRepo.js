@@ -1,5 +1,6 @@
 import db from '../db';
 import auditRepo from './auditRepo';
+import { roundHalfUp } from '../../utils/money';
 import {
   calculateItemActualBalance,
   buildItemStockCard,
@@ -104,6 +105,16 @@ export const itemsRepo = {
       margin_percent: marginPercent,
       variants: computedVariants
     };
+  },
+
+  /**
+   * Get an item by its code (case-insensitive) with computed balances and variants
+   */
+  async getByCode(code) {
+    if (!code) return null;
+    const clean = String(code).trim().toLowerCase();
+    const all = await this.getAll();
+    return all.find(it => String(it.code).trim().toLowerCase() === clean) || null;
   },
 
   /**
@@ -231,7 +242,7 @@ export const itemsRepo = {
    * Create new item with variants, image, and opening balance
    */
   async create(data, userId = 'usr-storekeeper') {
-    const id = data.id || `itm-${Date.now()}`;
+    const id = data.id || `itm-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
     const code = (data.code && String(data.code).trim()) || (await this.getNextCode());
 
     const isUnique = await this.isCodeUnique(code, id);
@@ -380,6 +391,10 @@ export const itemsRepo = {
       }
     });
 
+    if (Array.isArray(data.suppliers)) {
+      await this.setItemSuppliers(id, data.suppliers);
+    }
+
     await auditRepo.log(userId, 'CREATE_ITEM', 'items', id, null, itemRecord);
     return itemRecord;
   },
@@ -410,10 +425,13 @@ export const itemsRepo = {
       }
     }
 
-    const costPrice = data.cost_price !== undefined ? Math.max(0, Number(data.cost_price) || 0) : current.cost_price;
-    const sellingPrice = data.selling_price !== undefined ? Math.max(0, Number(data.selling_price) || 0) : current.selling_price;
+    const costPrice = data.cost_price !== undefined ? roundHalfUp(Math.max(0, Number(data.cost_price) || 0), 2) : (current.cost_price || 0);
+    const sellingPrice = data.selling_price !== undefined ? roundHalfUp(Math.max(0, Number(data.selling_price) || 0), 2) : (current.selling_price || 0);
     const marginPercent = costPrice > 0 ? Number((((sellingPrice - costPrice) / costPrice) * 100).toFixed(2)) : (Number(data.margin_percent) || current.margin_percent || 0);
-    const minIssueQty = data.min_issue_qty !== undefined ? Math.max(1, Number(data.min_issue_qty) || 1) : current.min_issue_qty;
+    const minIssueQty = data.min_issue_qty !== undefined ? Math.max(1, Number(data.min_issue_qty) || 1) : (current.min_issue_qty || 1);
+    const openingCost = data.opening_cost !== undefined
+      ? roundHalfUp(Math.max(0, Number(data.opening_cost) || 0), 2)
+      : (current.opening_cost !== undefined ? current.opening_cost : costPrice);
 
     const variants = nextHasVariants ? (data.variants || current.variants || []) : [];
     const totalStock = variants.length > 0
@@ -433,6 +451,7 @@ export const itemsRepo = {
       selling_price: sellingPrice,
       margin_percent: marginPercent,
       min_issue_qty: minIssueQty,
+      opening_cost: openingCost,
       has_variants: nextHasVariants,
       variants,
       location_id: data.location_id || current.location_id || 'loc-main',
@@ -440,12 +459,15 @@ export const itemsRepo = {
       is_active: data.is_active !== undefined ? Number(data.is_active) : current.is_active
     };
 
-    // If opening balance updated before any operational movements
+    // If opening balance or opening cost updated before any operational movements
     const hasOps = await this.hasOperationalMovements(id);
-    if (!hasOps && data.opening_balance !== undefined) {
-      const newOpen = Math.max(0, Number(data.opening_balance) || 0);
+    if (!hasOps) {
+      const newOpen = data.opening_balance !== undefined ? Math.max(0, Number(data.opening_balance) || 0) : (Number(current.opening_balance) || 0);
       updated.opening_balance = newOpen;
-      updated.current_stock = variants.length > 0 ? totalStock : newOpen;
+      updated.opening_cost = openingCost;
+      if (variants.length === 0) {
+        updated.current_stock = newOpen;
+      }
 
       // Update the opening balance stock movement
       const opMovement = await db.stock_movements.where('item_id').equals(id).filter(m => m.movement_type === 'opening_balance').first();
@@ -453,7 +475,7 @@ export const itemsRepo = {
         await db.stock_movements.update(opMovement.id, {
           quantity: newOpen,
           quantity_change: newOpen,
-          unit_cost: costPrice
+          unit_cost: openingCost
         });
       }
     }
@@ -491,6 +513,10 @@ export const itemsRepo = {
         }
       }
     });
+
+    if (Array.isArray(data.suppliers)) {
+      await this.setItemSuppliers(id, data.suppliers);
+    }
 
     await auditRepo.log(userId, 'UPDATE_ITEM', 'items', id, current, updated);
     return updated;
@@ -754,6 +780,122 @@ export const itemsRepo = {
     }
 
     return { id: `u-${Date.now()}`, name, code: name, is_active: 1 };
+  },
+
+  /**
+   * Get all supplier links for a given item from shared item_suppliers table
+   */
+  async getItemSuppliers(itemId) {
+    if (!db.item_suppliers) return [];
+    const links = await db.item_suppliers.where('item_id').equals(String(itemId)).toArray().catch(() => []);
+    const parties = await db.parties.toArray().catch(() => []);
+    const partyMap = new Map(parties.map(p => [String(p.id), p]));
+
+    return links.map(link => {
+      const p = partyMap.get(String(link.supplier_id)) || {};
+      return {
+        id: link.id,
+        item_id: link.item_id,
+        supplier_id: link.supplier_id,
+        is_preferred: Boolean(link.is_preferred),
+        last_purchase_price: Number(link.last_purchase_price) || 0,
+        supplier_name: p.name || link.supplier_id,
+        supplier_code: p.code || '',
+        supplier_phone: p.phone || ''
+      };
+    });
+  },
+
+  /**
+   * Sync supplier links for an item into shared item_suppliers table
+   */
+  async setItemSuppliers(itemId, suppliersList = []) {
+    if (!db.item_suppliers) return;
+    const strItemId = String(itemId);
+    await db.item_suppliers.where('item_id').equals(strItemId).delete().catch(() => {});
+
+    for (const sup of suppliersList) {
+      if (!sup.supplier_id) continue;
+      const strSupId = String(sup.supplier_id);
+      await db.item_suppliers.put({
+        id: `isup-${strItemId}-${strSupId}`,
+        item_id: strItemId,
+        supplier_id: strSupId,
+        is_preferred: sup.is_preferred ? 1 : 0,
+        last_purchase_price: Number(sup.last_purchase_price) || 0
+      });
+
+      // Keep supplier's supplied_item_ids in sync in parties & suppliers tables
+      const party = await db.parties.get(strSupId);
+      if (party) {
+        const itemIds = Array.isArray(party.supplied_item_ids) ? [...party.supplied_item_ids] : [];
+        if (!itemIds.includes(strItemId)) {
+          itemIds.push(strItemId);
+          await db.parties.update(strSupId, { supplied_item_ids: itemIds, supplied_all_items: 0 });
+        }
+      }
+      const supRec = await db.suppliers.get(strSupId);
+      if (supRec) {
+        const itemIds = Array.isArray(supRec.supplied_item_ids) ? [...supRec.supplied_item_ids] : [];
+        if (!itemIds.includes(strItemId)) {
+          itemIds.push(strItemId);
+          await db.suppliers.update(strSupId, { supplied_item_ids: itemIds, supplied_all_items: 0 });
+        }
+      }
+    }
+  },
+
+  /**
+   * Get all items supplied by a given supplier from shared item_suppliers table
+   */
+  async getSupplierItems(supplierId) {
+    if (!db.item_suppliers) return [];
+    const links = await db.item_suppliers.where('supplier_id').equals(String(supplierId)).toArray().catch(() => []);
+    const items = await db.items.toArray().catch(() => []);
+    const itemMap = new Map(items.map(i => [String(i.id), i]));
+
+    return links.map(link => {
+      const itm = itemMap.get(String(link.item_id)) || {};
+      return {
+        id: link.id,
+        item_id: link.item_id,
+        supplier_id: link.supplier_id,
+        is_preferred: Boolean(link.is_preferred),
+        last_purchase_price: Number(link.last_purchase_price) || Number(itm.cost_price) || 0,
+        item_name: itm.name || link.item_id,
+        item_code: itm.code || '',
+        item_unit: itm.unit || 'وحدة'
+      };
+    });
+  },
+
+  /**
+   * Sync items supplied by a given supplier into shared item_suppliers table
+   */
+  async setSupplierItems(supplierId, itemIds = []) {
+    if (!db.item_suppliers) return;
+    const strSupId = String(supplierId);
+    await db.item_suppliers.where('supplier_id').equals(strSupId).delete().catch(() => {});
+
+    for (const itemId of itemIds) {
+      const strItemId = String(itemId);
+      await db.item_suppliers.put({
+        id: `isup-${strItemId}-${strSupId}`,
+        item_id: strItemId,
+        supplier_id: strSupId,
+        is_preferred: 0,
+        last_purchase_price: 0
+      });
+    }
+
+    const party = await db.parties.get(strSupId);
+    if (party) {
+      await db.parties.update(strSupId, { supplied_item_ids: itemIds });
+    }
+    const supRec = await db.suppliers.get(strSupId);
+    if (supRec) {
+      await db.suppliers.update(strSupId, { supplied_item_ids: itemIds });
+    }
   }
 };
 

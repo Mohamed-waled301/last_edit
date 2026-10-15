@@ -4,6 +4,8 @@ import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import { handleFormKeyDown } from '../../utils/formNavigation';
+import { NumberInput } from '../../components/MoneyInput';
 
 export default function StockTransferFormPage({ onSaved, onNotify }) {
   const [items, setItems] = useState([]);
@@ -126,9 +128,9 @@ export default function StockTransferFormPage({ onSaved, onNotify }) {
       onCancel={() => { window.location.hash = '#/inventory'; }}
       isSaving={saving}
       saveDisabled={!isFormValid || saving}
-      saveText="تنفيذ التحويل المخزني"
+      saveText="إصدار إذن التحويل"
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={(e) => e.preventDefault()} onKeyDown={handleFormKeyDown} className="space-y-6">
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
             <ArrowRightLeft className="w-5 h-5 text-[#1F3A5F]" />
@@ -143,7 +145,14 @@ export default function StockTransferFormPage({ onSaved, onNotify }) {
               </label>
               <select
                 value={form.from_location_id}
-                onChange={(e) => setForm(prev => ({ ...prev, from_location_id: e.target.value }))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setForm(prev => ({
+                    ...prev,
+                    from_location_id: val,
+                    to_location_id: prev.to_location_id === val ? '' : prev.to_location_id
+                  }));
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               >
@@ -167,8 +176,10 @@ export default function StockTransferFormPage({ onSaved, onNotify }) {
                 required
               >
                 <option value="">-- اختر موقع الوجهة --</option>
-                {locations.map(loc => (
-                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                {locations
+                  .filter(loc => String(loc.id) !== String(form.from_location_id))
+                  .map(loc => (
+                    <option key={loc.id} value={loc.id}>{loc.name}</option>
                 ))}
               </select>
               <FieldError error={errors.to_location_id} />
@@ -220,12 +231,10 @@ export default function StockTransferFormPage({ onSaved, onNotify }) {
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 كمية التحويل <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                min="0.001"
-                step="any"
+              <NumberInput
                 value={form.quantity}
-                onChange={(e) => setForm(prev => ({ ...prev, quantity: e.target.value }))}
+                onChange={(val) => setForm(prev => ({ ...prev, quantity: val }))}
+                aria-label="كمية التحويل"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />

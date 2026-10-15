@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Store, X, Save, AlertTriangle } from 'lucide-react';
 import { api } from '../../services/api';
+import { MoneyInput, NumberInput } from '../../components/MoneyInput';
 
 export default function QuickOutletModal({ isOpen, onClose, onCreated, onNotify }) {
   const [name, setName] = useState('');
@@ -183,13 +184,11 @@ export default function QuickOutletModal({ isOpen, onClose, onCreated, onNotify 
               <label htmlFor="quick-outlet-markup" className="block font-bold text-gray-700 mb-1">
                 نسبة الزيادة السعرية (%)
               </label>
-              <input
+              <NumberInput
                 id="quick-outlet-markup"
-                type="number"
-                min="0"
-                step="0.5"
                 value={markup}
-                onChange={(e) => setMarkup(e.target.value)}
+                onChange={(val) => setMarkup(val)}
+                aria-label="نسبة الزيادة السعرية"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono focus:outline-none focus:ring-1 focus:ring-[#1F3A5F] text-xs"
               />
               <span className="text-[10px] text-gray-400 mt-0.5 block">زيادة تلقائية فوق سعر البيع القياسي</span>
@@ -199,12 +198,11 @@ export default function QuickOutletModal({ isOpen, onClose, onCreated, onNotify 
               <label htmlFor="quick-outlet-balance" className="block font-bold text-gray-700 mb-1">
                 رصيد الخزينة الافتتاحي (ج.م)
               </label>
-              <input
+              <MoneyInput
                 id="quick-outlet-balance"
-                type="number"
-                min="0"
                 value={initialBalance}
-                onChange={(e) => setInitialBalance(e.target.value)}
+                onChange={(val) => setInitialBalance(val)}
+                aria-label="رصيد الخزينة الافتتاحي"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono font-bold text-green-700 focus:outline-none focus:ring-1 focus:ring-[#1F3A5F] text-xs"
               />
               <span className="text-[10px] text-gray-400 mt-0.5 block">رصيد العهدة النقدية في درج المعرض</span>

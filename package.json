@@ -1,13 +1,14 @@
 {
-  "name": "apex-apparel-erp",
+  "name": "code-systems",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.4",
   "type": "module",
-  "description": "Apex Apparel ERP - نظام تخطيط موارد المؤسسات المتكامل",
-  "author": "Apex Apparel ERP",
+  "description": "code systems - نظام تخطيط موارد المؤسسات المتكامل",
+  "author": "code systems",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
+    "start": "vite",
     "build": "vite build",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:3000 && electron . --dev\"",
     "electron:start": "electron .",
@@ -22,7 +23,7 @@
   "dependencies": {
     "@fontsource/cairo": "^5.2.5",
     "@fontsource/tajawal": "^5.2.5",
-    "better-sqlite3": "^11.8.1"
+    "better-sqlite3": "11.8.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
@@ -47,14 +48,17 @@
     "xlsx": "^0.18.5"
   },
   "build": {
-    "appId": "com.apexapparelerp.app",
-    "productName": "Apex Apparel ERP",
-    "copyright": "Copyright © 2026 Apex Apparel ERP",
+    "appId": "com.codesystems.app",
+    "productName": "code systems",
+    "copyright": "Copyright © 2026 code systems",
     "npmRebuild": false,
     "directories": {
       "output": "release"
     },
     "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
     "electronFuses": {
       "runAsNode": false,
       "enableCookieEncryption": true,
@@ -99,11 +103,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "نظام Apex Apparel ERP",
-      "artifactName": "Apex-Apparel-ERP-Setup-${version}.exe"
+      "shortcutName": "نظام code systems",
+      "artifactName": "code-systems-Setup-${version}.exe"
     },
     "portable": {
-      "artifactName": "Apex-Apparel-ERP-Portable-${version}.exe"
+      "artifactName": "code-systems-Portable-${version}.exe"
     }
   }
 }

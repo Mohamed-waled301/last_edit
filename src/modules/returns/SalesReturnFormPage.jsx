@@ -4,6 +4,8 @@ import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import { handleFormKeyDown } from '../../utils/formNavigation';
+import { MoneyInput, NumberInput } from '../../components/MoneyInput';
 
 export default function SalesReturnFormPage({ onSaved, onNotify }) {
   const [returnMode, setReturnMode] = useState('against_invoice'); // 'against_invoice' | 'free_return'
@@ -39,7 +41,9 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
         ]);
 
         setInvoices(Array.isArray(invRes.data) ? invRes.data : []);
-        setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
+        // Sales return lists strictly finished products only
+        const rawProds = Array.isArray(prodRes.data) ? prodRes.data : [];
+        setProducts(rawProds.filter(p => p.item_type === 'finished' || p.item_type === 'تام' || p.item_type === 'منتج تام'));
         const custs = Array.isArray(custRes.data) ? custRes.data : [];
         setCustomers(custs.filter(c => c.is_customer !== 0));
       } catch (err) {
@@ -167,7 +171,7 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
       onCancel={() => { window.location.hash = '#/returns'; }}
       isSaving={saving}
       saveDisabled={!isFormValid || saving}
-      saveText="اعتماد وتأكيد المرتجع"
+      saveText="إصدار إذن المرتجع"
       extraBottomContent={
         <div className="flex items-center gap-4 text-xs font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200">
           <span>نوع المرتجع: <span className="font-bold text-[#1F3A5F]">{returnMode === 'against_invoice' ? 'مرتبط بفاتورة' : 'مرتجع حر'}</span></span>
@@ -178,7 +182,7 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={(e) => e.preventDefault()} onKeyDown={handleFormKeyDown} className="space-y-6">
         {/* Mode Selector (Requirement F5) */}
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
@@ -302,12 +306,10 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 الكمية المرتجعة <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                min="1"
-                max={returnMode === 'against_invoice' ? maxSoldQty : undefined}
+              <NumberInput
                 value={form.quantity}
-                onChange={(e) => handleQtyChange(e.target.value)}
+                onChange={(val) => handleQtyChange(val)}
+                aria-label="الكمية المرتجعة"
                 className={`w-full px-3 py-2 border rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 ${
                   isQtyExcess ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-300 focus:ring-[#1F3A5F]'
                 }`}
@@ -326,12 +328,10 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 قيمة المرتجع المستحقة (ج.م)
               </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
+              <MoneyInput
                 value={form.refund_amount}
-                onChange={(e) => setForm(prev => ({ ...prev, refund_amount: e.target.value }))}
+                onChange={(val) => setForm(prev => ({ ...prev, refund_amount: val }))}
+                aria-label="قيمة المرتجع المستحقة"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold text-emerald-700 focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
             </div>

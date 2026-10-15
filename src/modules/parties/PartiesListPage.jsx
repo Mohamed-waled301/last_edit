@@ -18,6 +18,8 @@ import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { exportToExcel } from '../../utils/exportExcel';
+import { isValidPhoneForWhatsApp, openWhatsAppChat } from '../../utils/phone';
+import { MoneyInput } from '../../components/MoneyInput';
 
 export default function PartiesListPage({ mode = 'suppliers', defaultTab = null, onNotify }) {
   const effectiveMode = defaultTab || mode;
@@ -112,7 +114,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
     const exportData = filteredParties.map(p => ({
       'الكود': p.code,
       'الاسم': p.name,
-      'الهاتف': p.phone || '-',
+      ...(effectiveMode === 'suppliers' ? { 'رقم التواصل مع المورد': p.phone || '-' } : { 'الهاتف': p.phone || '-' }),
       'مورد': p.is_supplier ? 'نعم' : 'لا',
       'عميل': p.is_customer ? 'نعم' : 'لا',
       'رصيد أول المدة (مورد)': p.supplier_opening_balance ?? p.opening_balance ?? 0,
@@ -226,7 +228,9 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
               <tr>
                 <th className="p-3">الكود</th>
                 <th className="p-3">الاسم / الشركة</th>
-                <th className="p-3">الهاتف</th>
+                <th className="p-3">
+                  {effectiveMode === 'suppliers' ? 'رقم التواصل مع المورد' : (effectiveMode === 'customers' ? 'رقم الهاتف' : 'رقم التواصل مع المورد / الهاتف')}
+                </th>
                 <th className="p-3 text-center">الصفة</th>
                 <th className="p-3 text-left font-mono">رصيد المورد (له)</th>
                 <th className="p-3 text-left font-mono">رصيد العميل (عليه)</th>
@@ -285,8 +289,36 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                         )}
                       </td>
 
-                      <td className="p-3 text-gray-600 font-mono">
-                        {p.phone || '-'}
+                      <td className="p-3 text-gray-700 font-mono">
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="font-bold text-xs">{p.phone || '-'}</span>
+                          {p.phone && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openWhatsAppChat(p.phone)}
+                                disabled={!isValidPhoneForWhatsApp(p.phone)}
+                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-colors"
+                                title={!isValidPhoneForWhatsApp(p.phone) ? 'رقم الهاتف غير مسجل أو غير صالح للواتساب' : 'فتح محادثة واتساب'}
+                              >
+                                <span>واتساب</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const bal = p.is_supplier && !p.is_customer ? supBal : (p.is_customer && !p.is_supplier ? custBal : netBal);
+                                  const msg = `السلام عليكم ورحمة الله، كشف حسابكم طرفنا مسجل برصيد: ${formatCurrency(bal)}.`;
+                                  openWhatsAppChat(p.phone, msg);
+                                }}
+                                disabled={!isValidPhoneForWhatsApp(p.phone)}
+                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-colors"
+                                title={!isValidPhoneForWhatsApp(p.phone) ? 'رقم الهاتف غير مسجل أو غير صالح للواتساب' : 'إرسال كشف الحساب الحالي عبر واتساب'}
+                              >
+                                <span>كشف حساب</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Role Badges */}
@@ -349,9 +381,16 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                         )}
                       </td>
 
-                      {/* Customer Credit Limit */}
+                      {/* Customer Credit Limit & Available Credit */}
                       <td className="p-3 text-left font-mono font-bold text-emerald-800">
-                        {p.is_customer && p.credit_limit > 0 ? formatCurrency(p.credit_limit) : (
+                        {p.is_customer && p.credit_limit > 0 ? (
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span>{formatCurrency(p.credit_limit)}</span>
+                            <span className={`text-[10px] font-bold ${Number(p.available_credit ?? (p.credit_limit - custBal)) < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                              (المتاح: {formatCurrency(p.available_credit ?? (p.credit_limit - custBal))})
+                            </span>
+                          </div>
+                        ) : (
                           p.is_customer ? <span className="text-gray-400">غير محدد</span> : '-'
                         )}
                       </td>
@@ -434,12 +473,10 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 المبلغ المراد مقاصته (ج.م)
               </label>
-              <input
-                type="number"
-                min="1"
-                max={offsetModalParty.max_offset_amount}
+              <MoneyInput
                 value={offsetAmount}
-                onChange={(e) => setOffsetAmount(e.target.value)}
+                onChange={(val) => setOffsetAmount(val)}
+                aria-label="المبلغ المراد مقاصته"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               />
             </div>

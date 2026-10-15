@@ -12,7 +12,9 @@ import {
   ArrowRight,
   Save,
   FolderTree,
-  X
+  X,
+  Truck,
+  Star
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
@@ -20,6 +22,8 @@ import { formatCurrency } from '../../utils/formatters';
 import { compressImageToBase64 } from '../../utils/imageCompressor';
 import { Validators, FieldError } from '../../utils/validation';
 import { calculateProfitMargin, calculateSellingPriceFromMargin } from '../../logic/costCalculator';
+import { handleFormKeyDown } from '../../utils/formNavigation';
+import { MoneyInput, NumberInput } from '../../components/MoneyInput';
 
 export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotify, onBack }) {
   const isEdit = Boolean(itemId);
@@ -52,6 +56,8 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
   const [sizesList, setSizesList] = useState([]);
   const [colorsList, setColorsList] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [suppliersList, setSuppliersList] = useState([]);
+  const [itemSuppliers, setItemSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
@@ -88,7 +94,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     async function loadData() {
       try {
         setLoading(true);
-        const [itemsRes, groupsRes, sectionsRes, sizesRes, colorsRes, locsRes, unitsRes, settingsRes] = await Promise.all([
+        const [itemsRes, groupsRes, sectionsRes, sizesRes, colorsRes, locsRes, unitsRes, settingsRes, suppliersRes] = await Promise.all([
           api.getItems(),
           api.getItemGroups(),
           api.getItemSections(),
@@ -96,13 +102,15 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
           api.getItemColors(),
           api.getStorageLocations(),
           api.getItemUnits(),
-          api.getSettings()
+          api.getSettings(),
+          api.getSuppliers()
         ]);
 
         const allItems = Array.isArray(itemsRes.data) ? itemsRes.data : (itemsRes.items || []);
         const grps = Array.isArray(groupsRes.data) ? groupsRes.data : (groupsRes.groups || []);
         const secs = Array.isArray(sectionsRes.data) ? sectionsRes.data : (sectionsRes.sections || []);
         const unList = Array.isArray(unitsRes.data) ? unitsRes.data : (unitsRes.units || []);
+        const sups = Array.isArray(suppliersRes.data) ? suppliersRes.data : (suppliersRes.suppliers || []);
         const defMargin = Number(settingsRes?.data?.default_profit_margin_percent ?? settingsRes?.settings?.default_profit_margin_percent ?? 0);
 
         setExistingItems(allItems);
@@ -112,14 +120,23 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
         setSizesList(Array.isArray(sizesRes.data) ? sizesRes.data : []);
         setColorsList(Array.isArray(colorsRes.data) ? colorsRes.data : []);
         setLocations(Array.isArray(locsRes.data) ? locsRes.data : []);
+        setSuppliersList(sups);
 
         if (isEdit && itemId) {
-          const [itemRes, opsCheck] = await Promise.all([
+          const [itemRes, opsCheck, itemSups] = await Promise.all([
             api.getItem(itemId),
-            api.hasItemOperationalMovements(itemId)
+            api.hasItemOperationalMovements(itemId),
+            api.getItemSuppliers(itemId).catch(() => [])
           ]);
 
           setHasOperationalMovements(Boolean(opsCheck?.hasOperationalMovements));
+          if (Array.isArray(itemSups)) {
+            setItemSuppliers(itemSups.map(s => ({
+              supplier_id: String(s.supplier_id),
+              is_preferred: Boolean(s.is_preferred),
+              last_purchase_price: Number(s.last_purchase_price) || 0
+            })));
+          }
 
           if (itemRes && itemRes.data) {
             const itm = itemRes.data;
@@ -192,8 +209,11 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
   };
 
   // Bidirectional Cost & Selling Price Live Calculation
-  const handleCostPriceChange = (val) => {
-    const cost = Math.max(0, Number(val) || 0);
+  const handleCostPriceChange = (valOrEvt) => {
+    const cleanVal = valOrEvt && typeof valOrEvt === 'object' && valOrEvt.target && 'value' in valOrEvt.target
+      ? valOrEvt.target.value
+      : String(valOrEvt ?? '');
+    const cost = Math.max(0, Number(cleanVal) || 0);
     const marginPct = Number(form.margin_percent) || 0;
 
     let newSell = form.selling_price;
@@ -212,21 +232,24 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
 
     setForm((prev) => ({
       ...prev,
-      cost_price: val,
+      cost_price: cleanVal,
       selling_price: newSell,
       margin_value: newMarginVal,
-      opening_cost: prev.opening_cost ? prev.opening_cost : val
+      opening_cost: prev.opening_cost !== undefined && prev.opening_cost !== '' ? prev.opening_cost : cleanVal
     }));
   };
 
-  const handleSellingPriceChange = (val) => {
-    const sell = Math.max(0, Number(val) || 0);
+  const handleSellingPriceChange = (valOrEvt) => {
+    const cleanVal = valOrEvt && typeof valOrEvt === 'object' && valOrEvt.target && 'value' in valOrEvt.target
+      ? valOrEvt.target.value
+      : String(valOrEvt ?? '');
+    const sell = Math.max(0, Number(cleanVal) || 0);
     const cost = Math.max(0, Number(form.cost_price) || 0);
     const { marginValue, marginPercent } = calculateProfitMargin(cost, sell);
 
     setForm((prev) => ({
       ...prev,
-      selling_price: val,
+      selling_price: cleanVal,
       margin_value: String(marginValue),
       margin_percent: String(marginPercent)
     }));
@@ -384,6 +407,47 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
     }
   };
 
+  // Supplier Linking Helpers
+  const handleToggleSupplier = (supId) => {
+    setItemSuppliers((prev) => {
+      const strId = String(supId);
+      const exists = prev.find((s) => s.supplier_id === strId);
+      if (exists) {
+        return prev.filter((s) => s.supplier_id !== strId);
+      } else {
+        return [
+          ...prev,
+          {
+            supplier_id: strId,
+            is_preferred: prev.length === 0,
+            last_purchase_price: Number(form.cost_price) || 0
+          }
+        ];
+      }
+    });
+  };
+
+  const handleSetPreferredSupplier = (supId) => {
+    const strId = String(supId);
+    setItemSuppliers((prev) =>
+      prev.map((s) => ({
+        ...s,
+        is_preferred: s.supplier_id === strId
+      }))
+    );
+  };
+
+  const handleSupplierPriceChange = (supId, price) => {
+    const strId = String(supId);
+    setItemSuppliers((prev) =>
+      prev.map((s) =>
+        s.supplier_id === strId
+          ? { ...s, last_purchase_price: Math.max(0, Number(price) || 0) }
+          : s
+      )
+    );
+  };
+
   // Validate form
   const validateForm = () => {
     const errs = {};
@@ -449,11 +513,12 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
         margin_percent: Number(form.margin_percent) || 0,
         min_issue_qty: Number(form.min_issue_qty) || 1,
         opening_balance: Number(form.opening_balance) || 0,
-        opening_cost: Number(form.opening_cost || form.cost_price) || 0,
+        opening_cost: (form.opening_cost !== '' && form.opening_cost !== undefined) ? Number(form.opening_cost) : (Number(form.cost_price) || 0),
         location_id: form.location_id,
         notes: form.notes,
         has_variants: Boolean(form.has_variants),
-        variants: form.has_variants ? form.variants : []
+        variants: form.has_variants ? form.variants : [],
+        suppliers: itemSuppliers
       };
 
       if (isEdit) {
@@ -514,7 +579,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-6">
         {/* Section 1: Main Identification & Image */}
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
@@ -797,12 +862,11 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
               <label htmlFor="min-issue-input" className="block text-xs font-semibold text-slate-700 mb-1">
                 الحد الأدنى للصرف / أمر التصنيع *
               </label>
-              <input
+              <NumberInput
                 id="min-issue-input"
-                type="number"
-                min="1"
                 value={form.min_issue_qty}
-                onChange={(e) => setForm((prev) => ({ ...prev, min_issue_qty: e.target.value }))}
+                onChange={(val) => setForm((prev) => ({ ...prev, min_issue_qty: val }))}
+                aria-label="الحد الأدنى للصرف أو أمر التصنيع"
                 className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50 text-slate-800 ${
                   errors.min_issue_qty ? 'border-red-500' : 'border-slate-300'
                 }`}
@@ -868,13 +932,11 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
               <label htmlFor="cost-price-input" className="block text-xs font-semibold text-slate-700 mb-1">
                 سعر التكلفة (ج.م) *
               </label>
-              <input
+              <MoneyInput
                 id="cost-price-input"
-                type="number"
-                step="0.01"
-                min="0"
                 value={form.cost_price}
-                onChange={(e) => handleCostPriceChange(e.target.value)}
+                onChange={(val) => handleCostPriceChange(val)}
+                aria-label="سعر التكلفة"
                 className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50 text-slate-800 ${
                   errors.cost_price ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
                 }`}
@@ -894,13 +956,11 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                     نسبة هامش الربح (%)
                   </label>
                   <div className="relative">
-                    <input
+                    <NumberInput
                       id="margin-pct-input"
-                      type="number"
-                      step="0.1"
-                      min="0"
                       value={form.margin_percent}
-                      onChange={(e) => handleMarginPercentChange(e.target.value)}
+                      onChange={(val) => handleMarginPercentChange(val)}
+                      aria-label="نسبة هامش الربح"
                       className="w-full pr-3.5 pl-9 py-2 border border-slate-300 rounded-lg text-sm font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50 text-slate-800"
                     />
                     <Percent className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -915,13 +975,11 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                   <label htmlFor="selling-price-input" className="block text-xs font-semibold text-slate-700 mb-1">
                     سعر البيع (ج.م) *
                   </label>
-                  <input
+                  <MoneyInput
                     id="selling-price-input"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={form.selling_price}
-                    onChange={(e) => handleSellingPriceChange(e.target.value)}
+                    onChange={(val) => handleSellingPriceChange(val)}
+                    aria-label="سعر البيع"
                     className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono font-bold text-emerald-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50 ${
                       errors.selling_price ? 'border-red-500 bg-red-50/30' : 'border-slate-300'
                     }`}
@@ -959,13 +1017,12 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                   </span>
                 )}
               </label>
-              <input
+              <NumberInput
                 id="opening-balance-input"
-                type="number"
-                min="0"
                 disabled={hasOperationalMovements || form.has_variants}
                 value={form.opening_balance}
-                onChange={(e) => setForm((prev) => ({ ...prev, opening_balance: e.target.value }))}
+                onChange={(val) => setForm((prev) => ({ ...prev, opening_balance: val }))}
+                aria-label="الرصيد الافتتاحي"
                 className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono font-bold text-slate-800 ${
                   hasOperationalMovements || form.has_variants
                     ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
@@ -986,14 +1043,15 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
               <label htmlFor="opening-cost-input" className="block text-xs font-semibold text-slate-700 mb-1">
                 تكلفة الرصيد الافتتاحي (ج.م)
               </label>
-              <input
+              <MoneyInput
                 id="opening-cost-input"
-                type="number"
-                step="0.01"
-                min="0"
                 disabled={hasOperationalMovements}
-                value={form.opening_cost || form.cost_price}
-                onChange={(e) => setForm((prev) => ({ ...prev, opening_cost: e.target.value }))}
+                value={form.opening_cost !== undefined && form.opening_cost !== '' ? form.opening_cost : form.cost_price}
+                onChange={(e) => {
+                  const val = e && typeof e === 'object' && e.target && 'value' in e.target ? e.target.value : String(e ?? '');
+                  setForm((prev) => ({ ...prev, opening_cost: val }));
+                }}
+                aria-label="تكلفة الرصيد الافتتاحي"
                 className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono font-bold text-slate-800 ${
                   hasOperationalMovements
                     ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
@@ -1128,12 +1186,13 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                     <label htmlFor="variant-opening-input" className="block text-xs font-semibold text-slate-700 mb-1">
                       الرصيد الافتتاحي
                     </label>
-                    <input
+                    <NumberInput
                       id="variant-opening-input"
-                      type="number"
-                      min="0"
                       value={newVariant.opening_balance}
-                      onChange={(e) => setNewVariant((p) => ({ ...p, opening_balance: e.target.value }))}
+                      onChange={(val) => setNewVariant((p) => ({ ...p, opening_balance: val }))}
+                      allowDecimals={true}
+                      min={0}
+                      aria-label="الرصيد الافتتاحي للمتغير"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-bold bg-white text-slate-800"
                     />
                   </div>
@@ -1209,6 +1268,93 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
           </div>
         )}
 
+        {/* Section: Approved Suppliers Linking */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Truck className="w-5 h-5 text-indigo-600" />
+              الموردون (الأصناف التي يوردونها)
+            </h2>
+            <span className="text-xs text-slate-500 font-medium">
+              ربط ثنائي متزامن مع بطاقة المورد - تحديد المورد المفضل وآخر سعر شراء
+            </span>
+          </div>
+
+          {suppliersList.length === 0 ? (
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 text-center">
+              لا يوجد موردون مسجلون في النظام حالياً.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-600">
+                حدد الموردين المعتمدين لتوريد هذا الصنف مع إمكانية تعيين المورد المفضل وتسجيل آخر سعر شراء:
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {suppliersList.map((sup) => {
+                  const linked = itemSuppliers.find((s) => s.supplier_id === String(sup.id));
+                  const isSelected = Boolean(linked);
+
+                  return (
+                    <div
+                      key={sup.id}
+                      className={`p-3.5 rounded-xl border transition-all ${
+                        isSelected
+                          ? 'border-indigo-300 bg-indigo-50/40 shadow-xs'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <label className="flex items-center gap-2.5 cursor-pointer flex-1">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSupplier(sup.id)}
+                            className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                          />
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 block">{sup.name}</span>
+                            <span className="text-[11px] text-slate-500 font-mono">{sup.code || sup.id}</span>
+                          </div>
+                        </label>
+
+                        {isSelected && (
+                          <button
+                            type="button"
+                            onClick={() => handleSetPreferredSupplier(sup.id)}
+                            className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
+                              linked.is_preferred
+                                ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold'
+                                : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
+                            }`}
+                            title={linked.is_preferred ? 'المورد المفضل' : 'تعيين كمورد مفضل'}
+                          >
+                            <Star className={`w-3 h-3 ${linked.is_preferred ? 'fill-amber-500 text-amber-500' : ''}`} />
+                            <span>{linked.is_preferred ? 'مفضل' : 'تفضيل'}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {isSelected && (
+                        <div className="mt-2.5 pt-2 border-t border-indigo-100 flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-slate-600 font-medium">آخر سعر شراء (ج.م):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={linked.last_purchase_price || ''}
+                            onChange={(e) => handleSupplierPriceChange(sup.id, e.target.value)}
+                            className="w-24 px-2 py-1 text-xs font-mono font-bold bg-white border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 text-left"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Section 4: Notes */}
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
@@ -1238,7 +1384,8 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
             إلغاء
           </button>
           <button
-            type="submit"
+            type="button"
+            onClick={handleSubmit}
             disabled={!isFormValid || saving}
             className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50"
           >

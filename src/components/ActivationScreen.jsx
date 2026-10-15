@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { backupRepo } from '../data';
 
-export default function ActivationScreen({ initialMachineCode = '', initialStatus = null, onActivated }) {
+export default function ActivationScreen({ initialMachineCode = '', initialStatus = null, onActivated, onSkip }) {
   const [machineCode, setMachineCode] = useState(initialMachineCode);
   const [licenseInput, setLicenseInput] = useState('');
   const [selectedFileName, setSelectedFileName] = useState('');
@@ -71,8 +71,8 @@ export default function ActivationScreen({ initialMachineCode = '', initialStatu
   // Handle Save Machine Code to File
   const handleSaveCodeToFile = () => {
     if (!machineCode) return;
-    const content = `نظام إدارة مصانع الملابس - كود ترخيص هذا الجهاز\n` +
-      `Apex Apparel ERP Device Code\n` +
+    const content = `نظام إدارة وتخطيط الموارد - كود ترخيص هذا الجهاز\n` +
+      `code systems Device Code\n` +
       `-----------------------------------------\n` +
       `كود الجهاز: ${machineCode}\n` +
       `تاريخ الاستخراج: ${new Date().toLocaleString('ar-EG')}\n` +
@@ -128,6 +128,11 @@ export default function ActivationScreen({ initialMachineCode = '', initialStatu
         const result = await window.electronAPI.activate(cleanKey);
 
         if (result && result.success) {
+          const activatedPayload = {
+            ...result,
+            isValid: true,
+            isActivated: true,
+          };
           setSuccessData({
             customerName: result.customerName,
             edition: result.edition || 'Enterprise',
@@ -135,10 +140,10 @@ export default function ActivationScreen({ initialMachineCode = '', initialStatu
             daysRemaining: result.daysRemaining,
           });
 
-          // Wait 1.8 seconds then notify parent to open app
+          // Wait 1.8 seconds then notify parent to open app permanently
           setTimeout(() => {
             if (onActivated) {
-              onActivated(result);
+              onActivated(activatedPayload);
             }
           }, 1800);
         } else {
@@ -178,12 +183,12 @@ export default function ActivationScreen({ initialMachineCode = '', initialStatu
     <div className="min-h-screen bg-[#F4F5F7] flex flex-col justify-between p-4 md:p-8" dir="rtl">
       {/* Top Header */}
       <header className="max-w-3xl mx-auto w-full text-center pt-2 pb-6">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#1F3A5F] text-white shadow-md mb-3">
-          <Key className="w-8 h-8" />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white border border-gray-200 shadow-md mb-3 overflow-hidden p-2">
+          <img src="/logo.png" alt="code systems logo" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
         </div>
         <h1 className="text-2xl md:text-3xl font-extrabold text-[#1F3A5F]">تفعيل النسخة</h1>
         <p className="text-sm md:text-base text-gray-600 mt-2 font-medium">
-          نظام إدارة مصانع وورش الملابس الجاهزة المتكامل - Apex Apparel ERP
+          نظام إدارة موارد المنشأة المتكامل - code systems
         </p>
       </header>
 
@@ -361,6 +366,22 @@ export default function ActivationScreen({ initialMachineCode = '', initialStatu
                     </>
                   )}
                 </button>
+
+                {/* Temporary Test Skip Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onSkip) {
+                      onSkip();
+                    } else if (onActivated) {
+                      onActivated({ isValid: true, isBypassed: true, customerName: 'وضع التجربة المؤقت' });
+                    }
+                  }}
+                  className="w-full mt-3 h-11 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer border border-gray-300"
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>تخطي الترخيص مؤقتاً للتجربة والاختبار</span>
+                </button>
               </form>
 
               {/* 3. Data Safety Safeguard (Never lock users out of their data) */}
@@ -402,7 +423,7 @@ export default function ActivationScreen({ initialMachineCode = '', initialStatu
 
       {/* Footer */}
       <footer className="max-w-3xl mx-auto w-full text-center text-xs text-gray-500 pt-6 pb-2">
-        نظام Apex Apparel ERP • حماية الترخيص الرقمي غير المتصل بالإنترنت • حقوق النشر محفوظة 2026
+        نظام code systems • حماية الترخيص الرقمي غير المتصل بالإنترنت • حقوق النشر محفوظة 2026
       </footer>
     </div>
   );

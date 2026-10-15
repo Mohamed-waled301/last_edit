@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowRight, Save, X, ChevronLeft } from 'lucide-react';
+import { settingsRepo } from '../data';
 
 /**
  * Standard PageContainer for Apex Enterprise ERP
@@ -22,6 +23,22 @@ export default function PageContainer({
   extraBottomContent,
   children
 }) {
+  const [factoryName, setFactoryName] = useState('');
+  const [companyLogo, setCompanyLogo] = useState('');
+
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const s = await settingsRepo.getSettings();
+        if (s?.factory_name) setFactoryName(s.factory_name);
+        if (s?.company_logo) setCompanyLogo(s.company_logo);
+      } catch (e) {
+        // ignore
+      }
+    }
+    loadSettings();
+  }, []);
+
   const handleBack = () => {
     if (onBack) {
       onBack();
@@ -34,8 +51,30 @@ export default function PageContainer({
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-4rem)] relative pb-24">
+      {/* Print-only Document Header (Shown automatically on all printed documents/reports) */}
+      <div className="hidden print:flex items-center justify-between border-b-2 border-[#1F3A5F] pb-4 mb-6">
+        <div className="flex items-center gap-4">
+          <img
+            src={companyLogo || '/logo.png'}
+            alt="شعار المنشأة"
+            className="h-16 w-auto max-w-[130px] object-contain rounded"
+            onError={(e) => {
+              if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+            }}
+          />
+          <div>
+            <h2 className="text-xl font-bold text-[#1F3A5F]">{factoryName || 'code systems'}</h2>
+            <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
+            {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+          </div>
+        </div>
+        <div className="text-left font-mono text-xs text-gray-500">
+          <div>تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG')}</div>
+        </div>
+      </div>
+
       {/* Top Header & Breadcrumbs Bar */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 shadow-xs">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 shadow-xs no-print">
         {/* Breadcrumb Trail */}
         {breadcrumbs && breadcrumbs.length > 0 && (
           <nav className="flex items-center gap-1.5 text-xs text-gray-500 mb-2 font-medium overflow-x-auto whitespace-nowrap">

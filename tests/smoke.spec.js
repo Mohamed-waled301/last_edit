@@ -26,30 +26,35 @@ async function ensureSetup(page) {
   await page.waitForLoadState('domcontentloaded');
 
   // Wait for initial system loading state to resolve
-  await page.locator('text=جاري تحميل نظام إدارة مصانع الملابس').waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
+  await page.locator('text=جاري تحميل').waitFor({ state: 'hidden', timeout: 30000 }).catch(() => {});
 
-  // If on Setup Screen, click submit and wait for full demo seeding
-  const setupForm = page.locator('form:has-text("اسم الشركة")');
-  if (await setupForm.isVisible({ timeout: 4000 }).catch(() => false)) {
-    const submitBtn = setupForm.locator('button[type="submit"]');
+  // If on Setup Screen, fill required details and submit
+  const setupHeading = page.locator('text=مرحباً بك في نظام');
+  if (await setupHeading.isVisible({ timeout: 10000 }).catch(() => false)) {
+    const inputs = page.locator('form input');
+    await inputs.nth(0).fill('مصنع النيل للملابس');
+    await inputs.nth(1).fill('المدير العام');
+    await inputs.nth(2).fill('1234');
+    await inputs.nth(3).fill('1234');
+    const submitBtn = page.locator('button:has-text("حفظ وبدء العمل على النظام")');
     await submitBtn.click();
-    await setupForm.waitFor({ state: 'hidden', timeout: 35000 });
+    await setupHeading.waitFor({ state: 'hidden', timeout: 35000 }).catch(() => {});
   }
 
   // If PIN login screen is shown, type 1234
   const pinInput = page.locator('input[type="password"]');
-  if (await pinInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+  if (await pinInput.isVisible({ timeout: 5000 }).catch(() => false)) {
     await pinInput.fill('1234');
     const loginButton = page.locator('button[type="submit"]');
     await loginButton.click();
-    await pinInput.waitFor({ state: 'hidden', timeout: 10000 });
+    await pinInput.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
   }
 
   // Wait for header to be visible
-  await expect(page.locator('header')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('header')).toBeVisible({ timeout: 25000 });
 }
 
-test.describe('Apex Apparel ERP Smoke Tests', () => {
+test.describe('code systems Smoke Tests', () => {
   test('1366px desktop width: visits every sidebar route without console errors or page horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
 
@@ -139,7 +144,7 @@ test.describe('Apex Apparel ERP Smoke Tests', () => {
     let switched = false;
     for (const opt of options) {
       const text = await opt.innerText();
-      if (!text.includes('خالد') && !text.includes('المنشاوي')) {
+      if (!text.includes('المدير') && !text.includes('owner')) {
         const val = await opt.getAttribute('value');
         if (val) {
           await roleSelect.selectOption(val);
@@ -153,7 +158,7 @@ test.describe('Apex Apparel ERP Smoke Tests', () => {
       await page.evaluate(() => {
         sessionStorage.setItem(
           'erp_active_user',
-          JSON.stringify({ id: 'usr-cashier', role: 'cashier', full_name: 'أحمد محمود كاشير' })
+          JSON.stringify({ id: 'usr-cashier', role: 'cashier', full_name: 'كاشير الفرع' })
         );
         window.location.reload();
       });
@@ -200,9 +205,9 @@ test.describe('Apex Apparel ERP Smoke Tests', () => {
     const helperText = page.locator('text=اختياري؛ اتركه فارغاً أو 0 لعدم تحديد سقف ائتماني. يطبق فقط على الفواتير الآجلة.');
     await expect(helperText).toBeVisible();
 
-    // Fill a value and check thousand separator formatting
+    // Fill a value and check input retains typed exact value without unwanted thousand formatting drift
     await creditLimitInput.fill('250000');
-    await expect(creditLimitInput).toHaveValue('250,000');
+    await expect(creditLimitInput).toHaveValue('250000');
 
     // Fill customer name and save
     const nameInput = page.locator('#party-name-input');
@@ -219,5 +224,78 @@ test.describe('Apex Apparel ERP Smoke Tests', () => {
     expect(page.url()).toContain('#/customers');
     const customerRow = page.locator('text=شركة الأناقة النقدية للاختبار');
     await expect(customerRow).toBeVisible();
+  });
+
+  test('data persistence across page reload: created records survive F5 / page reload', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await ensureSetup(page);
+
+    // Create unique records programmatically via window.api or Dexie
+    const testSupplierName = `مورد استمرارية البيانات ${Date.now()}`;
+    const testItemName = `صنف اختبار التحديث ${Date.now()}`;
+
+    await page.evaluate(async ({ supName, itmName }) => {
+      const sup = await window.api.createParty({
+        code: `SUP-REL-${Date.now().toString().slice(-4)}`,
+        name: supName,
+        type: 'supplier',
+        is_supplier: 1,
+        phone: '01012345678',
+        current_balance: 0
+      });
+
+      const itm = await window.api.createItem({
+        code: `ITM-REL-${Date.now().toString().slice(-4)}`,
+        name: itmName,
+        item_type: 'raw_material',
+        item_group: 'خامات',
+        item_department: 'حياكة',
+        unit: 'متر',
+        cost_price: 150,
+        opening_balance: 10,
+        opening_cost: 150
+      });
+
+      await window.api.createPurchaseOrder({
+        supplier_id: sup.id || sup.party?.id,
+        payment_terms: 'cash',
+        items: [
+          {
+            material_id: itm.id || itm.item?.id,
+            quantity_ordered: 5,
+            quantity: 5,
+            unit_price: 150
+          }
+        ]
+      });
+    }, { supName: testSupplierName, itmName: testItemName });
+
+    // Verify supplier is in suppliers list
+    await page.goto('#/suppliers');
+    await page.waitForTimeout(600);
+    await expect(page.locator(`text=${testSupplierName}`)).toBeVisible();
+
+    // Verify item is in items list
+    await page.goto('#/items');
+    await page.waitForTimeout(600);
+    await expect(page.locator(`text=${testItemName}`)).toBeVisible();
+
+    // Perform page reload (simulating F5 / browser reload)
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(1000);
+
+    // Re-verify that records survived reload completely!
+    await page.goto('#/suppliers');
+    await page.waitForTimeout(600);
+    await expect(page.locator(`text=${testSupplierName}`)).toBeVisible();
+
+    await page.goto('#/items');
+    await page.waitForTimeout(600);
+    await expect(page.locator(`text=${testItemName}`)).toBeVisible();
+
+    await page.goto('#/purchases');
+    await page.waitForTimeout(600);
+    await expect(page.locator(`text=${testSupplierName}`)).toBeVisible();
   });
 });

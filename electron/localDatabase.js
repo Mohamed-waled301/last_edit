@@ -1,6 +1,88 @@
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+
+function createSqliteConnection(dbPath, customOptions = {}) {
+  const electronBinding = path.join(__dirname, 'better_sqlite3.node');
+  const bindingExists = fs.existsSync(electronBinding);
+
+  try {
+    const BetterSqlite3 = require('better-sqlite3');
+    const opts = { ...customOptions };
+    if (process.versions.electron && bindingExists && !opts.nativeBinding) {
+      opts.nativeBinding = electronBinding;
+    }
+    return new BetterSqlite3(dbPath, opts);
+  } catch (betterSqliteErr) {
+    try {
+      const { DatabaseSync } = require('node:sqlite');
+      const syncDb = new DatabaseSync(dbPath, customOptions);
+      return wrapNodeSqlite(syncDb);
+    } catch {
+      throw betterSqliteErr;
+    }
+  }
+}
+
+function wrapNodeSqlite(syncDb) {
+  return {
+    pragma(query) {
+      if (!query) return [];
+      const trimmed = query.trim();
+      if (trimmed.toLowerCase().startsWith('integrity_check')) {
+        return syncDb.prepare('PRAGMA integrity_check').all();
+      }
+      syncDb.exec(`PRAGMA ${trimmed}`);
+      return [];
+    },
+    prepare(sql) {
+      const stmt = syncDb.prepare(sql);
+      return {
+        all(...params) {
+          const flat = Array.isArray(params[0]) && params.length === 1 ? params[0] : params;
+          return stmt.all(...flat);
+        },
+        get(...params) {
+          const flat = Array.isArray(params[0]) && params.length === 1 ? params[0] : params;
+          return stmt.get(...flat) || null;
+        },
+        run(...params) {
+          const flat = Array.isArray(params[0]) && params.length === 1 ? params[0] : params;
+          return stmt.run(...flat);
+        },
+      };
+    },
+    exec(sql) {
+      return syncDb.exec(sql);
+    },
+    transaction(fn) {
+      return (...args) => {
+        syncDb.exec('BEGIN IMMEDIATE');
+        try {
+          const result = fn(...args);
+          syncDb.exec('COMMIT');
+          return result;
+        } catch (err) {
+          syncDb.exec('ROLLBACK');
+          throw err;
+        }
+      };
+    },
+    async backup(targetPath) {
+      const dir = path.dirname(targetPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const escaped = targetPath.replace(/'/g, "''");
+      syncDb.exec(`VACUUM INTO '${escaped}'`);
+      return { targetPath };
+    },
+    close() {
+      try {
+        syncDb.close();
+      } catch {}
+    },
+  };
+}
 
 class LocalDatabaseManager {
   constructor(userDataPath) {
@@ -16,7 +98,7 @@ class LocalDatabaseManager {
         fs.mkdirSync(this.userDataPath, { recursive: true });
       }
 
-      this.db = new Database(this.dbPath);
+      this.db = createSqliteConnection(this.dbPath);
       this.db.pragma('journal_mode = WAL');
       this.db.pragma('foreign_keys = ON');
       this.db.pragma('synchronous = NORMAL');
@@ -111,7 +193,22 @@ class LocalDatabaseManager {
       const sqlContent = fs.readFileSync(filePath, 'utf8');
 
       const applyMigration = db.transaction(() => {
-        db.exec(sqlContent);
+        const statements = sqlContent
+          .split(';')
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        for (const stmt of statements) {
+          try {
+            db.exec(stmt + ';');
+          } catch (stmtErr) {
+            if (stmtErr.message && stmtErr.message.toLowerCase().includes('duplicate column name')) {
+              continue;
+            }
+            throw stmtErr;
+          }
+        }
+
         db.prepare(
           'INSERT INTO `schema_version` (version, applied_at, description) VALUES (?, ?, ?)'
         ).run(versionNum, new Date().toISOString(), description);
@@ -164,7 +261,7 @@ class LocalDatabaseManager {
       }
 
       // 1. Verify backup file integrity before restoring
-      const testDb = new Database(sourcePath, { readonly: true });
+      const testDb = createSqliteConnection(sourcePath, { readonly: true });
       const integrity = testDb.pragma('integrity_check');
       testDb.close();
 

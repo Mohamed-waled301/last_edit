@@ -3,20 +3,26 @@ import { Printer, ArrowRight, FileText, CheckCircle2 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { triggerPrint } from '../../utils/print';
 
 export default function SalesInvoicePrintPage({ invoiceId = null }) {
   const [invoice, setInvoice] = useState(null);
-  const [printMode, setPrintMode] = useState('a4'); // 'a4' | 'thermal'
+  const [printMode, setPrintMode] = useState('thermal'); // Default to 80mm thermal receipt
   const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState(null);
 
   useEffect(() => {
     async function loadInvoice() {
       try {
         setLoading(true);
-        const res = await api.getSalesInvoices();
+        const [res, setRes] = await Promise.all([
+          api.getSalesInvoices(),
+          api.getSettings ? api.getSettings() : Promise.resolve(null)
+        ]);
         const invoices = Array.isArray(res.data) ? res.data : (Array.isArray(res.invoices) ? res.invoices : []);
         const inv = invoices.find(i => String(i.id) === String(invoiceId) || String(i.invoice_number) === String(invoiceId)) || invoices[0];
         setInvoice(inv || null);
+        setSettings(setRes || null);
       } catch (err) {
         console.error(err);
       } finally {
@@ -27,7 +33,11 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
   }, [invoiceId]);
 
   const handlePrint = () => {
-    window.print();
+    triggerPrint({
+      silent: false,
+      printBackground: true,
+      pageSize: printMode === 'thermal' ? { width: 80000, height: 200000 } : 'A4'
+    });
   };
 
   if (loading) {
@@ -105,11 +115,20 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
         <div className="max-w-4xl mx-auto bg-white p-8 sm:p-12 shadow-md rounded-lg border border-gray-200 print:shadow-none print:border-none print:p-0">
           {/* Header */}
           <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-[#1F3A5F]">شركة أبيكس لصناعة الملابس الجاهزة</h2>
-              <p className="text-xs text-gray-500 mt-1">مؤسسة صناعة وتصدير الملابس الجاهزة</p>
-              <p className="text-xs text-gray-600 mt-1">المنطقة الصناعية - المحلة الكبرى / القاهرة</p>
-              <p className="text-xs text-gray-600">س.ت: 489201 • ب.ض: 789-204-110</p>
+            <div className="flex items-center gap-4">
+              {settings?.company_logo && (
+                <img
+                  src={settings.company_logo}
+                  alt="شعار المنشأة"
+                  className="h-16 w-auto max-w-[140px] object-contain rounded"
+                />
+              )}
+              <div>
+                <h2 className="text-2xl font-bold text-[#1F3A5F]">{settings?.factory_name || ''}</h2>
+                {settings?.address && <p className="text-xs text-gray-600 mt-1">{settings.address}</p>}
+                {settings?.phone && <p className="text-xs text-gray-600">هاتف: {settings.phone}</p>}
+                {settings?.tax_number && <p className="text-xs text-gray-600">الرقم الضريبي: {settings.tax_number}</p>}
+              </div>
             </div>
             <div className="text-left font-mono">
               <span className="inline-block px-3 py-1 bg-[#1F3A5F] text-white font-bold text-sm rounded mb-2">
@@ -201,14 +220,41 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
         </div>
       )}
 
-      {/* 80mm Thermal Receipt Preview (Requirement F6) */}
+      {/* 80mm Thermal Receipt Layout (Requirement 2) */}
       {printMode === 'thermal' && (
-        <div className="max-w-[320px] mx-auto bg-white p-4 shadow-md rounded-md font-mono text-xs border border-gray-300 print:shadow-none print:border-none print:p-0">
+        <div className="w-[80mm] max-w-[80mm] mx-auto bg-white p-3 shadow-md rounded-md font-mono text-xs border border-gray-300 print:shadow-none print:border-none print:p-0 print:m-0 print:w-[80mm]">
+          <style>{`
+            @media print {
+              @page {
+                size: 80mm auto;
+                margin: 0;
+              }
+              body {
+                width: 80mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #fff !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+            }
+          `}</style>
           <div className="text-center border-b border-dashed border-gray-400 pb-3 mb-3">
-            <h3 className="font-bold text-sm">مصنع أبيكس للملابس</h3>
-            <p className="text-[10px] text-gray-600">معرض ومنفذ بيع الملابس الجاهزة</p>
-            <p className="text-[10px] text-gray-600">س.ت 489201 • ب.ض 789204110</p>
-            <div className="mt-2 text-right">
+            <img
+              src={settings?.company_logo || '/logo.png'}
+              alt="code systems logo"
+              className="h-12 w-auto max-w-[100px] object-contain mx-auto mb-1.5"
+              onError={(e) => {
+                if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+              }}
+            />
+            <h2 className="font-extrabold text-sm text-gray-900">{settings?.factory_name || 'code systems'}</h2>
+            <div className="text-[11px] font-bold text-[#1F3A5F]">نظام code systems</div>
+            {settings?.address && <p className="text-[10px] text-gray-600 mt-0.5">{settings.address}</p>}
+            {settings?.phone && <p className="text-[10px] text-gray-600">هاتف: {settings.phone}</p>}
+            {settings?.tax_number && <p className="text-[10px] text-gray-600">الرقم الضريبي: {settings.tax_number}</p>}
+            <div className="mt-2 text-right pt-2 border-t border-dotted border-gray-300">
               <div>رقم الفاتورة: <strong>{invoice.invoice_number}</strong></div>
               <div>التاريخ: {formatDate(invoice.invoice_date)}</div>
               <div>العميل: {invoice.customer_name || 'عميل نقدي'}</div>
@@ -238,8 +284,9 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
             </div>
           </div>
 
-          <div className="text-center text-[10px] text-gray-500">
+          <div className="text-center text-[10px] text-gray-500 pb-2">
             <p>شكراً لتعاملكم معنا</p>
+            <p>نظام إدارة المبيعات والمخازن - code systems</p>
             <p>البضاعة المباعة ترد وتستبدل خلال 14 يوماً بالفاتورة</p>
           </div>
         </div>

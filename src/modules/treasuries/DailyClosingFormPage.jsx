@@ -5,6 +5,7 @@ import { api, getActiveUser } from '../../services/api';
 import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import QuickOutletModal from '../outlets/QuickOutletModal';
+import { MoneyInput } from '../../components/MoneyInput';
 
 export default function DailyClosingFormPage({ onSaved, onNotify }) {
   const activeUser = getActiveUser();
@@ -166,18 +167,6 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
                 ))}
               </select>
               <FieldError error={errors.outlet_id} />
-              {outlets.length === 0 && (
-                <div className="mt-1 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800 flex items-center justify-between">
-                  <span>لا توجد فروع مسجلة.</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickOutletModal(true)}
-                    className="font-bold underline text-[#1F3A5F] cursor-pointer"
-                  >
-                    إضافة فرع
-                  </button>
-                </div>
-              )}
             </div>
 
             <div>
@@ -216,45 +205,40 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">عهدة بداية الوردية (ج.م)</label>
-              <input
-                type="number"
-                min="0"
+              <MoneyInput
                 value={form.opening_cash}
-                onChange={(e) => setForm(p => ({ ...p, opening_cash: e.target.value }))}
+                onChange={(val) => setForm(p => ({ ...p, opening_cash: val }))}
+                aria-label="عهدة بداية الوردية"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold"
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">مبيعات نقدية خلال الوردية (ج.م)</label>
-              <input
-                type="number"
-                min="0"
+              <MoneyInput
                 value={form.cash_sales}
-                onChange={(e) => setForm(p => ({ ...p, cash_sales: e.target.value }))}
+                onChange={(val) => setForm(p => ({ ...p, cash_sales: val }))}
+                aria-label="مبيعات نقدية خلال الوردية"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold text-green-700"
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">مصروفات نقدية بالمعرض (ج.م)</label>
-              <input
-                type="number"
-                min="0"
+              <MoneyInput
                 value={form.cash_expenses}
-                onChange={(e) => setForm(p => ({ ...p, cash_expenses: e.target.value }))}
+                onChange={(val) => setForm(p => ({ ...p, cash_expenses: val }))}
+                aria-label="مصروفات نقدية بالمعرض"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold text-rose-700"
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">النقدية الفعلية بالدرج (ج.م) <span className="text-red-500">*</span></label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
+              <MoneyInput
                 value={form.actual_cash_counted}
-                onChange={(e) => setForm(p => ({ ...p, actual_cash_counted: e.target.value }))}
+                onChange={(val) => setForm(p => ({ ...p, actual_cash_counted: val }))}
+                aria-label="النقدية الفعلية بالدرج"
                 className="w-full px-3 py-2 border border-emerald-400 rounded-md text-sm font-mono font-bold text-emerald-800 bg-emerald-50/20"
                 required
               />

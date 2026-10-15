@@ -156,8 +156,15 @@ export interface StockCardReport {
 export function buildItemStockCard(
   item: { id: string; name: string; code?: string; unit?: string; opening_balance?: number },
   allMovements: StockMovement[],
-  filter: StockCardFilter = {}
-): StockCardReport {
+  filter: StockCardFilter & { startDate?: string; endDate?: string } = {}
+): StockCardReport & {
+  opening_balance: number;
+  total_in: number;
+  total_out: number;
+  net_change: number;
+  closing_balance: number;
+  entries: StockCardLedgerRow[];
+} {
   const itemId = item.id;
   const initialOpening = Number(item.opening_balance) || 0;
 
@@ -173,7 +180,9 @@ export function buildItemStockCard(
     return da.localeCompare(db);
   });
 
-  const { dateFrom, dateTo, variantId, locationId, movementType } = filter;
+  const dateFrom = filter.startDate || filter.dateFrom;
+  const dateTo = filter.endDate || filter.dateTo;
+  const { variantId, locationId, movementType } = filter;
 
   // 1. Calculate Period Opening Balance (initial opening + movements before dateFrom)
   let periodOpening = initialOpening;
@@ -209,7 +218,7 @@ export function buildItemStockCard(
   let totalIn = 0;
   let totalOut = 0;
   const breakdown: Record<string, { label: string; inQty: number; outQty: number; count: number }> = {};
-  const rows: StockCardLedgerRow[] = [];
+  const rows: (StockCardLedgerRow & { quantity: number; document_id: string })[] = [];
 
   for (const m of inPeriodMovements) {
     const dir = getMovementDirection(m);
@@ -240,10 +249,12 @@ export function buildItemStockCard(
       movement_type: typeKey,
       type_label: typeMeta.label,
       direction: dir,
+      quantity: qty,
       in_quantity: inQty,
       out_quantity: outQty,
       running_balance: Number(running.toFixed(3)),
       unit_cost: Number(m.unit_cost) || 0,
+      document_id: m.document_id || m.reference_id || '-',
       document_reference: m.document_id || m.reference_id || '-',
       location_id: m.location_id,
       variant_id: m.variant_id,
@@ -264,12 +275,18 @@ export function buildItemStockCard(
     unit: item.unit || 'قطعة',
     initialOpeningBalance: initialOpening,
     periodOpeningBalance: periodOpening,
+    opening_balance: periodOpening,
     totalIn,
+    total_in: totalIn,
     totalOut,
+    total_out: totalOut,
     netChange,
+    net_change: netChange,
     closingBalance,
+    closing_balance: closingBalance,
     movementBreakdown: breakdown,
-    rows
+    rows,
+    entries: rows
   };
 }
 

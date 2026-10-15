@@ -26,7 +26,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Scissors
 } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import { api } from '../services/api';
@@ -34,6 +35,8 @@ import db from '../data/db';
 import { formatCurrency, formatNumber, formatDate } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
 import StockCardPage from './inventory/StockCardPage';
+import { resolveOpeningBalance, resolveOpeningType } from '../logic/balances';
+import { toPiasters, fromPiasters } from '../utils/money';
 
 export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }) {
   // 'index' or specific report key:
@@ -173,11 +176,11 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
           color: 'blue'
         },
         {
-          key: 'outsourced-manufacturing',
-          title: 'تقرير التشغيل والتصنيع لدى الغير',
-          desc: 'أوامر التشغيل الخارجي (تطريز، غسيل، طباعة) وتراكم التكاليف مع مصانع الغير',
-          icon: Factory,
-          color: 'amber'
+          key: 'cut-order-stages',
+          title: 'تقرير مراحل القص (المطابع والتطريز والحياكة)',
+          desc: 'إجماليات التكلفة، المسدد، والمتبقي لكل ورشة ولكل أمر قص مع التصدير لإكسيل',
+          icon: Scissors,
+          color: 'indigo'
         }
       ]
     },
@@ -225,12 +228,14 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
           }
           case 'goods-receipts': {
             const grns = await db.goods_receipts.toArray();
-            const items = await db.items.toArray();
             const sups = await db.suppliers.toArray();
-            const supMap = new Map(sups.map((s) => [s.id, s.name]));
+            const parties = await db.parties.toArray();
+            const supMap = new Map();
+            for (const s of sups) supMap.set(s.id, s.name);
+            for (const p of parties) supMap.set(p.id, p.name);
             const populated = grns.map((g) => ({
               ...g,
-              supplier_name: supMap.get(g.supplier_id) || g.supplier_id
+              supplier_name: supMap.get(g.supplier_id) || g.supplier_name || g.supplier_id
             }));
             setReportData(populated);
             break;
@@ -253,8 +258,76 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
             break;
           }
           case 'supplier-statements': {
-            const sups = await db.parties.filter((p) => p.is_supplier === 1).toArray();
-            setReportData(sups);
+            const [sups, rawSuppliers, supplierInvoices, purchaseOrders, payments] = await Promise.all([
+              db.parties.filter((p) => p.is_supplier === 1).toArray(),
+              db.suppliers.toArray(),
+              db.supplier_invoices.toArray(),
+              db.purchase_orders.toArray(),
+              db.payments.toArray()
+            ]);
+
+            const map = new Map();
+            for (const s of sups) map.set(s.id, { ...s, is_supplier: 1 });
+            for (const s of rawSuppliers) {
+              if (!map.has(s.id)) {
+                map.set(s.id, { ...s, is_supplier: 1 });
+              } else {
+                map.set(s.id, { ...s, ...map.get(s.id) });
+              }
+            }
+            const allSuppliers = Array.from(map.values());
+
+            const populated = allSuppliers.map((sup) => {
+              const opening = resolveOpeningBalance(sup, 'supplier');
+              const openingType = resolveOpeningType(sup, 'supplier');
+
+              // Credit purchase invoices for this supplier
+              const creditInvoices = supplierInvoices.filter(
+                (inv) => (inv.supplier_id === sup.id || inv.party_id === sup.id) &&
+                         inv.payment_terms === 'credit' &&
+                         inv.status !== 'cancelled'
+              );
+              const creditPOs = purchaseOrders.filter(
+                (po) => (po.supplier_id === sup.id || po.party_id === sup.id) &&
+                        po.payment_terms === 'credit' &&
+                        po.status !== 'cancelled' &&
+                        !creditInvoices.some((inv) => inv.po_id === po.id || inv.id === po.id)
+              );
+              const creditInvoicesTotal = [...creditInvoices, ...creditPOs].reduce(
+                (sum, inv) => sum + (Number(inv.total_amount ?? inv.grand_total) || 0),
+                0
+              );
+
+              // Supplier payments
+              const supPayments = payments.filter(
+                (p) => (p.supplier_id === sup.id || p.party_id === sup.id) &&
+                       p.status !== 'cancelled'
+              );
+              const supplierPaymentsTotal = supPayments.reduce(
+                (sum, p) => sum + (Number(p.amount) || 0),
+                0
+              );
+
+              // Formula: Opening Balance + Credit Purchase Invoices - Supplier Payments
+              const signedOpening = openingType === 'debit' ? -opening : opening;
+              const supplierDebt = Math.max(0, fromPiasters(toPiasters(signedOpening) + toPiasters(creditInvoicesTotal) - toPiasters(supplierPaymentsTotal)));
+
+              return {
+                ...sup,
+                opening_balance: opening,
+                supplier_opening_balance: opening,
+                customer_opening_balance: 0,
+                opening_balance_type: openingType,
+                supplier_opening_type: openingType,
+                credit_invoices_total: creditInvoicesTotal,
+                supplier_payments_total: supplierPaymentsTotal,
+                supplier_balance: supplierDebt,
+                current_balance: supplierDebt,
+                balance_due: supplierDebt
+              };
+            });
+
+            setReportData(populated);
             break;
           }
           case 'installments-due': {
@@ -268,8 +341,69 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
             break;
           }
           case 'customer-statements': {
-            const custs = await db.parties.filter((p) => p.is_customer === 1).toArray();
-            setReportData(custs);
+            const [custs, rawCustomers, salesInvoices, customerPayments] = await Promise.all([
+              db.parties.filter((p) => p.is_customer === 1).toArray(),
+              db.customers.toArray(),
+              db.sales_invoices.toArray(),
+              db.customer_payments.toArray()
+            ]);
+
+            const map = new Map();
+            for (const c of custs) map.set(c.id, { ...c, is_customer: 1 });
+            for (const c of rawCustomers) {
+              if (!map.has(c.id)) {
+                map.set(c.id, { ...c, is_customer: 1 });
+              } else {
+                map.set(c.id, { ...c, ...map.get(c.id) });
+              }
+            }
+            const allCustomers = Array.from(map.values());
+
+            const populated = allCustomers.map((cust) => {
+              const opening = resolveOpeningBalance(cust, 'customer');
+              const openingType = resolveOpeningType(cust, 'customer');
+
+              // Credit sales invoices
+              const creditInvoices = salesInvoices.filter(
+                (inv) => (inv.customer_id === cust.id || inv.party_id === cust.id) &&
+                         inv.payment_terms === 'credit' &&
+                         inv.status !== 'cancelled'
+              );
+              const creditInvoicesTotal = creditInvoices.reduce(
+                (sum, inv) => sum + (Number(inv.net_amount ?? inv.grand_total ?? inv.total_invoice_amount ?? inv.total_amount) || 0),
+                0
+              );
+
+              // Customer payments
+              const custPayments = customerPayments.filter(
+                (p) => (p.customer_id === cust.id || p.party_id === cust.id) &&
+                       p.status !== 'cancelled'
+              );
+              const customerPaymentsTotal = custPayments.reduce(
+                (sum, p) => sum + (Number(p.amount) || 0),
+                0
+              );
+
+              // Formula: Opening Balance + Credit Sales Invoices - Customer Payments
+              const signedOpening = openingType === 'credit' ? -opening : opening;
+              const customerDebt = Math.max(0, fromPiasters(toPiasters(signedOpening) + toPiasters(creditInvoicesTotal) - toPiasters(customerPaymentsTotal)));
+
+              return {
+                ...cust,
+                opening_balance: opening,
+                customer_opening_balance: opening,
+                supplier_opening_balance: 0,
+                opening_balance_type: openingType,
+                customer_opening_type: openingType,
+                credit_invoices_total: creditInvoicesTotal,
+                customer_payments_total: customerPaymentsTotal,
+                customer_balance: customerDebt,
+                current_balance: customerDebt,
+                balance_due: customerDebt
+              };
+            });
+
+            setReportData(populated);
             break;
           }
           case 'returns': {
@@ -316,6 +450,32 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
           case 'outsourced-manufacturing': {
             const res = await api.getFinishingOrders();
             setReportData(res.data || res.finishing_orders || []);
+            break;
+          }
+          case 'cut-order-stages': {
+            const res = await api.getProductionOrders();
+            const list = res.data || res.production_orders || [];
+            const rows = [];
+            for (const o of list) {
+              const stages = o.stages || {};
+              for (const [stKey, stData] of Object.entries(stages)) {
+                if (!stData) continue;
+                rows.push({
+                  id: `${o.id}-${stKey}`,
+                  order_id: o.id,
+                  cutting_number: o.cutting_number || o.order_number,
+                  cutting_name: o.cutting_name || o.product_name,
+                  stage_title: stKey === 'printing' ? 'الطباعة' : stKey === 'embroidery' ? 'التطريز' : 'الحياكة',
+                  vendor_name: stData.vendor_name || 'غير محدد',
+                  pricing_type: stData.pricing_type === 'per_piece' ? 'سعر قطعة' : stData.pricing_type === 'batches' ? 'دفعات' : 'مبلغ ثابت',
+                  total_cost: stData.total_cost || 0,
+                  paid: stData.paid || 0,
+                  remaining: stData.remaining || 0,
+                  date: o.start_date || o.created_at?.split('T')[0]
+                });
+              }
+            }
+            setReportData(rows);
             break;
           }
           case 'disbursements-by-expense': {
@@ -824,6 +984,19 @@ function renderTableHeaders(key) {
           <th className="p-3 text-center">الحالة</th>
         </tr>
       );
+    case 'cut-order-stages':
+      return (
+        <tr>
+          <th className="p-3">رقم القصة</th>
+          <th className="p-3">اسم القصة</th>
+          <th className="p-3">المرحلة</th>
+          <th className="p-3">الورشة / المورد</th>
+          <th className="p-3">نظام التسعير</th>
+          <th className="p-3 text-left font-mono">إجمالي التكلفة</th>
+          <th className="p-3 text-left font-mono">المسدد</th>
+          <th className="p-3 text-left font-mono">المتبقي</th>
+        </tr>
+      );
     case 'disbursements-by-expense':
       return (
         <tr>
@@ -914,19 +1087,33 @@ function renderTableRow(key, row, idx) {
         </tr>
       );
     case 'supplier-statements':
-    case 'customer-statements':
       return (
         <tr key={row.id || idx} className="hover:bg-slate-50">
-          <td className="p-3 font-mono font-bold text-slate-900">{row.code}</td>
+          <td className="p-3 font-mono font-bold text-slate-900">{row.code || row.id}</td>
           <td className="p-3 font-bold text-slate-800">{row.name}</td>
           <td className="p-3 font-mono">{row.phone || '-'}</td>
           <td className="p-3 text-center font-mono">
-            {formatCurrency(row.supplier_opening_balance ?? row.customer_opening_balance ?? 0)}
+            {formatCurrency(row.supplier_opening_balance ?? row.opening_balance ?? 0)}
           </td>
           <td className="p-3 text-center font-mono font-bold text-blue-900">
-            {formatCurrency(row.supplier_balance ?? row.customer_balance ?? 0)}
+            {formatCurrency(row.supplier_balance ?? row.current_balance ?? 0)}
           </td>
-          <td className="p-3 text-center">{row.supplier_opening_type ?? row.customer_opening_type ?? 'دائن'}</td>
+          <td className="p-3 text-center">{row.supplier_opening_type ?? row.opening_balance_type ?? 'دائن'}</td>
+        </tr>
+      );
+    case 'customer-statements':
+      return (
+        <tr key={row.id || idx} className="hover:bg-slate-50">
+          <td className="p-3 font-mono font-bold text-slate-900">{row.code || row.id}</td>
+          <td className="p-3 font-bold text-slate-800">{row.name}</td>
+          <td className="p-3 font-mono">{row.phone || '-'}</td>
+          <td className="p-3 text-center font-mono">
+            {formatCurrency(row.customer_opening_balance ?? row.opening_balance ?? 0)}
+          </td>
+          <td className="p-3 text-center font-mono font-bold text-teal-900">
+            {formatCurrency(row.customer_balance ?? row.current_balance ?? 0)}
+          </td>
+          <td className="p-3 text-center">{row.customer_opening_type ?? row.opening_balance_type ?? 'مدين'}</td>
         </tr>
       );
     case 'installments-due':
@@ -999,6 +1186,19 @@ function renderTableRow(key, row, idx) {
           <td className="p-3 text-slate-700">{row.finishing_type}</td>
           <td className="p-3 text-center font-mono font-bold">{formatNumber(row.quantity_sent)}</td>
           <td className="p-3 text-center">{row.status}</td>
+        </tr>
+      );
+    case 'cut-order-stages':
+      return (
+        <tr key={row.id || idx} className="hover:bg-slate-50">
+          <td className="p-3 font-mono font-bold text-slate-900">{row.cutting_number}</td>
+          <td className="p-3 font-bold text-slate-800">{row.cutting_name}</td>
+          <td className="p-3 font-bold text-indigo-700">{row.stage_title}</td>
+          <td className="p-3 font-semibold text-slate-900">{row.vendor_name}</td>
+          <td className="p-3 text-slate-600">{row.pricing_type}</td>
+          <td className="p-3 text-left font-mono font-bold text-slate-900">{formatCurrency(row.total_cost)}</td>
+          <td className="p-3 text-left font-mono font-bold text-emerald-700">{formatCurrency(row.paid)}</td>
+          <td className="p-3 text-left font-mono font-bold text-amber-700">{formatCurrency(row.remaining)}</td>
         </tr>
       );
     case 'disbursements-by-expense':

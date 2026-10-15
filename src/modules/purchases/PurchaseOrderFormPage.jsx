@@ -20,9 +20,14 @@ import {
   Filter
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
+import DocumentConfirmModal from '../../components/DocumentConfirmModal';
+import QuickSupplierModal from './QuickSupplierModal';
+import MoneyInput, { NumberInput } from '../../components/MoneyInput';
+import { navigationGuard } from '../../utils/navigationGuard';
 import { api } from '../../services/api';
 import { formatCurrency, formatNumber, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import { handleFormKeyDown } from '../../utils/formNavigation';
 import { calculatePurchaseOrderTotals } from '../../logic/purchaseOrderCalculations';
 
 export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCancel, onNotify, onBack }) {
@@ -36,6 +41,10 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
   const [treasuries, setTreasuries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
+  const isSavedRef = useRef(false);
+  const [suggestedSupplier, setSuggestedSupplier] = useState(null);
 
   // Supplier linking filter toggle: default false (show only linked items), toggle to show all
   const [showAllItems, setShowAllItems] = useState(false);
@@ -76,7 +85,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     items: [
       {
         material_id: '',
-        quantity_ordered: '',
+        item_code: '',
+        code_error: '',
+        quantity_ordered: '1',
         unit_price: '',
         total_price: 0
       }
@@ -100,6 +111,38 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       onCancel();
     } else {
       window.location.hash = '#/purchases';
+    }
+  };
+
+  // Register unsaved changes protection (Requirement 5)
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      if (Boolean(form.supplier_id)) return true;
+      if (Boolean(form.notes?.trim())) return true;
+      if (Boolean(form.po_number?.trim())) return true;
+      if (form.items.some((it) => Boolean(it.material_id) || (it.quantity_ordered && it.quantity_ordered !== '1') || Boolean(it.unit_price))) {
+        return true;
+      }
+      return false;
+    });
+    return unregister;
+  }, [form]);
+
+  const handleSupplierCreated = async (newSupplier) => {
+    try {
+      const supRes = await api.getSuppliers();
+      const sups = Array.isArray(supRes.data) ? supRes.data : (supRes.suppliers || []);
+      setSuppliers(sups);
+      if (newSupplier?.id) {
+        setForm((prev) => ({ ...prev, supplier_id: newSupplier.id }));
+        setErrors((prev) => ({ ...prev, supplier_id: null }));
+      }
+      if (onNotify) {
+        onNotify('تم إضافة المورد واختياره بنجاح');
+      }
+    } catch (err) {
+      console.error('Failed to reload suppliers after creation:', err);
     }
   };
 
@@ -200,7 +243,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     }));
   };
 
-  // Line item change from table row select
+  // Line item change from table row select: fills code and stays in sync
   const handleItemChange = (index, itemId) => {
     const itm = itemsList.find((i) => String(i.id) === String(itemId));
     const defaultPrice = itm ? Number(itm.cost_price) || 0 : 0;
@@ -216,6 +259,8 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       updated[index] = {
         ...cur,
         material_id: itemId,
+        item_code: itm ? itm.code || '' : '',
+        code_error: '',
         unit_price: String(unitPrice),
         quantity_ordered: currentQty,
         total_price: isNaN(total) ? 0 : total
@@ -227,6 +272,91 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       setTimeout(() => {
         quantityInputRefs.current[index]?.focus();
       }, 50);
+
+      // Requirement 6.2: Choosing an item can suggest its linked suppliers
+      api.getItemSuppliers(itemId).then((res) => {
+        const links = res?.data || [];
+        if (links.length > 0) {
+          const pref = links.find((l) => l.is_preferred) || links[0];
+          const sup = suppliers.find((s) => String(s.id) === String(pref.supplier_id));
+          if (sup) {
+            setSuggestedSupplier({ ...sup, last_price: pref.last_purchase_price });
+            setForm((prev) => (!prev.supplier_id ? { ...prev, supplier_id: sup.id } : prev));
+          }
+        }
+      }).catch(() => {});
+    }
+  };
+
+  // Line code typing
+  const handleLineCodeChange = (index, codeVal) => {
+    setForm((prev) => {
+      const updated = [...prev.items];
+      updated[index] = {
+        ...updated[index],
+        item_code: codeVal,
+        code_error: ''
+      };
+      return { ...prev, items: updated };
+    });
+  };
+
+  // Line code lookup on blur or Enter (Requirement 6)
+  const handleLineCodeLookup = (index) => {
+    const code = (form.items[index]?.item_code || '').trim();
+    if (!code) return;
+
+    const itm = itemsList.find(i => String(i.code).trim().toLowerCase() === code.toLowerCase());
+    if (!itm) {
+      setForm((prev) => {
+        const updated = [...prev.items];
+        updated[index] = {
+          ...updated[index],
+          code_error: 'الكود غير موجود'
+        };
+        return { ...prev, items: updated };
+      });
+      return;
+    }
+
+    // Found item: load into line and move focus to quantity
+    const defaultPrice = Number(itm.cost_price) || 0;
+    setForm((prev) => {
+      const updated = [...prev.items];
+      const cur = updated[index];
+      const currentQty = cur.quantity_ordered && Number(cur.quantity_ordered) > 0 ? cur.quantity_ordered : '1';
+      const total = Number((Number(currentQty) * defaultPrice).toFixed(2));
+      updated[index] = {
+        ...cur,
+        material_id: itm.id,
+        item_code: itm.code,
+        code_error: '',
+        unit_price: String(defaultPrice),
+        quantity_ordered: currentQty,
+        total_price: isNaN(total) ? 0 : total
+      };
+      return { ...prev, items: updated };
+    });
+
+    setFocusedLineIndex(index);
+    setTimeout(() => {
+      quantityInputRefs.current[index]?.focus();
+      quantityInputRefs.current[index]?.select?.();
+    }, 50);
+
+    // Suggest linked supplier
+    if (itm.id) {
+      api.getItemSuppliers(itm.id).then((res) => {
+        const links = res?.data || [];
+        if (links.length > 0) {
+          const pref = links.find((l) => l.is_preferred) || links[0];
+          const sup = suppliers.find((s) => String(s.id) === String(pref.supplier_id));
+          if (sup) {
+            setSuggestedSupplier({ ...sup, last_price: pref.last_purchase_price });
+            setForm((prev) => (!prev.supplier_id ? { ...prev, supplier_id: sup.id } : prev));
+          }
+        }
+      }).catch(() => {});
     }
   };
 
@@ -238,21 +368,27 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       const lines = [...prev.items];
       const last = lines[lines.length - 1];
 
+      const costPrice = Number(item.cost_price || 0);
       if (last && !last.material_id) {
         targetIdx = lines.length - 1;
+        const currentQty = last.quantity_ordered && Number(last.quantity_ordered) > 0 ? last.quantity_ordered : '1';
         lines[targetIdx] = {
           ...last,
           material_id: item.id,
-          unit_price: String(item.cost_price || 0),
-          quantity_ordered: '', // Empty per requirement 3
-          total_price: 0
+          item_code: item.code || '',
+          code_error: '',
+          unit_price: String(costPrice),
+          quantity_ordered: currentQty,
+          total_price: Number((Number(currentQty) * costPrice).toFixed(2))
         };
       } else {
         lines.push({
           material_id: item.id,
-          unit_price: String(item.cost_price || 0),
-          quantity_ordered: '', // Empty per requirement 3
-          total_price: 0
+          item_code: item.code || '',
+          code_error: '',
+          unit_price: String(costPrice),
+          quantity_ordered: '1',
+          total_price: Number((1 * costPrice).toFixed(2))
         });
         targetIdx = lines.length - 1;
       }
@@ -265,6 +401,21 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     setTimeout(() => {
       quantityInputRefs.current[targetIdx]?.focus();
     }, 50);
+
+    // Requirement 6.2: Suggest linked supplier
+    if (item.id) {
+      api.getItemSuppliers(item.id).then((res) => {
+        const links = res?.data || [];
+        if (links.length > 0) {
+          const pref = links.find((l) => l.is_preferred) || links[0];
+          const sup = suppliers.find((s) => String(s.id) === String(pref.supplier_id));
+          if (sup) {
+            setSuggestedSupplier({ ...sup, last_price: pref.last_purchase_price });
+            setForm((prev) => (!prev.supplier_id ? { ...prev, supplier_id: sup.id } : prev));
+          }
+        }
+      }).catch(() => {});
+    }
   };
 
   const handleLineQtyChange = (index, qtyVal) => {
@@ -332,7 +483,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         ...prev.items,
         {
           material_id: '',
-          quantity_ordered: '',
+          item_code: '',
+          code_error: '',
+          quantity_ordered: '1',
           unit_price: '',
           total_price: 0
         }
@@ -468,21 +621,23 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       setForm((prev) => {
         const lines = [...prev.items];
         const last = lines[lines.length - 1];
+        const costPrice = Number(newItem.cost_price || 0);
         if (last && !last.material_id) {
           targetIdx = lines.length - 1;
+          const currentQty = last.quantity_ordered && Number(last.quantity_ordered) > 0 ? last.quantity_ordered : '1';
           lines[targetIdx] = {
             ...last,
             material_id: newItem.id,
-            unit_price: String(newItem.cost_price || 0),
-            quantity_ordered: '', // EMPTY per requirement 3
-            total_price: 0
+            unit_price: String(costPrice),
+            quantity_ordered: currentQty,
+            total_price: Number((Number(currentQty) * costPrice).toFixed(2))
           };
         } else {
           lines.push({
             material_id: newItem.id,
-            unit_price: String(newItem.cost_price || 0),
-            quantity_ordered: '', // EMPTY per requirement 3
-            total_price: 0
+            unit_price: String(costPrice),
+            quantity_ordered: '1',
+            total_price: Number((1 * costPrice).toFixed(2))
           });
           targetIdx = lines.length - 1;
         }
@@ -532,7 +687,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     const lineQtyErrs = {};
     const incompleteLines = [];
 
-    if (!form.supplier_id) errs.supplier_id = 'يرجى اختيار المورد';
+    if (!form.supplier_id) errs.supplier_id = 'اختيار المورد';
     if (!form.order_date) errs.order_date = 'تاريخ أمر التوريد مطلوب';
 
     if (form.items.length === 0) {
@@ -575,8 +730,8 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     return Object.keys(errs).length === 0 && Object.keys(lineQtyErrs).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    if (e) e.preventDefault();
+  const handleRequestIssue = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!validate()) {
       if (!isTotalsValid) {
         if (onNotify) onNotify('الصافي النهائي لا يمكن أن يكون أقل من صفر (المصاريف الإضافية والخصم أكبر من إجمالي البنود)', 'error');
@@ -584,7 +739,10 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       }
       return;
     }
+    setShowConfirmModal(true);
+  };
 
+  const handleConfirmIssue = async () => {
     try {
       setSaving(true);
       const payload = {
@@ -615,8 +773,11 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       };
 
       await api.createPurchaseOrder(payload);
+      isSavedRef.current = true;
+      navigationGuard.unregister();
+      setShowConfirmModal(false);
       if (onNotify) {
-        onNotify('تم حفظ فاتورة الشراء واعتماد استلام المخزون وحساب المورد بنجاح');
+        onNotify('تم إصدار فاتورة الشراء واعتماد استلام المخزون وحساب المورد بنجاح');
       }
 
       if (onSaved) {
@@ -625,7 +786,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         handleBack();
       }
     } catch (err) {
-      alert(err.message || 'حدث خطأ أثناء حفظ أمر التوريد');
+      alert(err.message || 'حدث خطأ أثناء إصدار الفاتورة');
     } finally {
       setSaving(false);
     }
@@ -657,17 +818,17 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
           </button>
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={handleRequestIssue}
             disabled={saving}
             className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
-            <span>{saving ? 'جاري الحفظ...' : 'حفظ أمر التوريد'}</span>
+            <span>{saving ? 'جاري الإصدار...' : 'إصدار الفاتورة'}</span>
           </button>
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={(e) => e.preventDefault()} onKeyDown={handleFormKeyDown} className="space-y-6">
         {/* Section 1: Order Header & Dates */}
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
@@ -690,13 +851,26 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
             </div>
 
             <div>
-              <label htmlFor="supplier-select" className="block text-xs font-semibold text-slate-700 mb-1">
-                المورد المعتمد *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="supplier-select" className="block text-xs font-semibold text-slate-700">
+                  المورد المعتمد *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowAddSupplierModal(true)}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>إضافة مورد</span>
+                </button>
+              </div>
               <select
                 id="supplier-select"
                 value={form.supplier_id}
-                onChange={(e) => setForm((prev) => ({ ...prev, supplier_id: e.target.value }))}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, supplier_id: e.target.value }));
+                  if (errors.supplier_id) setErrors((prev) => ({ ...prev, supplier_id: null }));
+                }}
                 className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
                 required
               >
@@ -707,6 +881,15 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                   </option>
                 ))}
               </select>
+              {suggestedSupplier && form.supplier_id !== suggestedSupplier.id && (
+                <button
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, supplier_id: suggestedSupplier.id }))}
+                  className="mt-1 text-[11px] text-blue-700 font-bold bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md hover:bg-blue-100 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <span>المورد المقترح للصنف: «{suggestedSupplier.name}» (اضغط للاختيار)</span>
+                </button>
+              )}
               <FieldError error={errors.supplier_id} />
             </div>
 
@@ -994,11 +1177,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                   <label htmlFor="quick-item-cost" className="block text-[11px] font-semibold text-slate-700 mb-0.5">
                     سعر التكلفة (ج.م)
                   </label>
-                  <input
+                  <MoneyInput
                     id="quick-item-cost"
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    dir="ltr"
                     value={quickItemForm.cost_price}
                     onChange={(e) => setQuickItemForm({ ...quickItemForm, cost_price: e.target.value })}
                     className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-md font-mono"
@@ -1125,6 +1306,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                   <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
                     <tr>
                       <th className="p-3 w-10">#</th>
+                      <th className="p-3 w-28 text-center font-mono">كود الصنف</th>
                       <th className="p-3">الصنف / الخامة</th>
                       <th className="p-3 w-28">الكمية المطلوبة</th>
                       <th className="p-3 w-28">سعر الوحدة</th>
@@ -1142,6 +1324,34 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                         }`}
                       >
                         <td className="p-3 font-semibold text-slate-400">{idx + 1}</td>
+
+                        {/* Product Code Field (Requirement 6) */}
+                        <td className="p-2 w-28">
+                          <input
+                            id={`po-line-code-${idx}`}
+                            type="text"
+                            inputMode="text"
+                            value={line.item_code || ''}
+                            onChange={(e) => handleLineCodeChange(idx, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleLineCodeLookup(idx);
+                              }
+                            }}
+                            onBlur={() => handleLineCodeLookup(idx)}
+                            onFocus={() => setFocusedLineIndex(idx)}
+                            className={`w-full px-2 py-1.5 border rounded-lg text-xs font-mono font-bold text-center bg-white ${
+                              line.code_error ? 'border-red-500 text-red-700 bg-red-50' : 'border-slate-300 text-slate-800'
+                            }`}
+                          />
+                          {line.code_error && (
+                            <span className="text-[10px] text-red-600 font-bold block mt-0.5 whitespace-nowrap">
+                              {line.code_error}
+                            </span>
+                          )}
+                        </td>
+
                         <td className="p-2">
                           <label htmlFor={`po-line-item-${idx}`} className="sr-only">اختر الصنف للبند {idx + 1}</label>
                           <select
@@ -1161,13 +1371,10 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                         </td>
                         <td className="p-2">
                           <label htmlFor={`po-line-qty-${idx}`} className="sr-only">الكمية للبند {idx + 1}</label>
-                          <input
+                          <NumberInput
                             id={`po-line-qty-${idx}`}
                             data-testid={`po-line-qty-${idx}`}
                             ref={(el) => { quantityInputRefs.current[idx] = el; }}
-                            type="number"
-                            min="0.001"
-                            step="any"
                             value={line.quantity_ordered}
                             onChange={(e) => {
                               handleLineQtyChange(idx, e.target.value);
@@ -1193,11 +1400,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                         </td>
                         <td className="p-2">
                           <label htmlFor={`po-line-price-${idx}`} className="sr-only">السعر للبند {idx + 1}</label>
-                          <input
+                          <MoneyInput
                             id={`po-line-price-${idx}`}
-                            type="number"
-                            min="0"
-                            step="0.01"
+                            dir="ltr"
                             value={line.unit_price}
                             onChange={(e) => handleLinePriceChange(idx, e.target.value)}
                             onFocus={() => setFocusedLineIndex(idx)}
@@ -1268,9 +1473,15 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
 
                     <div className="space-y-1 text-[11px]">
                       <div className="flex justify-between py-1 border-b border-slate-200">
-                        <span className="text-slate-600">آخر سعر شراء:</span>
+                        <span className="text-slate-600">سعر التكلفة:</span>
                         <span className="font-mono font-bold text-slate-900">
-                          {formatCurrency(focusedItem.last_purchase_price || focusedItem.cost_price || 0)}
+                          {formatCurrency(focusedItem.cost_price || focusedItem.last_purchase_price || 0)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-slate-200">
+                        <span className="text-slate-600">سعر البيع:</span>
+                        <span className="font-mono font-bold text-emerald-700">
+                          {formatCurrency(focusedItem.selling_price || 0)}
                         </span>
                       </div>
                       <div className="flex justify-between py-1 border-b border-slate-200">
@@ -1362,11 +1573,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                       </td>
                       <td className="p-2">
                         <label htmlFor={`inst-amount-${idx}`} className="sr-only">مبلغ القسط {idx + 1}</label>
-                        <input
+                        <MoneyInput
                           id={`inst-amount-${idx}`}
-                          type="number"
-                          step="0.01"
-                          min="0.01"
+                          dir="ltr"
                           value={inst.amount}
                           onChange={(e) => handleInstallmentChange(idx, 'amount', e.target.value)}
                           className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold bg-white text-slate-800"
@@ -1434,12 +1643,8 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
               <label htmlFor="discount-pct-input" className="block text-xs font-semibold text-slate-700 mb-1">
                 نسبة الخصم (%)
               </label>
-              <input
+              <NumberInput
                 id="discount-pct-input"
-                type="number"
-                step="0.1"
-                min="0"
-                max="100"
                 value={form.discount_percent}
                 onChange={(e) => handleDiscountPercentChange(e.target.value)}
                 className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono bg-slate-50 text-slate-800"
@@ -1450,11 +1655,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
               <label htmlFor="discount-val-input" className="block text-xs font-semibold text-slate-700 mb-1">
                 قيمة الخصم (ج.م)
               </label>
-              <input
+              <MoneyInput
                 id="discount-val-input"
-                type="number"
-                step="0.01"
-                min="0"
+                dir="ltr"
                 value={form.discount_value}
                 onChange={(e) => handleDiscountValueChange(e.target.value)}
                 className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono bg-slate-50 text-slate-800"
@@ -1465,11 +1668,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
               <label htmlFor="additional-exp-input" className="block text-xs font-semibold text-slate-700 mb-1">
                 مصاريف إضافية (ج.م)
               </label>
-              <input
+              <MoneyInput
                 id="additional-exp-input"
-                type="number"
-                step="0.01"
-                min="0"
+                dir="ltr"
                 value={form.additional_expenses}
                 onChange={(e) => setForm((prev) => ({ ...prev, additional_expenses: e.target.value }))}
                 className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono bg-slate-50 text-slate-800"
@@ -1514,15 +1715,38 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
             إلغاء
           </button>
           <button
-            type="submit"
+            type="button"
+            onClick={handleRequestIssue}
             disabled={saving}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50 cursor-pointer"
           >
             <Save className="w-4 h-4" />
-            <span>{saving ? 'جاري الحفظ...' : 'حفظ أمر التوريد'}</span>
+            <span>{saving ? 'جاري الإصدار...' : 'إصدار الفاتورة'}</span>
           </button>
         </div>
       </form>
+
+      {/* Invoice Confirmation Modal */}
+      <DocumentConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmIssue}
+        title="تأكيد إصدار فاتورة المشتريات"
+        documentType="فاتورة مشتريات"
+        partyLabel="المورد"
+        partyName={selectedSupplier?.name || ''}
+        paymentType={form.payment_terms}
+        totalAmount={grandTotal}
+        isSubmitting={saving}
+      />
+
+      {/* Quick Add Supplier Modal (Requirement 3) */}
+      <QuickSupplierModal
+        isOpen={showAddSupplierModal}
+        onClose={() => setShowAddSupplierModal(false)}
+        existingSuppliers={suppliers}
+        onSupplierCreated={handleSupplierCreated}
+      />
     </PageContainer>
   );
 }

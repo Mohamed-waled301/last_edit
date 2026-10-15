@@ -30,7 +30,7 @@ export const usersRepo = {
       await db.users.put({
         id: ownerId,
         username: 'owner',
-        full_name: ownerFullName || 'م. خالد المنشاوي (الرئيس التنفيذي - CEO)',
+        full_name: ownerFullName.trim(),
         password_hash: hash,
         password_salt: salt,
         role: 'owner',
@@ -44,7 +44,7 @@ export const usersRepo = {
         await db.users.put({
           id: 'usr-cashier',
           username: 'cashier',
-          full_name: 'أحمد محمود (كاشير)',
+          full_name: 'كاشير منفذ البيع',
           password_hash: hash,
           password_salt: salt,
           role: 'cashier',
@@ -58,7 +58,7 @@ export const usersRepo = {
       if (!existingSettings) {
         await db.settings.put({
           id: 1,
-          factory_name: factoryName || 'مجموعة القمة للصناعات المتطورة والأنظمة الذكية',
+          factory_name: factoryName.trim(),
           phone: '',
           address: '',
           vat_enabled: 0,
@@ -69,7 +69,7 @@ export const usersRepo = {
         });
       } else {
         await db.settings.update(1, {
-          factory_name: factoryName || existingSettings.factory_name,
+          factory_name: factoryName.trim(),
         });
       }
 

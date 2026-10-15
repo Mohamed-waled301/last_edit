@@ -6,7 +6,8 @@ import { settingsRepo, usersRepo } from '../data';
 export default function Header({ currentScreen, onNavigate, onNotify, onLockSession, onToggleSidebar }) {
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(getActiveUser());
-  const [factoryName, setFactoryName] = useState('مجموعة القمة للصناعات المتطورة');
+  const [factoryName, setFactoryName] = useState('');
+  const [companyLogo, setCompanyLogo] = useState('');
 
   useEffect(() => {
     loadHeaderData();
@@ -19,6 +20,9 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
       const settings = await settingsRepo.getSettings();
       if (settings?.factory_name) {
         setFactoryName(settings.factory_name);
+      }
+      if (settings?.company_logo) {
+        setCompanyLogo(settings.company_logo);
       }
       setCurrentUser(getActiveUser());
     } catch (e) {
@@ -62,16 +66,25 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
           <Menu className="w-5 h-5 text-[#1F3A5F]" />
         </button>
 
-        <div className="flex-1 min-w-0 overflow-hidden whitespace-nowrap">
-          <h1
-            className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 leading-tight truncate"
-            title={factoryName}
-          >
-            {factoryName}
-          </h1>
-          <span className="text-xs text-gray-500 font-medium hidden md:block truncate">
-            نظام تخطيط موارد المؤسسات الشامل
-          </span>
+        <div className="flex items-center gap-2.5 min-w-0 overflow-hidden whitespace-nowrap">
+          {companyLogo && (
+            <img
+              src={companyLogo}
+              alt="شعار المنشأة"
+              className="h-9 w-auto max-w-[50px] object-contain rounded shrink-0"
+            />
+          )}
+          <div className="flex-1 min-w-0 overflow-hidden whitespace-nowrap">
+            <h1
+              className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 leading-tight truncate"
+              title={factoryName}
+            >
+              {factoryName}
+            </h1>
+            <span className="text-xs text-gray-500 font-medium hidden md:block truncate">
+              نظام تخطيط موارد المؤسسات الشامل
+            </span>
+          </div>
         </div>
       </div>
 

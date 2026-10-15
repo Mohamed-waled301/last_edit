@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
+  openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
+  saveExcel: (data) => ipcRenderer.invoke('excel:save', data),
+  print: (options) => ipcRenderer.invoke('app:print', options),
 
   // Single-device offline licensing IPC
   getMachineCode: () => ipcRenderer.invoke('license:get-machine-code'),
