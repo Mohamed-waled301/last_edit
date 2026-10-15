@@ -17,6 +17,10 @@ export default defineConfig({
   server: {
     port: 3000,
   },
+  build: {
+    sourcemap: false,
+    minify: 'esbuild',
+  },
   test: {
     globals: true,
     include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],

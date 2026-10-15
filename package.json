@@ -87,9 +87,14 @@
       "!**/*.spec.*",
       "!tools/**/*",
       "!**/*.pem",
+      "!**/*.key",
       "!**/*.rar",
       "!**/*.db*",
-      "!**/*.sqlite*"
+      "!**/*.sqlite*",
+      "!tests/**/*",
+      "!src/**/*",
+      "!**/*.md",
+      "!**/.env*"
     ],
     "win": {
       "icon": "build/icon.ico",

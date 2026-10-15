@@ -1,0 +1,212 @@
+name: Publish Production Release to Public Releases Repo
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'cutting-v*'
+      - 'standard-v*'
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: 'Edition to build and release'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - 'both'
+          - 'cutting'
+          - 'standard'
+      draft:
+        description: 'Create release as Draft (not published to users yet)'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: 'Dry Run mode (build and verify allow-list only, do NOT publish)'
+        required: false
+        default: false
+        type: boolean
+      releases_repo:
+        description: 'Target public releases repository (<owner>/<repo>)'
+        required: false
+        default: 'Mohamed-waled301/code-systems-releases'
+        type: string
+
+jobs:
+  build-and-publish:
+    name: Build & Publish Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run automated test suite
+        run: npm test
+
+      # Determine target edition based on tag or input
+      - name: Detect active edition
+        id: target
+        shell: bash
+        run: |
+          EDITION="${{ github.event.inputs.edition || 'both' }}"
+          if [[ "${GITHUB_REF}" == refs/tags/cutting-v* ]]; then
+            EDITION="cutting"
+          elif [[ "${GITHUB_REF}" == refs/tags/standard-v* ]]; then
+            EDITION="standard"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]] && [ -z "${{ github.event.inputs.edition }}" ]; then
+            EDITION="both"
+          fi
+          echo "selected_edition=${EDITION}" >> $GITHUB_OUTPUT
+          
+          # Extract version from tag or package.json
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            TAG_NAME="v${VERSION}"
+          fi
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      # Build Cutting Edition (if selected)
+      - name: Build Cutting Edition Binaries
+        if: steps.target.outputs.selected_edition == 'cutting' || steps.target.outputs.selected_edition == 'both'
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          npm run build:cutting
+          npx cross-env EDITION=cutting electron-builder --win --x64 --publish never -c.appId=com.codesystems.cutting.app -c.productName="code systems Cutting" -c.nsis.shortcutName="نظام code systems (إصدار القص)" -c.nsis.artifactName="code-systems-cutting-Setup-${version}.exe" -c.portable.artifactName="code-systems-cutting-Portable-${version}.exe"
+
+      # Build Standard Edition (if selected)
+      - name: Build Standard Edition Binaries
+        if: steps.target.outputs.selected_edition == 'standard' || steps.target.outputs.selected_edition == 'both'
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          npm run build:standard
+          npx cross-env EDITION=standard electron-builder --win --x64 --publish never -c.appId=com.codesystems.standard.app -c.productName="code systems Standard" -c.nsis.shortcutName="نظام code systems (الإصدار القياسي)" -c.nsis.artifactName="code-systems-standard-Setup-${version}.exe" -c.portable.artifactName="code-systems-standard-Portable-${version}.exe"
+
+      # Security & Hardening Step 1: Inspect packed asar contents
+      - name: Audit app.asar integrity & secret stripping
+        run: node scripts/verify-packaged-asar.cjs release
+
+      # Security & Hardening Step 2: Strict Allow-List check on release output
+      - name: Enforce strict release artifact allow-list
+        run: node scripts/verify-release-artifacts.cjs release
+
+      # Save artifacts in workflow run
+      - name: Archive build artifacts in CI run
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-installers
+          path: release/*.exe
+          if-no-files-found: error
+
+      # Generate Arabic release notes
+      - name: Generate Arabic Release Notes
+        id: notes
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.target.outputs.version }}"
+          $edition = "${{ steps.target.outputs.selected_edition }}"
+          $date = (Get-Date).ToString("yyyy-MM-dd")
+          
+          $notes = @"
+          # نظام code systems — الإصدار الرسمي v$ver
+          
+          **تاريخ الإصدار:** $date  
+          **نوع الحزمة:** حزم التثبيت الرسمية لنظام ويندوز ($edition)
+          
+          ---
+          
+          ### 📦 الملفات المرفقة وبصمات التحقق (SHA-256 Checksums):
+          "@
+          
+          Get-ChildItem -Path "release" -Filter "*.exe" | ForEach-Object {
+            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash
+            $sizeMb = [Math]::Round($_.Length / 1MB, 2)
+            $notes += "`n* **$($_.Name)** ($sizeMb MB)`n  ``SHA-256: $hash```n"
+          }
+          
+          $notes += @"
+          
+          ---
+          
+          ### ⚙️ تعليمات التثبيت:
+          1. قم بتحميل ملف التثبيت المخصص لنشاطك:
+             * **code-systems-cutting-Setup-$ver.exe**: لمصانع وورش الملابس وأوامر القص.
+             * **code-systems-standard-Setup-$ver.exe**: للشركات التجارية، المعارض، والمخازن.
+          2. شغّل ملف التثبيت على جهازك (Windows 10 / Windows 11).
+          3. **تنبيه حماية الشاشة (Windows SmartScreen):**
+             * عند ظهور نافذة التنبيه الزرقاء، اضغط على **"More info" (مزيد من المعلومات)** ثم **"Run anyway" (تشغيل على أي حال)**.
+          4. عند أول تشغيل، انسخ كود الجهاز (Machine Code) لتفعيله برمز الترخيص الخاص بك.
+          
+          ---
+          *هذا الإصدار معتمد ومبني آلياً عبر بيئة النشر المؤمنة.*
+          "@
+          
+          Set-Content -Path "release-notes.md" -Value $notes -Encoding utf8
+          Write-Host "Generated release-notes.md successfully."
+
+      # Dry Run Check
+      - name: Check Dry Run Mode
+        if: ${{ inputs.dry_run == true }}
+        shell: bash
+        run: |
+          echo "====================================================="
+          echo "DRY RUN MODE ENABLED - SKIPPING RELEASES PUBLISHING"
+          echo "All builds and allow-list verifications passed 100%!"
+          echo "Files verified:"
+          ls -lh release/*.exe
+          echo "====================================================="
+
+      # Publish to Public Releases Repo via GitHub CLI
+      - name: Publish Release to Public Repository
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        shell: bash
+        run: |
+          TARGET_REPO="${{ inputs.releases_repo || 'Mohamed-waled301/code-systems-releases' }}"
+          TAG="${{ steps.target.outputs.tag_name }}"
+          TITLE="نظام code systems v${{ steps.target.outputs.version }}"
+          
+          DRAFT_FLAG=""
+          if [ "${{ inputs.draft }}" = "true" ]; then
+            DRAFT_FLAG="--draft"
+          fi
+          
+          echo "Publishing release to public repo: ${TARGET_REPO}"
+          echo "Tag: ${TAG}"
+          echo "Title: ${TITLE}"
+          
+          # Collect all allow-listed executables
+          FILES=(release/*.exe)
+          
+          # Create release using gh CLI
+          gh release create "${TAG}" \
+            --repo "${TARGET_REPO}" \
+            --title "${TITLE}" \
+            --notes-file release-notes.md \
+            --latest \
+            ${DRAFT_FLAG} \
+            "${FILES[@]}"
+          
+          echo "✅ Release successfully published to https://github.com/${TARGET_REPO}/releases"

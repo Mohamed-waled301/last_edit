@@ -92,6 +92,7 @@ async function createWindow() {
       sandbox: true,
       webSecurity: true,
       spellcheck: false,
+      devTools: isDev,
     },
   });
 

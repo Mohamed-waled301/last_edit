@@ -238,12 +238,74 @@ npm run electron:build
 - **مثبّت النظام (NSIS Installer)**: `code-systems-Setup-1.0.4.exe` (تثبيت مخصص لكل مستخدم، اختيار مسار التثبيت، واختصارات سطح المكتب وقائمة ابدأ باللغة العربية).
 - **النسخة المحمولة (Portable .exe)**: `code-systems-Portable-1.0.4.exe` (تشغيل مباشر بدون تثبيت).
 
-### 3. نشر إصدار جديد عبر GitHub Actions (Publish a Release)
+### 3. نشر الإصدارات إلى مستودع التوزيع العام المنفصل (Releases-Only Distribution)
+
+تم فصل بيئة التطوير عن بيئة التوزيع لضمان حماية الكود المصدري وسرية النظام:
+* **مستودع الكود المصدري (Private Repo):** يظل **خاصاً (Private)** بشكل دائم ولا يراه سوى فريق التطوير المعتمد.
+* **مستودع الإصدارات (Public Releases Repo):** مستودع **عام (Public)** مخصص حصرياً للمستخدمين والعملاء، يحتوي فقط على ملف `README.md` وملفات التثبيت `.exe` دون أي كود مصدري أو ملفات تكوين.
+
+#### أ) إنشاء مستودع الإصدارات العام (Public Releases Repo):
+1. قم بإنشاء مستودع جديد على GitHub باسم `code-systems-releases` (أو `code-systems-cutting-releases` و `code-systems-standard-releases`).
+2. اضبط المستودع ليكون **Public**.
+3. انسخ محتويات مجلد `releases-repo-template/unified/` (أو المجلد المخصص للإصدار) إلى المستودع العام، والتزم بأن يحتوي فقط على `README.md` و `LICENSE`.
+4. تأكد عبر سكريبت الفحص:
+   ```bash
+   node scripts/verify-releases-repo.cjs path/to/code-systems-releases
+   ```
+
+#### ب) إنشاء مفتاح الوصول المحدود (Fine-Grained PAT Token):
+1. من حسابك على GitHub، توجه إلى: **Settings** $\rightarrow$ **Developer Settings** $\rightarrow$ **Personal Access Tokens** $\rightarrow$ **Fine-grained tokens**.
+2. اضغط **Generate new token**.
+3. الاسم: `RELEASES_PUBLISHER_TOKEN`.
+4. الصلاحية (Expiration): حدد المدة المناسبة (مثلاً سنة).
+5. نطاق المستودعات (Repository access): اختر **Only select repositories** $\rightarrow$ اختر مستودع الإصدارات العام فقط (`code-systems-releases`).
+6. الصلاحيات (Permissions): من قسم **Repository permissions**، اختر:
+   * **Contents**: `Read and write` (لتمكين رفع الإصدارات وملفات الـ exe).
+7. اضغط **Generate token** وانسخ المفتاح.
+
+#### ج) إضافة المفتاح السري إلى مستودع الكود الخاص:
+1. افتح مستودع الكود المصدري الخاص $\rightarrow$ **Settings** $\rightarrow$ **Secrets and variables** $\rightarrow$ **Actions**.
+2. اضغط **New repository secret**.
+3. الاسم (Name): `RELEASES_REPO_TOKEN`.
+4. القيمة (Secret): الصق المفتاح الذي نسخته في الخطوة السابقة.
+
+#### د) إطلاق إصدار جديد (Cut a Release):
+يمكن إطلاق الإصدار عبر رفع Tag:
 ```bash
+# إطلاق كلا الإصدارين معاً (Cutting + Standard)
 git tag v1.0.4
-git push origin --tags
+git push origin v1.0.4
+
+# أو إطلاق إصدار القص فقط
+git tag cutting-v1.0.4
+git push origin cutting-v1.0.4
+
+# أو إطلاق الإصدار التجاري القياسي فقط
+git tag standard-v1.0.4
+git push origin standard-v1.0.4
 ```
-يقوم سير العمل المؤتمت `.github/workflows/build-windows.yml` ببناء ملفات `.exe` على بيئة Windows النظيفة ورفعها كمرفقات في صفحة **GitHub Releases**.
+أو تشغيل السير يدوياً عبر علامة التبويب **Actions** $\rightarrow$ اختيار workflow **Publish Production Release** وتحديد الإصدار المطلوب.
+
+#### هـ) وضع الاختبار التجريبي (Dry-Run Mode):
+لتجربة عملية البناء والتحقق الصارم من قائمة الملفات المسموح بها دون إنشاء Release فعلي:
+1. توجه إلى **Actions** $\rightarrow$ **Publish Production Release to Public Releases Repo**.
+2. اضغط **Run workflow**.
+3. فعّل خيار `dry_run: true`.
+4. سيتم بناء الحزم، فحص ملفات الـ asar، والتحقق من قائمة الـ Allow-List والتأكد من نجاح كل الفحوصات 100% دون المساس بمستودع الإصدارات.
+
+#### و) التراجع عن إصدار أو إلغاؤه (Rollback a Release):
+في حال تم نشر إصدار به مشكلة فنية:
+1. افتح مستودع الإصدارات العام: `https://github.com/Mohamed-waled301/code-systems-releases/releases`.
+2. اضغط على زر **Edit** بجوار الإصدار المراد سحبه.
+3. يمكنك إما:
+   * وضع علامة على **"Set as a pre-release"** حتى لا يتم تنزيله كأحدث إصدار رئيسي للمستخدمين.
+   * أو الضغط على **Delete this release** لحذف الإصدار وسحبه نهائياً من العرض.
+
+#### ز) قائمة الملفات المسموح بنشرها (Strict Allow-List):
+يتضمن سير العمل المؤتمت فحصاً صارماً يمنع رفع أي ملف ما لم يكن مصرحاً به صراحة:
+* **المصرح به فقط:** `*.exe` (ملفات التثبيت والنسخ المحمولة المعتمدة)، وبصمات SHA-256.
+* **المحظور تماماً والموجب لفشل البناء فوراً:**
+  `builder-debug.yml`، `*.map` (خرائط الأكواد)، `*.pdb`، المجلدات المفكوكة `win-unpacked`، مجلد `tools/`، المفاتيح `*.pem` أو `*.key`، ملفات التراخيص `license*.json`، ملفات `.env`، وسجلات الاختبارات.
 
 ### 4. أين تُخزن بيانات المستخدم؟ (Data Storage Location)
 - تُخزن قواعد بيانات IndexedDB محلياً بشكل دائم داخل مجلد بيانات التطبيق:
