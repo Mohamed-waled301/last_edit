@@ -14,15 +14,14 @@ const FORBIDDEN_ASAR_PATTERNS = [
   /\.map$/i,
   /\.pem$/i,
   /\.key$/i,
-  /tools[\/\\]license-generator/i,
-  /tools[\/\\]/i,
-  /tests[\/\\]/i,
-  /src[\/\\]/i,
+  /^[\\\/]tools([\\\/]|$)/i,
+  /^[\\\/]tests([\\\/]|$)/i,
+  /^[\\\/]src([\\\/]|$)/i,
   /\.test\.[jt]sx?$/i,
   /\.spec\.[jt]sx?$/i,
   /\.env/i,
   /private\.pem/i,
-  /\.git/i,
+  /^[\\\/]\.git([\\\/]|$)/i,
 ];
 
 function findAsarFile(targetDir) {

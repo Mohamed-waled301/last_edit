@@ -97,7 +97,11 @@
       "!tests/**/*",
       "!src/**/*",
       "!**/*.md",
-      "!**/.env*"
+      "!**/.env*",
+      "!**/node_modules/**/*.cpp",
+      "!**/node_modules/**/*.hpp",
+      "!**/node_modules/**/*.c",
+      "!**/node_modules/**/*.h"
     ],
     "win": {
       "icon": "build/icon.ico",
