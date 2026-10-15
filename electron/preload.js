@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Single-device offline licensing IPC
   getMachineCode: () => ipcRenderer.invoke('license:get-machine-code'),
+  getUserDataPath: () => ipcRenderer.invoke('license:get-user-data-path'),
   getLicenseStatus: () => ipcRenderer.invoke('license:get-status'),
   activate: (licenseKeyOrJson) => ipcRenderer.invoke('license:activate', licenseKeyOrJson),
   onLicenseStatusChanged: (callback) => {

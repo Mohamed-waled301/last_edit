@@ -33,6 +33,7 @@ export default function Sidebar({
   onClose,
   isPinned = false,
   onTogglePin,
+  licenseStatus = null,
 }) {
   const [isHovered, setIsHovered] = useState(false);
   const [companySettings, setCompanySettings] = useState(null);
@@ -363,11 +364,23 @@ export default function Sidebar({
           )}
         </nav>
 
-        {/* Footer: the text "code systems" only (visible when expanded) */}
+        {/* Footer: the text "code systems" and license info (visible when expanded) */}
         {isExpanded && (
-          <div className="p-3 border-t border-gray-200 shrink-0 text-center select-none bg-slate-50/50">
+          <div className="p-2.5 border-t border-gray-200 shrink-0 text-center select-none bg-slate-50/50">
             <span className="text-xs font-bold text-slate-700 block tracking-wide">
               code systems
+            </span>
+            <span
+              className="text-[11px] font-semibold text-slate-500 block mt-0.5 truncate"
+              title={
+                licenseStatus?.isActivated && licenseStatus?.customerName
+                  ? `مرخّص لـ ${licenseStatus.customerName}`
+                  : 'غير مفعّل'
+              }
+            >
+              {licenseStatus?.isActivated && licenseStatus?.customerName
+                ? `مرخّص لـ ${licenseStatus.customerName}`
+                : 'غير مفعّل'}
             </span>
           </div>
         )}

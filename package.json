@@ -17,6 +17,7 @@
     "test:e2e": "playwright test",
     "db:migrate": "node tools/migrate-from-hostinger/migrate.js",
     "db:verify": "node tools/migrate-from-hostinger/verify.js",
+    "license:reset-dev": "node tools/reset-dev-license.cjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },

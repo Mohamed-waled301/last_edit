@@ -317,4 +317,112 @@ describe('Single-Device License Verification Suite', () => {
       expect(res.code).toBe('PARSE_ERROR');
     });
   });
+
+  describe('5. Fail-Closed on Corrupted, Missing, or Truncated Files', () => {
+    it('fails closed when license.json contains corrupt or invalid JSON', () => {
+      const mgr = new LicenseManager(tempDir);
+      fs.writeFileSync(mgr.licenseFilePath, '{"payload": {"customerName": "Test", incomplete_json...', 'utf8');
+
+      const status = mgr.getStatus();
+      expect(status.isValid).toBe(false);
+      expect(status.isActivated).toBe(false);
+    });
+
+    it('fails closed when license.json is completely empty (0 bytes)', () => {
+      const mgr = new LicenseManager(tempDir);
+      fs.writeFileSync(mgr.licenseFilePath, '', 'utf8');
+
+      const status = mgr.getStatus();
+      expect(status.isValid).toBe(false);
+      expect(status.isActivated).toBe(false);
+    });
+
+    it('fails closed when encrypted token .sys_activation.dat is corrupted', () => {
+      const mgr = new LicenseManager(tempDir);
+      fs.writeFileSync(mgr.tokenFilePath, 'corrupted_base64_or_random_bytes_XYZ!@#', 'utf8');
+
+      const status = mgr.getStatus();
+      expect(status.isValid).toBe(false);
+      expect(status.isActivated).toBe(false);
+    });
+  });
+
+  describe('6. Production Code Security Audit Scan', () => {
+    it('verifies electron/main.js guards dev bypass with !app.isPackaged', () => {
+      const mainPath = path.join(process.cwd(), 'electron/main.js');
+      const content = fs.readFileSync(mainPath, 'utf8');
+
+      expect(content).toContain('!app.isPackaged');
+      expect(content).toContain('ALLOW_DEV_LICENSE_BYPASS');
+    });
+
+    it('verifies src/App.jsx enforces licenseStatus.isValid && licenseStatus.isActivated with no localStorage backdoor', () => {
+      const appPath = path.join(process.cwd(), 'src/App.jsx');
+      const content = fs.readFileSync(appPath, 'utf8');
+
+      expect(content).toContain('const isSystemActivated = Boolean(licenseStatus?.isValid && licenseStatus?.isActivated);');
+      expect(content).not.toContain("localStorage.getItem('code_systems_activated')");
+    });
+
+    it('verifies ActivationScreen does not unconditionally allow skip in production', () => {
+      const screenPath = path.join(process.cwd(), 'src/components/ActivationScreen.jsx');
+      const content = fs.readFileSync(screenPath, 'utf8');
+
+      expect(content).toContain('Boolean(onSkip)');
+    });
+  });
+
+  describe('7. Edition Compatibility Checks', () => {
+    it('rejects a license issued for standard edition when running cutting edition', () => {
+      const mgr = new LicenseManager(tempDir, 'cutting');
+      const code = mgr.getMachineCode();
+
+      const payload = {
+        customerName: 'مصنع قياسي',
+        machineIdHash: normalizeMachineCode(code),
+        issuedAt: new Date().toISOString(),
+        expiresAt: null,
+        edition: 'standard',
+      };
+      const signed = signTestLicense(payload, testKeyPair.privateKey);
+
+      // Verify license with 'cutting' expected edition
+      const result = verifyLicense(signed, code, testKeyPair.publicKey, mgr.stateFilePath, new Date(), 'cutting');
+      expect(result.valid).toBe(false);
+      expect(result.code).toBe('EDITION_MISMATCH');
+    });
+
+    it('rejects a license issued for cutting edition when running standard edition', () => {
+      const mgr = new LicenseManager(tempDir, 'standard');
+      const code = mgr.getMachineCode();
+
+      const payload = {
+        customerName: 'مصنع ملابس قص',
+        machineIdHash: normalizeMachineCode(code),
+        issuedAt: new Date().toISOString(),
+        expiresAt: null,
+        edition: 'cutting',
+      };
+      const signed = signTestLicense(payload, testKeyPair.privateKey);
+
+      // Verify license with 'standard' expected edition
+      const result = verifyLicense(signed, code, testKeyPair.publicKey, mgr.stateFilePath, new Date(), 'standard');
+      expect(result.valid).toBe(false);
+      expect(result.code).toBe('EDITION_MISMATCH');
+    });
+  });
+
+  describe('8. Asar Packaging Verification Rules', () => {
+    it('verifies that electron/ files are included and private keys/tools are excluded in package.json build config', () => {
+      const pkgPath = path.join(process.cwd(), 'package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      const files = pkg.build.files;
+
+      expect(files).toContain('electron/**/*');
+      expect(files).toContain('!tools/**/*');
+      expect(files).toContain('!**/*.pem');
+      expect(files).toContain('!**/*.sqlite*');
+      expect(files).toContain('!**/*.db*');
+    });
+  });
 });

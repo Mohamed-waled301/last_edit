@@ -85,7 +85,7 @@ function parseHash(hash) {
 }
 
 export default function App() {
-  const [licenseStatus, setLicenseStatus] = useState({ isValid: true, isBypassed: true }); // Initialized to valid for instant testing access
+  const [licenseStatus, setLicenseStatus] = useState({ isValid: false, isChecking: true });
   const [machineCode, setMachineCode] = useState('');
   const [hasOwnerUser, setHasOwnerUser] = useState(null); // null = checking, true/false
   const [isLocked, setIsLocked] = useState(false);
@@ -224,8 +224,6 @@ export default function App() {
   // Offline Licensing Verification and Realtime 24h Sync
   useEffect(() => {
     async function checkLicense() {
-      const locallyActivated = typeof window !== 'undefined' && localStorage.getItem('code_systems_activated') === 'true';
-
       if (typeof window !== 'undefined' && window.electronAPI?.getLicenseStatus) {
         try {
           const [status, code] = await Promise.all([
@@ -233,30 +231,19 @@ export default function App() {
             window.electronAPI.getMachineCode ? window.electronAPI.getMachineCode() : Promise.resolve(''),
           ]);
           if (code) setMachineCode(code);
-
-          if (status?.isValid || status?.isActivated || locallyActivated) {
-            localStorage.setItem('code_systems_activated', 'true');
-            setLicenseStatus({
-              ...status,
-              isValid: true,
-              isActivated: true,
-              customerName: status?.customerName || 'code system',
-              edition: status?.edition || 'Enterprise',
-            });
-          } else {
-            setLicenseStatus(status);
-          }
+          setLicenseStatus(status || { isValid: false, isActivated: false, error: 'تعذر التحقق من الترخيص' });
         } catch (err) {
           console.error('License initial check failed:', err);
-          if (locallyActivated) {
-            setLicenseStatus({ isValid: true, isActivated: true });
-          } else {
-            setLicenseStatus({ isValid: false, isActivated: false, error: 'تعذر التحقق من الترخيص' });
-          }
+          setLicenseStatus({ isValid: false, isActivated: false, error: 'تعذر التحقق من الترخيص' });
         }
       } else {
-        // Not in Electron desktop (e.g. browser or tests)
-        setLicenseStatus({ isValid: true, isActivated: true });
+        // In browser / test runner without Electron bridge:
+        setLicenseStatus({
+          isValid: true,
+          isActivated: true,
+          customerName: 'مطور النظام (بيئة المتصفح)',
+          edition: 'cutting',
+        });
       }
     }
 
@@ -278,18 +265,12 @@ export default function App() {
     }
     triggerRendererDailyBackup();
 
+    // Listen for realtime 24h background license status updates
     if (typeof window !== 'undefined' && window.electronAPI?.onLicenseStatusChanged) {
-      const unsub = window.electronAPI.onLicenseStatusChanged((updatedStatus) => {
-        if (updatedStatus?.isValid || updatedStatus?.isActivated) {
-          localStorage.setItem('code_systems_activated', 'true');
-          setLicenseStatus({
-            ...updatedStatus,
-            isValid: true,
-            isActivated: true,
-          });
-        }
+      const unsub = window.electronAPI.onLicenseStatusChanged((status) => {
+        setLicenseStatus(status);
       });
-      return unsub;
+      return () => unsub?.();
     }
   }, []);
 
@@ -368,18 +349,16 @@ export default function App() {
 
   const currentSidebarScreen = getSidebarActiveScreen();
 
-  // 0. Hardened License Verification Gate with permanent session persistence
-  const isSystemActivated =
-    Boolean(licenseStatus?.isValid || licenseStatus?.isActivated) ||
-    (typeof window !== 'undefined' && localStorage.getItem('code_systems_activated') === 'true');
+  // 0. Hardened License Verification Gate - fails closed
+  const isSystemActivated = Boolean(licenseStatus?.isValid && licenseStatus?.isActivated);
 
-  // Permanently lock/disable activation route when activated
+  // Permanently redirect activation route when activated
   if (isSystemActivated && route.root === 'activation') {
     window.location.hash = '#/home';
   }
 
   if (!isSystemActivated) {
-    if (licenseStatus === null) {
+    if (licenseStatus?.isChecking) {
       return (
         <div className="min-h-screen bg-[#F4F5F7] flex items-center justify-center p-4" dir="rtl">
           <div className="text-center font-bold text-gray-600 text-lg">
@@ -394,22 +373,12 @@ export default function App() {
         initialMachineCode={machineCode}
         initialStatus={licenseStatus}
         onActivated={(newStatus) => {
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('code_systems_activated', 'true');
-          }
           setLicenseStatus({
             ...newStatus,
             isValid: true,
             isActivated: true,
           });
           showNotification('تم تفعيل النظام بنجاح!', 'success');
-        }}
-        onSkip={() => {
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('code_systems_activated', 'true');
-          }
-          setLicenseStatus({ isValid: true, isActivated: true, isBypassed: true });
-          showNotification('تم الدخول إلى النظام', 'info');
         }}
       />
     );
@@ -741,6 +710,7 @@ export default function App() {
         onClose={() => setSidebarOpen(false)}
         isPinned={isSidebarPinned}
         onTogglePin={handleTogglePin}
+        licenseStatus={licenseStatus}
       />
 
       {/* Main Content Area: Offset by 72px (unpinned) or 260px (pinned) on desktop, 0 on mobile */}

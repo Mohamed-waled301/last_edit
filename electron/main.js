@@ -28,17 +28,22 @@ if (!gotSingleInstanceLock) {
 }
 
 // Explicitly preserve the existing userData folder to guarantee no data or license loss
-const existingUserDataPath = path.join(app.getPath('appData'), 'apex-apparel-erp');
-const tempNewPath = path.join(app.getPath('appData'), 'code-systems');
+const testUserDataDir = process.env.TEST_USER_DATA_DIR;
+if (testUserDataDir) {
+  app.setPath('userData', testUserDataDir);
+} else {
+  const existingUserDataPath = path.join(app.getPath('appData'), 'apex-apparel-erp');
+  const tempNewPath = path.join(app.getPath('appData'), 'code-systems');
 
-if (!fs.existsSync(existingUserDataPath) && fs.existsSync(tempNewPath)) {
-  try {
-    fs.cpSync(tempNewPath, existingUserDataPath, { recursive: true });
-  } catch (migErr) {
-    console.warn('[UserData Restore Warning]:', migErr);
+  if (!fs.existsSync(existingUserDataPath) && fs.existsSync(tempNewPath)) {
+    try {
+      fs.cpSync(tempNewPath, existingUserDataPath, { recursive: true });
+    } catch (migErr) {
+      console.warn('[UserData Restore Warning]:', migErr);
+    }
   }
+  app.setPath('userData', existingUserDataPath);
 }
-app.setPath('userData', existingUserDataPath);
 
 let mainWindow = null;
 let isQuitting = false;
@@ -381,21 +386,40 @@ ipcMain.handle('app:print', async (_event, options = {}) => {
 // 2. Offline Single-Device Licensing IPC Handlers
 ipcMain.handle('license:get-machine-code', () => {
   if (!licenseManager) {
-    licenseManager = new LicenseManager(app.getPath('userData'));
+    licenseManager = new LicenseManager(app.getPath('userData'), process.env.EDITION || 'cutting');
   }
   return licenseManager.getMachineCode();
 });
 
+ipcMain.handle('license:get-user-data-path', () => {
+  return app.getPath('userData');
+});
+
 ipcMain.handle('license:get-status', () => {
+  const allowDevBypass = !app.isPackaged && process.env.ALLOW_DEV_LICENSE_BYPASS === 'true';
+  if (allowDevBypass) {
+    return {
+      isValid: true,
+      isActivated: true,
+      isDevBypass: true,
+      customerName: 'مطور النظام (تخطي تجريبي)',
+      edition: process.env.EDITION || 'cutting',
+      machineCode: licenseManager ? licenseManager.getMachineCode() : 'DEV-MODE',
+      daysRemaining: null,
+      isPermanent: true,
+      error: null,
+      code: null,
+    };
+  }
   if (!licenseManager) {
-    licenseManager = new LicenseManager(app.getPath('userData'));
+    licenseManager = new LicenseManager(app.getPath('userData'), process.env.EDITION || 'cutting');
   }
   return licenseManager.getStatus();
 });
 
 ipcMain.handle('license:activate', (_event, licenseInput) => {
   if (!licenseManager) {
-    licenseManager = new LicenseManager(app.getPath('userData'));
+    licenseManager = new LicenseManager(app.getPath('userData'), process.env.EDITION || 'cutting');
   }
   const result = licenseManager.activate(licenseInput);
   if (result.success && mainWindow && !mainWindow.isDestroyed()) {
@@ -572,18 +596,7 @@ ipcMain.handle('excel:save', async (_event, { filename, base64Data }) => {
 
 // Lifecycle
 app.whenReady().then(async () => {
-  licenseManager = new LicenseManager(app.getPath('userData'));
-
-  // Auto-import project license.lic if present and not yet activated, then self-clean
-  try {
-    const rootLicPath = path.join(__dirname, '..', 'license.lic');
-    if (fs.existsSync(rootLicPath)) {
-      const licContent = fs.readFileSync(rootLicPath, 'utf8');
-      licenseManager.activate(licContent);
-    }
-  } catch (licErr) {
-    console.warn('[License Auto-Import Warning]:', licErr);
-  }
+  licenseManager = new LicenseManager(app.getPath('userData'), process.env.EDITION || 'cutting');
   localDatabaseManager = new LocalDatabaseManager(app.getPath('userData'));
 
   // Daily Automated Backup: runs once every day without manual user intervention

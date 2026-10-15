@@ -252,7 +252,7 @@ export default function ActivationScreen({ initialMachineCode = '', initialStatu
 
                 {/* Readonly Machine Code Box */}
                 <div className="bg-white border-2 border-slate-300 rounded-lg p-4 text-center select-all">
-                  <div className="text-2xl md:text-3xl font-mono font-extrabold tracking-widest text-[#1F3A5F]">
+                  <div id="activation-machine-code" className="text-2xl md:text-3xl font-mono font-extrabold tracking-widest text-[#1F3A5F]">
                     {machineCode || 'جاري استخراج كود الجهاز...'}
                   </div>
                 </div>
@@ -282,7 +282,10 @@ export default function ActivationScreen({ initialMachineCode = '', initialStatu
 
                 {/* Developer Explanation Notice */}
                 <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-md text-xs md:text-sm text-blue-900 leading-relaxed font-semibold">
-                  ابعت الكود ده للمطور عشان يديك ترخيص لهذا الجهاز بس
+                  <div>ابعت الكود ده للمطور عشان يديك ترخيص لهذا الجهاز بس</div>
+                  <div className="text-[11px] text-blue-700 font-mono mt-1" dir="ltr">
+                    %APPDATA%\apex-apparel-erp
+                  </div>
                 </div>
               </section>
 
@@ -367,21 +370,17 @@ export default function ActivationScreen({ initialMachineCode = '', initialStatu
                   )}
                 </button>
 
-                {/* Temporary Test Skip Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onSkip) {
-                      onSkip();
-                    } else if (onActivated) {
-                      onActivated({ isValid: true, isBypassed: true, customerName: 'وضع التجربة المؤقت' });
-                    }
-                  }}
-                  className="w-full mt-3 h-11 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer border border-gray-300"
-                >
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>تخطي الترخيص مؤقتاً للتجربة والاختبار</span>
-                </button>
+                {/* Optional Test Skip Button - only if explicitly passed */}
+                {Boolean(onSkip) && (
+                  <button
+                    type="button"
+                    onClick={onSkip}
+                    className="w-full mt-3 h-11 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer border border-gray-300"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>تخطي الترخيص مؤقتاً للتجربة والاختبار</span>
+                  </button>
+                )}
               </form>
 
               {/* 3. Data Safety Safeguard (Never lock users out of their data) */}
