@@ -1,40 +1,38 @@
 #!/usr/bin/env node
 /**
  * scripts/verify-release-artifacts.cjs
- * Strict Allow-List Validator for Shipped Release Binaries.
- * CI will FAIL if any non-allowed or forbidden files exist in the release directory.
+ * Strict Allow-List & Content Validator for Shipped Release Binaries.
+ * CI will FAIL if any non-allowed, unexpected, or corrupted files exist.
  */
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// Strict Allow-List Patterns (Regular Expressions)
-const ALLOWED_FILE_PATTERNS = [
-  /^code-systems.*-Setup-.*\.exe$/i,
-  /^code-systems.*-Portable-.*\.exe$/i,
-  /^code-systems.*\.exe$/i,
-  // Only if auto-update is enabled
-  /^latest\.yml$/i,
-  /^.*\.blockmap$/i,
+// Strict Allow-List Patterns (Exact Match for Approved Artifacts)
+const APPROVED_EXE_PATTERNS = [
+  /^code-systems-cutting-Setup-[\d\w.-]+\.exe$/i,
+  /^code-systems-cutting-Portable-[\d\w.-]+\.exe$/i,
+  /^code-systems-standard-Setup-[\d\w.-]+\.exe$/i,
+  /^code-systems-standard-Portable-[\d\w.-]+\.exe$/i,
 ];
 
-// Explicit Forbidden Patterns (Must NEVER be shipped)
-const FORBIDDEN_FILE_PATTERNS = [
+// Explicit Forbidden File Extensions and Names
+const FORBIDDEN_PATTERNS = [
+  /\.[jt]sx?$/i,         // JavaScript / TypeScript source
+  /\.json$/i,            // JSON configs or licenses
+  /\.map$/i,             // Source maps
+  /\.pdb$/i,             // Debug symbols
+  /\.pem$/i,             // Private or public keys
+  /\.key$/i,             // Key files
+  /\.lic$/i,             // License files
+  /^\.env/i,             // Environment files
+  /\.log$/i,             // Logs
+  /\.txt$/i,             // Text files
+  /\.md$/i,              // Markdown docs in release folder
   /builder-debug\.yml$/i,
   /builder-effective-config\.yaml$/i,
-  /\.map$/i,
-  /\.pdb$/i,
-  /\.pem$/i,
-  /\.key$/i,
-  /\.lic$/i,
-  /license.*\.json$/i,
-  /^\.env/i,
-  /\.log$/i,
-  /win-unpacked/i,
-  /tools/i,
-  /tests/i,
-  /src/i,
+  /license-generator/i,
 ];
 
 function calculateSha256(filePath) {
@@ -44,6 +42,29 @@ function calculateSha256(filePath) {
   return hash.digest('hex');
 }
 
+/**
+ * Validates that an executable file is a legitimate Windows PE binary (checks MZ header)
+ * and meets minimum sanity thresholds.
+ */
+function validateExecutableContent(filePath, fileName) {
+  const stats = fs.statSync(filePath);
+  if (stats.size < 5 * 1024 * 1024) {
+    return `Executable ${fileName} is suspiciously small (${(stats.size / 1024).toFixed(1)} KB). Expected > 5MB.`;
+  }
+
+  const fd = fs.openSync(filePath, 'r');
+  const buffer = Buffer.alloc(2);
+  fs.readSync(fd, buffer, 0, 2, 0);
+  fs.closeSync(fd);
+
+  // Check MZ header (0x4D, 0x5A)
+  if (buffer[0] !== 0x4D || buffer[1] !== 0x5A) {
+    return `File ${fileName} does not contain valid Windows PE executable magic bytes ('MZ').`;
+  }
+
+  return null;
+}
+
 function verifyReleaseArtifacts(releaseDir, autoUpdateEnabled = false) {
   if (!fs.existsSync(releaseDir)) {
     console.error(`❌ [Error] Release output directory not found: ${releaseDir}`);
@@ -51,76 +72,95 @@ function verifyReleaseArtifacts(releaseDir, autoUpdateEnabled = false) {
   }
 
   console.log(`\n======================================================`);
-  console.log(`[Release Artifacts Allow-List Audit] Directory: ${path.resolve(releaseDir)}`);
+  console.log(`[Strict Release Artifacts Audit] Directory: ${path.resolve(releaseDir)}`);
+  console.log(`Auto-Update Enabled: ${autoUpdateEnabled}`);
   console.log(`======================================================`);
 
   const entries = fs.readdirSync(releaseDir, { withFileTypes: true });
-  const allowedFiles = [];
+  const approvedArtifacts = [];
   const violations = [];
-  const ignoredDevArtifacts = new Set(['win-unpacked']); // Builder output subdirectories to ignore/exclude from upload
 
   for (const entry of entries) {
     const fileName = entry.name;
+    const fullPath = path.join(releaseDir, fileName);
 
     if (entry.isDirectory()) {
       if (fileName === 'win-unpacked') {
-        // Ignored internal builder directory, verify it's never uploaded
+        // Internal packaging directory, must NOT be part of upload
         continue;
       }
-      violations.push(`Unexpected directory found in release output: /${fileName}`);
+      violations.push(`Unexpected directory detected in release folder: /${fileName}`);
       continue;
     }
 
     // Check against forbidden list
-    const isExplicitlyForbidden = FORBIDDEN_FILE_PATTERNS.some((pat) => pat.test(fileName));
-    if (isExplicitlyForbidden) {
+    const isForbidden = FORBIDDEN_PATTERNS.some((pattern) => pattern.test(fileName));
+    if (isForbidden) {
       violations.push(`FORBIDDEN file detected in release folder: ${fileName}`);
       continue;
     }
 
-    // Check auto-update exclusion
-    if (!autoUpdateEnabled && (fileName === 'latest.yml' || fileName.endsWith('.blockmap'))) {
-      console.log(`[Note] Skipping update metadata (auto-update disabled): ${fileName}`);
-      continue;
+    // Auto-update files handling
+    if (fileName === 'latest.yml' || fileName.endsWith('.blockmap')) {
+      if (!autoUpdateEnabled) {
+        console.log(`  [Excluded] Auto-update disabled, skipping: ${fileName}`);
+        continue;
+      } else {
+        // If auto-update is enabled, allow latest.yml and blockmaps
+        const stats = fs.statSync(fullPath);
+        approvedArtifacts.push({
+          name: fileName,
+          path: fullPath,
+          sizeMb: (stats.size / (1024 * 1024)).toFixed(2),
+          sha256: calculateSha256(fullPath),
+        });
+        continue;
+      }
     }
 
-    // Check against allow-list
-    const isAllowed = ALLOWED_FILE_PATTERNS.some((pat) => pat.test(fileName));
-    if (isAllowed) {
-      const fullPath = path.join(releaseDir, fileName);
+    // Check against approved executable patterns
+    const isApprovedExe = APPROVED_EXE_PATTERNS.some((pattern) => pattern.test(fileName));
+    if (isApprovedExe) {
+      // Validate content & PE header
+      const contentError = validateExecutableContent(fullPath, fileName);
+      if (contentError) {
+        violations.push(contentError);
+        continue;
+      }
+
       const stats = fs.statSync(fullPath);
       const sha256 = calculateSha256(fullPath);
-      allowedFiles.push({
+      approvedArtifacts.push({
         name: fileName,
         path: fullPath,
         sizeMb: (stats.size / (1024 * 1024)).toFixed(2),
         sha256,
       });
     } else {
-      violations.push(`File is NOT on the strict release allow-list: ${fileName}`);
+      violations.push(`File is NOT on the approved release allow-list: ${fileName}`);
     }
   }
 
-  console.log(`\n--- Verified Allow-Listed Artifacts (${allowedFiles.length} files) ---`);
-  for (const file of allowedFiles) {
+  console.log(`\n--- Approved Release Artifacts (${approvedArtifacts.length} files) ---`);
+  for (const file of approvedArtifacts) {
     console.log(`  ✓ ${file.name} (${file.sizeMb} MB) | SHA-256: ${file.sha256}`);
   }
 
   if (violations.length > 0) {
-    console.error(`\n❌ [AUDIT FAILED] Violations detected in release directory:`);
+    console.error(`\n❌ [STRICT AUDIT FAILED] Violations detected in release folder:`);
     for (const v of violations) {
       console.error(`   ✗ ${v}`);
     }
-    console.error(`\nAborting release. Do NOT upload non-allowlisted artifacts.`);
+    console.error(`\nAborting release. Shipped artifacts must conform strictly to the allow-list.`);
     return false;
   }
 
-  if (allowedFiles.length === 0) {
-    console.error(`\n❌ [AUDIT FAILED] No allowed installer (.exe) files found in ${releaseDir}`);
+  if (approvedArtifacts.length === 0) {
+    console.error(`\n❌ [STRICT AUDIT FAILED] No approved executable (.exe) files found in ${releaseDir}`);
     return false;
   }
 
-  console.log(`\n✅ [AUDIT PASSED] All ${allowedFiles.length} release artifacts strictly conform to the allow-list.`);
+  console.log(`\n✅ [STRICT AUDIT PASSED] All ${approvedArtifacts.length} release artifacts verified for names, PE headers, and allow-list.`);
   return true;
 }
 

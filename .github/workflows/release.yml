@@ -87,9 +87,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           WIN_CSC_LINK: ${{ secrets.CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: |
-          npm run build:cutting
-          npx cross-env EDITION=cutting electron-builder --win --x64 --publish never -c.appId=com.codesystems.cutting.app -c.productName="code systems Cutting" -c.nsis.shortcutName="نظام code systems (إصدار القص)" -c.nsis.artifactName="code-systems-cutting-Setup-${version}.exe" -c.portable.artifactName="code-systems-cutting-Portable-${version}.exe"
+        run: npm run electron:build:cutting
 
       # Build Standard Edition (if selected)
       - name: Build Standard Edition Binaries
@@ -99,9 +97,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           WIN_CSC_LINK: ${{ secrets.CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: |
-          npm run build:standard
-          npx cross-env EDITION=standard electron-builder --win --x64 --publish never -c.appId=com.codesystems.standard.app -c.productName="code systems Standard" -c.nsis.shortcutName="نظام code systems (الإصدار القياسي)" -c.nsis.artifactName="code-systems-standard-Setup-${version}.exe" -c.portable.artifactName="code-systems-standard-Portable-${version}.exe"
+        run: npm run electron:build:standard
 
       # Security & Hardening Step 1: Inspect packed asar contents
       - name: Audit app.asar integrity & secret stripping
@@ -165,42 +161,53 @@ jobs:
           Set-Content -Path "release-notes.md" -Value $notes -Encoding utf8
           Write-Host "Generated release-notes.md successfully."
 
-      # Dry Run Check
+      # Dry Run Safeguard Check
       - name: Check Dry Run Mode
-        if: ${{ inputs.dry_run == true }}
+        if: ${{ github.event.inputs.dry_run == 'true' || inputs.dry_run == true }}
         shell: bash
         run: |
-          echo "====================================================="
-          echo "DRY RUN MODE ENABLED - SKIPPING RELEASES PUBLISHING"
-          echo "All builds and allow-list verifications passed 100%!"
-          echo "Files verified:"
+          echo "=========================================================="
+          echo "🛡️ DRY RUN MODE VERIFIED - SKIPPING RELEASE PUBLISHING"
+          echo "All builds, packaging, and allow-list verifications passed!"
+          echo "Zero files uploaded to GitHub Releases."
+          echo "Approved local assets:"
           ls -lh release/*.exe
-          echo "====================================================="
+          echo "=========================================================="
 
-      # Publish to Public Releases Repo via GitHub CLI
+      # Publish to Public Releases Repo via GitHub CLI (Strictly blocked in dry_run mode)
       - name: Publish Release to Public Repository
-        if: ${{ inputs.dry_run != true }}
+        if: ${{ github.event.inputs.dry_run != 'true' && inputs.dry_run != true }}
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
         shell: bash
         run: |
-          TARGET_REPO="${{ inputs.releases_repo || 'Mohamed-waled301/code-systems-releases' }}"
+          # Strictly locked to approved public releases repository
+          TARGET_REPO="Mohamed-waled301/code-systems-releases"
           TAG="${{ steps.target.outputs.tag_name }}"
-          TITLE="نظام code systems v${{ steps.target.outputs.version }}"
+          EDITION="${{ steps.target.outputs.selected_edition }}"
+          VER="${{ steps.target.outputs.version }}"
+          
+          if [ "${EDITION}" = "cutting" ]; then
+            TITLE="نظام code systems (إصدار مصانع الملابس وقص المراحل) v${VER}"
+          elif [ "${EDITION}" = "standard" ]; then
+            TITLE="نظام code systems (الإصدار التجاري القياسي) v${VER}"
+          else
+            TITLE="نظام code systems v${VER}"
+          fi
           
           DRAFT_FLAG=""
-          if [ "${{ inputs.draft }}" = "true" ]; then
+          if [ "${{ github.event.inputs.draft }}" = "true" ] || [ "${{ inputs.draft }}" = "true" ]; then
             DRAFT_FLAG="--draft"
           fi
           
-          echo "Publishing release to public repo: ${TARGET_REPO}"
+          echo "Publishing release to public repository: ${TARGET_REPO}"
           echo "Tag: ${TAG}"
           echo "Title: ${TITLE}"
           
-          # Collect all allow-listed executables
+          # Collect allow-listed executables
           FILES=(release/*.exe)
           
-          # Create release using gh CLI
+          # Create and upload release via GitHub CLI
           gh release create "${TAG}" \
             --repo "${TARGET_REPO}" \
             --title "${TITLE}" \
