@@ -391,6 +391,14 @@ ipcMain.handle('app:print', async (_event, options = {}) => {
   });
 });
 
+// Edition IPC Handlers
+ipcMain.on('edition:get-sync', (event) => {
+  event.returnValue = activeEdition;
+});
+ipcMain.handle('edition:get', () => {
+  return activeEdition;
+});
+
 // 2. Offline Single-Device Licensing IPC Handlers
 ipcMain.handle('license:get-machine-code', () => {
   if (!licenseManager) {

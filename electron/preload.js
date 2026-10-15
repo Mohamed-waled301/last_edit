@@ -1,7 +1,17 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+let activeEdition = process.env.EDITION;
+try {
+  activeEdition = ipcRenderer.sendSync('edition:get-sync') || activeEdition;
+} catch {}
+if (!activeEdition) {
+  activeEdition = 'cutting';
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
+  edition: activeEdition,
+  getEdition: () => activeEdition,
   platform: process.platform,
   getVersion: () => ipcRenderer.invoke('app:version'),
   saveAutoBackup: (data) => ipcRenderer.invoke('backup:save-auto', data),

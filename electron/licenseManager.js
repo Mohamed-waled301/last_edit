@@ -193,7 +193,9 @@ function verifyLicense(licenseData, currentMachineCode, publicKeyPem = LICENSE_P
   if (expectedEdition) {
     const rawLicEdition = String(payload.edition || '').trim().toLowerCase();
     const rawExpected = String(expectedEdition).trim().toLowerCase();
-    const isCuttingMatch = rawExpected === 'cutting' && (rawLicEdition === 'cutting' || rawLicEdition === 'enterprise');
+    // Legacy licenses (no edition field) are treated as 'cutting' since that was the only edition before the split
+    const isLegacy = !rawLicEdition;
+    const isCuttingMatch = rawExpected === 'cutting' && (isLegacy || rawLicEdition === 'cutting' || rawLicEdition === 'enterprise');
     const isStandardMatch = rawExpected === 'standard' && rawLicEdition === 'standard';
 
     if (!isCuttingMatch && !isStandardMatch) {
@@ -418,7 +420,9 @@ class LicenseManager {
             // Check edition match
             const rawLicEdition = String(record.edition || '').trim().toLowerCase();
             const rawExpected = String(this.edition || 'cutting').trim().toLowerCase();
-            const isCuttingMatch = rawExpected === 'cutting' && (rawLicEdition === 'cutting' || rawLicEdition === 'enterprise');
+            // Legacy licenses (no edition field) are treated as 'cutting' since that was the only edition before the split
+            const isLegacy = !rawLicEdition;
+            const isCuttingMatch = rawExpected === 'cutting' && (isLegacy || rawLicEdition === 'cutting' || rawLicEdition === 'enterprise');
             const isStandardMatch = rawExpected === 'standard' && rawLicEdition === 'standard';
 
             if (!isCuttingMatch && !isStandardMatch) {

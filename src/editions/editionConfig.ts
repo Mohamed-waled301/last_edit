@@ -67,7 +67,15 @@ export const EDITIONS: Record<EditionId, EditionConfig> = {
  * Priority: localStorage override > process.env.EDITION > compile-time __EDITION__ > 'cutting'
  */
 export function getActiveEdition(): EditionId {
-  // 1. Runtime override (for testing, e2e, dynamic switching)
+  // 1. Electron bridge runtime check (direct from Electron main process)
+  if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    const e = (window as any).electronAPI.edition || (window as any).electronAPI.getEdition?.();
+    if (e === 'standard' || e === 'cutting') {
+      return e as EditionId;
+    }
+  }
+
+  // 2. Runtime override (for testing, e2e, dynamic switching)
   if (typeof window !== 'undefined' && window.localStorage) {
     const override = window.localStorage.getItem('__APP_EDITION_OVERRIDE__');
     if (override === 'standard' || override === 'cutting') {
