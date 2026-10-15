@@ -263,7 +263,7 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
           </div>
           <h2 className="text-xl font-bold text-red-900">غير مصرح لك بالوصول</h2>
           <p className="text-sm text-red-700 leading-relaxed">
-            هذه الشاشة والعمليات مخصصة للإدارة العليا والرئيس التنفيذي (CEO) فقط.
+            هذه الشاشة والعمليات مخصصة للإدارة العليا والرئيس التنفيذي فقط.
           </p>
           <button
             type="button"

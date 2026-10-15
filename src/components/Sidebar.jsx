@@ -20,7 +20,9 @@ import {
   Pin,
   X,
   Scissors,
+  Building2,
 } from 'lucide-react';
+import { api } from '../services/api';
 import { APP_VERSION } from '../version';
 
 export default function Sidebar({
@@ -33,6 +35,22 @@ export default function Sidebar({
   onTogglePin,
 }) {
   const [isHovered, setIsHovered] = useState(false);
+  const [companySettings, setCompanySettings] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCompanySettings() {
+      try {
+        const res = await api.getSettings();
+        const data = res?.settings || res?.data || res || null;
+        if (isMounted && data) {
+          setCompanySettings(data);
+        }
+      } catch {}
+    }
+    loadCompanySettings();
+    return () => { isMounted = false; };
+  }, []);
 
   // Close on Escape key press
   useEffect(() => {
@@ -191,27 +209,33 @@ export default function Sidebar({
         }`}
         aria-label="القائمة الجانبية للنظام"
       >
-        {/* Top Header: Logo + Title + Pin Button */}
+        {/* Top Header: Company Logo from Settings + Company Name */}
         <div className="h-16 border-b border-gray-200 px-3 flex items-center justify-between shrink-0 overflow-hidden">
           <div className="flex items-center gap-2.5 min-w-0">
-            <img
-              src="/logo.png"
-              alt="code systems logo"
-              className="w-10 h-10 rounded-md object-contain shrink-0"
-              onError={(e) => {
-                e.target.style.display = 'none';
-              }}
-            />
+            {companySettings?.company_logo ? (
+              <img
+                src={companySettings.company_logo}
+                alt=""
+                className="w-10 h-10 rounded-md object-contain shrink-0"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-md bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0">
+                <Building2 className="w-5 h-5 text-slate-600" />
+              </div>
+            )}
             <div
               className={`overflow-hidden transition-all duration-200 whitespace-nowrap ${
                 isExpanded ? 'opacity-100 max-w-[170px]' : 'opacity-0 max-w-0 pointer-events-none'
               }`}
             >
-              <span className="font-bold text-[#1F3A5F] text-base block leading-none truncate">
-                code systems
+              <span className="font-bold text-[#1F3A5F] text-sm block leading-none truncate">
+                {companySettings?.company_name || 'code systems'}
               </span>
               <span className="text-[11px] text-gray-500 font-semibold block mt-1 truncate">
-                نظام إدارة موارد المنشأة
+                code systems
               </span>
             </div>
           </div>
@@ -339,26 +363,14 @@ export default function Sidebar({
           )}
         </nav>
 
-        {/* Bottom Application Version Display */}
-        <div className="p-3 border-t border-gray-200 shrink-0 text-center select-none bg-slate-50/50">
-          <div
-            className={`transition-all duration-200 whitespace-nowrap overflow-hidden flex flex-col items-center justify-center ${
-              isExpanded ? 'opacity-100' : 'opacity-0 h-0 hidden'
-            }`}
-          >
-            <span className="text-[11px] font-bold text-slate-700 block">
+        {/* Footer: the text "code systems" only (visible when expanded) */}
+        {isExpanded && (
+          <div className="p-3 border-t border-gray-200 shrink-0 text-center select-none bg-slate-50/50">
+            <span className="text-xs font-bold text-slate-700 block tracking-wide">
               code systems
             </span>
-            <span className="text-[11px] font-mono font-semibold text-slate-500 mt-0.5 block" dir="ltr">
-              الإصدار v{APP_VERSION}
-            </span>
           </div>
-          {!isExpanded && (
-            <div className="text-[10px] font-mono font-bold text-slate-500 text-center" dir="ltr">
-              v{APP_VERSION}
-            </div>
-          )}
-        </div>
+        )}
       </aside>
     </>
   );

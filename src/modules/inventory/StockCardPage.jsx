@@ -135,7 +135,17 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
   };
 
   const handlePrint = () => {
-    window.print();
+    try {
+      sessionStorage.setItem('print_preview_payload', JSON.stringify({
+        type: 'stock_card',
+        item: selectedItem,
+        movements: sortedMovements,
+        currentStock,
+        totalIn,
+        totalOut,
+      }));
+    } catch {}
+    window.location.hash = `#/print-preview?type=stock_card&id=${selectedItemId}&returnUrl=${encodeURIComponent('#/stock-card')}`;
   };
 
   const getMovementLabel = (type) => {
@@ -160,7 +170,7 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
 
   return (
     <PageContainer
-      title="حركة الصنف وكارت الصنف (Stock Card)"
+      title="حركة الصنف وكارت الصنف"
       subtitle="سجل الأستاذ المخزني التفصيلي مع الرصيد التراكمي الحي، صافي تغير الفترة، والتدقيق الرقابي"
       breadcrumbs={[
         { label: 'المخزن', href: '#/inventory' },
@@ -313,7 +323,7 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
             <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-4 shadow-xs">
               <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1 mb-1">
                 <ArrowDownRight className="w-3.5 h-3.5 text-emerald-600" />
-                <span>إجمالي الوارد (In):</span>
+                <span>إجمالي الوارد:</span>
               </span>
               <span className="text-xl font-bold font-mono text-emerald-800">
                 +{formatNumber(cardData.total_in ?? cardData.totalIn ?? 0)}
@@ -324,7 +334,7 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
             <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-4 shadow-xs">
               <span className="text-xs text-rose-700 font-semibold flex items-center gap-1 mb-1">
                 <ArrowUpRight className="w-3.5 h-3.5 text-rose-600" />
-                <span>إجمالي المنصرف (Out):</span>
+                <span>إجمالي المنصرف:</span>
               </span>
               <span className="text-xl font-bold font-mono text-rose-800">
                 -{formatNumber(cardData.total_out ?? cardData.totalOut ?? 0)}
@@ -370,7 +380,7 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
           <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <FileSpreadsheet className="w-4 h-4 text-blue-600" />
-              <span>جدول حركة الصنف والرصيد التراكمي (Running Balance)</span>
+              <span>جدول حركة الصنف والرصيد التراكمي</span>
             </h3>
             {cardData && (
               <span className="text-xs text-slate-500">

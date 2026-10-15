@@ -376,6 +376,7 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
         confirmLabel="إصدار السند الآن"
         cancelLabel="تعديل البيانات"
         onConfirm={handleConfirmIssue}
+        onClose={() => setShowConfirmModal(false)}
         onCancel={() => setShowConfirmModal(false)}
         isSubmitting={saving}
         summaryData={{

@@ -27,18 +27,18 @@ if (!gotSingleInstanceLock) {
   process.exit(0);
 }
 
-// Fixed persistent userData path for code systems with seamless auto-migration
-const oldUserDataPath = path.join(app.getPath('appData'), 'apex-apparel-erp');
-const persistentUserDataPath = path.join(app.getPath('appData'), 'code-systems');
+// Explicitly preserve the existing userData folder to guarantee no data or license loss
+const existingUserDataPath = path.join(app.getPath('appData'), 'apex-apparel-erp');
+const tempNewPath = path.join(app.getPath('appData'), 'code-systems');
 
-if (fs.existsSync(oldUserDataPath) && !fs.existsSync(persistentUserDataPath)) {
+if (!fs.existsSync(existingUserDataPath) && fs.existsSync(tempNewPath)) {
   try {
-    fs.cpSync(oldUserDataPath, persistentUserDataPath, { recursive: true });
+    fs.cpSync(tempNewPath, existingUserDataPath, { recursive: true });
   } catch (migErr) {
-    console.warn('[UserData Migration Warning]:', migErr);
+    console.warn('[UserData Restore Warning]:', migErr);
   }
 }
-app.setPath('userData', persistentUserDataPath);
+app.setPath('userData', existingUserDataPath);
 
 let mainWindow = null;
 let isQuitting = false;
@@ -215,7 +215,149 @@ app.on('second-instance', () => {
 // Register IPC handlers
 ipcMain.handle('app:version', () => app.getVersion());
 
-// Native direct printing handler (fixes Chromium "app doesn't support print preview" error)
+// 1. In-App Print Preview IPC Handlers (Item 8: direct silent print & save PDF)
+ipcMain.handle('print:list-printers', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return [];
+  }
+  try {
+    const printers = await mainWindow.webContents.getPrintersAsync();
+    return printers.map((p) => ({
+      name: p.name,
+      displayName: p.displayName || p.name,
+      description: p.description || '',
+      status: p.status,
+      isDefault: Boolean(p.isDefault),
+    }));
+  } catch (err) {
+    console.error('[list-printers error]:', err);
+    return [];
+  }
+});
+
+ipcMain.handle('print:print-html', async (_event, params = {}) => {
+  const {
+    html = '',
+    deviceName = '',
+    pageSize = 'A4',
+    landscape = false,
+    margins = 'default',
+    copies = 1,
+    printBackground = true,
+  } = params;
+
+  let hiddenWin = null;
+  try {
+    hiddenWin = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        sandbox: true,
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
+
+    const encoded = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+    await hiddenWin.loadURL(encoded);
+
+    // Wait for fonts to finish rendering
+    try {
+      await hiddenWin.webContents.executeJavaScript('document.fonts ? document.fonts.ready : Promise.resolve()');
+    } catch {}
+
+    // Map margin options
+    let marginConfig = { marginType: 'default' };
+    if (margins === 'none') {
+      marginConfig = { marginType: 'none' };
+    } else if (margins === 'minimal') {
+      marginConfig = { marginType: 'minimum' };
+    }
+
+    return await new Promise((resolve) => {
+      hiddenWin.webContents.print(
+        {
+          silent: true,
+          deviceName: deviceName || '',
+          pageSize: pageSize === '80mm' ? { width: 80000, height: 297000 } : pageSize,
+          landscape: Boolean(landscape),
+          margins: marginConfig,
+          copies: Math.max(1, Number(copies) || 1),
+          printBackground: printBackground !== false,
+        },
+        (success, failureReason) => {
+          if (success) {
+            resolve({ success: true });
+          } else {
+            resolve({ success: false, error: failureReason || 'فشلت الطباعة، تأكد من اتصال الطابعة' });
+          }
+        }
+      );
+    });
+  } catch (err) {
+    console.error('[print:print-html error]:', err);
+    return { success: false, error: err?.message || 'فشلت عملية الطباعة' };
+  } finally {
+    if (hiddenWin && !hiddenWin.isDestroyed()) {
+      hiddenWin.destroy();
+    }
+  }
+});
+
+ipcMain.handle('print:save-pdf', async (_event, params = {}) => {
+  const {
+    html = '',
+    filename = 'document.pdf',
+    pageSize = 'A4',
+    landscape = false,
+  } = params;
+
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'حفظ كملف PDF',
+    defaultPath: filename,
+    filters: [{ name: 'ملفات PDF', extensions: ['pdf'] }],
+  });
+
+  if (canceled || !filePath) {
+    return { canceled: true };
+  }
+
+  let hiddenWin = null;
+  try {
+    hiddenWin = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        sandbox: true,
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
+
+    const encoded = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+    await hiddenWin.loadURL(encoded);
+
+    try {
+      await hiddenWin.webContents.executeJavaScript('document.fonts ? document.fonts.ready : Promise.resolve()');
+    } catch {}
+
+    const pdfData = await hiddenWin.webContents.printToPDF({
+      pageSize: pageSize === '80mm' ? { width: 80000, height: 297000 } : pageSize,
+      landscape: Boolean(landscape),
+      printBackground: true,
+    });
+
+    await fs.promises.writeFile(filePath, pdfData);
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('[print:save-pdf error]:', err);
+    return { success: false, error: err?.message || 'فشل حفظ ملف PDF' };
+  } finally {
+    if (hiddenWin && !hiddenWin.isDestroyed()) {
+      hiddenWin.destroy();
+    }
+  }
+});
+
+// Legacy direct printing fallback
 ipcMain.handle('app:print', async (_event, options = {}) => {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return { success: false, error: 'النافذة غير متاحة' };

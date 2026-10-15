@@ -33,11 +33,7 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
   }, [invoiceId]);
 
   const handlePrint = () => {
-    triggerPrint({
-      silent: false,
-      printBackground: true,
-      pageSize: printMode === 'thermal' ? { width: 80000, height: 200000 } : 'A4'
-    });
+    window.location.hash = `#/print-preview?type=${printMode === 'thermal' ? 'sales_invoice_thermal' : 'sales_invoice'}&id=${invoice.id || invoice.invoice_number}&returnUrl=${encodeURIComponent('#/sales')}`;
   };
 
   if (loading) {
@@ -119,8 +115,11 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
               {settings?.company_logo && (
                 <img
                   src={settings.company_logo}
-                  alt="شعار المنشأة"
+                  alt=""
                   className="h-16 w-auto max-w-[140px] object-contain rounded"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
                 />
               )}
               <div>

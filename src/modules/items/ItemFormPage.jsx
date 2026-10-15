@@ -1104,7 +1104,7 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
               {/* ON / OFF Switch */}
               <div className="flex items-center gap-3">
                 <span className="text-xs font-bold text-slate-700">
-                  {form.has_variants ? 'المتغيرات مفعلة (ON)' : 'المتغيرات معطلة (OFF)'}
+                  {form.has_variants ? 'المتغيرات مفعلة' : 'المتغيرات معطلة'}
                 </span>
                 <button
                   type="button"
@@ -1149,11 +1149,11 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
                       onChange={(e) => setNewVariant((p) => ({ ...p, size: e.target.value }))}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold bg-white text-slate-800"
                     >
-                      <option value="صغير">صغير (S)</option>
-                      <option value="وسط">وسط (M)</option>
-                      <option value="كبير">كبير (L)</option>
-                      <option value="كبير جداً">كبير جداً (XL)</option>
-                      <option value="كبير مضاعف">كبير مضاعف (XXL)</option>
+                      <option value="صغير">صغير</option>
+                      <option value="وسط">وسط</option>
+                      <option value="كبير">كبير</option>
+                      <option value="كبير جداً">كبير جداً</option>
+                      <option value="كبير مضاعف">كبير مضاعف</option>
                       <option value="30 (بنطلون)">30 (بنطلون)</option>
                       <option value="32 (بنطلون)">32 (بنطلون)</option>
                       <option value="34 (بنطلون)">34 (بنطلون)</option>

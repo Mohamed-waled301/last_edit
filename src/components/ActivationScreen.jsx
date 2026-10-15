@@ -243,7 +243,7 @@ export default function ActivationScreen({ initialMachineCode = '', initialStatu
               <section className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <span className="text-sm font-bold text-gray-800">
-                    كود تعريف هذا الجهاز (Machine ID)
+                    كود تعريف هذا الجهاز
                   </span>
                   <span className="text-xs text-slate-500 font-medium">
                     كود رقمي فريد ومحمي مشتق من عتاد الجهاز

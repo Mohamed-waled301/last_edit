@@ -31,7 +31,7 @@ export default function PaymentReceiptPrintPage({ type = 'supplier_payment', id 
   }, [type, id]);
 
   const handlePrint = () => {
-    triggerPrint({ silent: false, printBackground: true });
+    window.location.hash = `#/print-preview?type=${type}&id=${id || (record?.id || record?.receipt_number || record?.payment_number)}&returnUrl=${encodeURIComponent('#/disbursements')}`;
   };
 
   if (loading) {
@@ -90,18 +90,20 @@ export default function PaymentReceiptPrintPage({ type = 'supplier_payment', id 
         {/* Header with Company Logo */}
         <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-6">
           <div className="flex items-center gap-4">
-            <img
-              src={settings?.company_logo || '/logo.png'}
-              alt="شعار المنشأة"
-              className="h-16 w-auto max-w-[140px] object-contain rounded"
-              onError={(e) => {
-                if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-              }}
-            />
+            {settings?.company_logo && (
+              <img
+                src={settings.company_logo}
+                alt=""
+                className="h-16 w-auto max-w-[140px] object-contain rounded"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            )}
             <div>
               <h2 className="text-2xl font-bold text-[#1F3A5F]">{settings?.factory_name || 'code systems'}</h2>
               {settings?.address && <p className="text-xs text-gray-600 mt-1">{settings.address}</p>}
-              {settings?.phone && <p className="text-xs text-gray-600">هاتف: {settings.phone}</p>}
+              {settings?.phone && <p className="text-xs text-gray-600">هاتف: <span className="font-mono">{settings.phone}</span></p>}
             </div>
           </div>
 
@@ -157,9 +159,11 @@ export default function PaymentReceiptPrintPage({ type = 'supplier_payment', id 
           )}
 
           {/* Signatures */}
-          <div className="grid grid-cols-3 gap-6 pt-12 text-center text-xs text-gray-600">
+          <div className="grid grid-cols-3 gap-6 pt-12 text-center text-xs text-gray-600 font-sans">
             <div className="space-y-8">
-              <span className="font-bold block">أمين الخزينة</span>
+              <span className="font-bold block">
+                {isCustomer ? 'المسلِّم / العميل' : 'المستلم / المورد'}
+              </span>
               <div className="border-b border-gray-400 w-32 mx-auto"></div>
             </div>
             <div className="space-y-8">
@@ -167,7 +171,7 @@ export default function PaymentReceiptPrintPage({ type = 'supplier_payment', id 
               <div className="border-b border-gray-400 w-32 mx-auto"></div>
             </div>
             <div className="space-y-8">
-              <span className="font-bold block">{isCustomer ? 'المستلم / المورد' : 'المستلم'}</span>
+              <span className="font-bold block">أمين الخزينة</span>
               <div className="border-b border-gray-400 w-32 mx-auto"></div>
             </div>
           </div>

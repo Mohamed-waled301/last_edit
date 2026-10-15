@@ -1,17 +1,19 @@
-import React, { forwardRef } from 'react';
-import { normalizeDigits, sanitizeDecimalInput } from '../utils/money';
+import React, { forwardRef, useState, useEffect, useRef } from 'react';
+import { normalizeDigits } from '../utils/money';
 
 /**
- * Shared MoneyInput / NumberInput Component for Apex Apparel ERP
+ * Shared MoneyInput / NumberInput Component for code systems ERP
  *
  * Rules:
  * - Uses type="text" and inputMode="decimal" (or "numeric")
+ * - Keeps raw typed string in local state while focused to allow intermediate states ("", "0.", "12.", "-")
+ * - Commits clean values without altering what the user typed
  * - No spinner arrows (up/down) anywhere
  * - Wheel and ArrowUp/ArrowDown value changes disabled
  * - Select-all on focus
+ * - Supports seamless copy/paste
  * - Converts Arabic-Indic numerals (٠-٩) to Western (0-9)
  * - Enter never submits a form or issues a document
- * - Applied immediately and exactly as typed; never alters value on blur or scroll
  */
 export const MoneyInput = forwardRef(function MoneyInput(
   {
@@ -31,8 +33,28 @@ export const MoneyInput = forwardRef(function MoneyInput(
   },
   ref
 ) {
+  // Normalize incoming value to string
+  const toDisplayString = (val) => {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'object' && val !== null && val.target && 'value' in val.target) {
+      return String(val.target.value ?? '');
+    }
+    return String(val);
+  };
+
+  const [localValue, setLocalValue] = useState(() => toDisplayString(value));
+  const isFocusedRef = useRef(false);
+
+  // Sync from prop changes when the user is NOT actively typing inside the field
+  useEffect(() => {
+    if (!isFocusedRef.current) {
+      setLocalValue(toDisplayString(value));
+    }
+  }, [value]);
+
   const sanitize = (raw) => {
-    let text = normalizeDigits(raw);
+    if (raw === null || raw === undefined) return '';
+    let text = normalizeDigits(String(raw));
 
     let isNegative = false;
     if (allowNegative && text.startsWith('-')) {
@@ -43,6 +65,7 @@ export const MoneyInput = forwardRef(function MoneyInput(
     if (!allowDecimal) {
       text = text.replace(/[^0-9]/g, '');
     } else {
+      // Keep only digits and decimal point
       text = text.replace(/[^0-9.]/g, '');
       const parts = text.split('.');
       if (parts.length > 2) {
@@ -59,6 +82,9 @@ export const MoneyInput = forwardRef(function MoneyInput(
   const handleChange = (e) => {
     const rawVal = e?.target ? e.target.value : String(e ?? '');
     const clean = sanitize(rawVal);
+
+    // Update local state immediately so intermediate typing is preserved
+    setLocalValue(clean);
 
     if (onChange) {
       // Support both React event signature and direct value signature
@@ -81,16 +107,27 @@ export const MoneyInput = forwardRef(function MoneyInput(
         preventDefault: () => e?.preventDefault?.(),
       };
 
-      // Call handler
       onChange(syntheticEvent);
     }
   };
 
   const handleFocus = (e) => {
+    isFocusedRef.current = true;
     if (selectAllOnFocus) {
-      e.target.select();
+      try {
+        e.target.select();
+      } catch {}
     }
     if (onFocus) onFocus(e);
+  };
+
+  const handleBlur = (e) => {
+    isFocusedRef.current = false;
+    // On blur, synchronize with current prop value if it changed externally
+    if (value !== undefined) {
+      setLocalValue(toDisplayString(value));
+    }
+    if (onBlur) onBlur(e);
   };
 
   const handleKeyDown = (e) => {
@@ -117,12 +154,29 @@ export const MoneyInput = forwardRef(function MoneyInput(
     if (onWheel) onWheel(e);
   };
 
-  const displayVal =
-    value === null || value === undefined
-      ? ''
-      : typeof value === 'object' && value !== null && value.target && 'value' in value.target
-      ? String(value.target.value)
-      : String(value);
+  const handlePaste = (e) => {
+    // Let browser paste, then sanitize via onChange, or handle clipboardData
+    const pasted = e.clipboardData?.getData('text');
+    if (pasted) {
+      e.preventDefault();
+      const clean = sanitize(pasted);
+      const input = e.target;
+      const start = input.selectionStart || 0;
+      const end = input.selectionEnd || 0;
+      const nextVal = sanitize(
+        localValue.slice(0, start) + clean + localValue.slice(end)
+      );
+      setLocalValue(nextVal);
+      if (onChange) {
+        const syntheticEvent = {
+          target: { name: props.name, value: nextVal },
+          currentTarget: { name: props.name, value: nextVal },
+          toString: () => nextVal,
+        };
+        onChange(syntheticEvent);
+      }
+    }
+  };
 
   return (
     <input
@@ -130,12 +184,13 @@ export const MoneyInput = forwardRef(function MoneyInput(
       type="text"
       inputMode={allowDecimal ? 'decimal' : 'numeric'}
       dir={dir}
-      value={displayVal}
+      value={localValue}
       onChange={handleChange}
       onFocus={handleFocus}
-      onBlur={onBlur}
+      onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       onWheel={handleWheel}
+      onPaste={handlePaste}
       autoComplete="off"
       className={className}
       {...props}

@@ -48,7 +48,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
     phone: DEFAULT_PHONE_VALUE,
     address: '',
     tax_number: '',
-    supplier_type: 'goods', // 'goods' | 'service'
+    supplier_type: '', // required for suppliers
     credit_limit: '', // Blank or 0 means no limit
     supplier_opening_balance: '0',
     supplier_opening_type: 'credit',
@@ -144,7 +144,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
               phone: p.phone || DEFAULT_PHONE_VALUE,
               address: p.address || '',
               tax_number: p.tax_number || '',
-              supplier_type: p.supplier_type || 'goods',
+              supplier_type: p.supplier_type || '',
               credit_limit: p.credit_limit ? String(p.credit_limit) : '',
               supplier_opening_balance: String(p.supplier_opening_balance ?? p.opening_balance ?? 0),
               supplier_opening_type: p.supplier_opening_type || 'credit',
@@ -180,6 +180,9 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
     if (phoneErr) errs.phone = phoneErr;
 
     if (isSupplier) {
+      if (!form.supplier_type) {
+        errs.supplier_type = 'برجاء اختيار نوع نشاط المورد';
+      }
       const supOpen = Number(form.supplier_opening_balance);
       if (form.supplier_opening_balance === '' || isNaN(supOpen) || supOpen < 0) {
         errs.supplier_opening_balance = 'رصيد أول المدة للمورد يجب أن يكون رقماً لا يقل عن صفر';
@@ -345,7 +348,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
     });
   };
 
-  const isFormValid = Boolean(form.name.trim() && form.code.trim());
+  const isFormValid = Boolean(form.name.trim() && form.code.trim() && (!isSupplier || Boolean(form.supplier_type)));
 
   if (loading) {
     return (
@@ -374,8 +377,8 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!isFormValid || saving}
-            className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50"
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50 cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>{saving ? 'جاري الحفظ...' : isEdit ? 'حفظ التعديلات' : 'حفظ جهة التعامل'}</span>
@@ -568,10 +571,12 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
                 maxLength={11}
                 value={form.phone}
                 onChange={handlePhoneChange}
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm font-mono text-left bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
+                className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono text-left bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 ${
+                  errors.phone ? 'border-rose-500 bg-rose-50/30' : 'border-slate-300'
+                }`}
               />
               <span className="text-[11px] text-slate-500 mt-1 block">
-                رقم موبايل مصري يبدأ بـ 01 (010 / 011 / 012 / 015)
+                رقم موبايل يبدأ بـ 01 ومكوّن من 11 رقماً
               </span>
               <FieldError error={errors.phone} />
             </div>
@@ -610,18 +615,27 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
 
             {isSupplier && (
               <div>
-                <label htmlFor="party-sup-type" className="block text-xs font-semibold text-slate-700 mb-1">
-                  نوع نشاط المورد
+                <label htmlFor="party-supplier-type-select" className="block text-xs font-semibold text-slate-700 mb-1">
+                  نوع نشاط المورد *
                 </label>
                 <select
-                  id="party-sup-type"
+                  id="party-supplier-type-select"
                   value={form.supplier_type}
-                  onChange={(e) => setForm((prev) => ({ ...prev, supplier_type: e.target.value }))}
-                  className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800"
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, supplier_type: e.target.value }));
+                    if (errors.supplier_type) {
+                      setErrors((prev) => ({ ...prev, supplier_type: null }));
+                    }
+                  }}
+                  className={`w-full px-3.5 py-2 border rounded-lg text-sm bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 ${
+                    errors.supplier_type ? 'border-rose-500 bg-rose-50/30' : 'border-slate-300'
+                  }`}
                 >
+                  <option value="">-- اختر نوع نشاط المورد --</option>
                   <option value="goods">توريد خامات ومستلزمات إنتاج</option>
                   <option value="service">مصنع تشغيل خارجي لدى الغير (تطريز / غسيل / حياكة)</option>
                 </select>
+                <FieldError error={errors.supplier_type} />
               </div>
             )}
 
@@ -885,7 +899,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!isFormValid || saving}
+            disabled={saving}
             className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50 cursor-pointer"
           >
             <Save className="w-4 h-4" />

@@ -1,26 +1,55 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { CheckCircle2, X, AlertCircle, FileText } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
 
 /**
  * DocumentConfirmModal
- * Modal shown before issuing an invoice or document (Purchase / Sales / Orders).
- * Displays document type, party name (supplier/customer), payment terms, and net total.
+ * Modal shown before issuing an invoice, voucher, or document.
+ * Displays document type, party name, payment terms, or custom summaryData.
  * Actions: "تأكيد الإصدار" / "رجوع"
  */
 export default function DocumentConfirmModal({
   isOpen,
   onClose,
+  onCancel,
   onConfirm,
   title = 'تأكيد إصدار المستند',
+  message = '',
   documentType = 'فاتورة',
   partyLabel = 'الطرف الثاني',
   partyName = '',
   paymentType = 'cash', // 'cash' | 'credit'
   totalAmount = 0,
   isSubmitting = false,
+  confirmLabel = 'تأكيد الإصدار',
+  cancelLabel = 'رجوع',
+  summaryData = null,
   extraDetails = null,
 }) {
+  const handleClose = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (onClose) {
+      onClose();
+    } else if (onCancel) {
+      onCancel();
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleClose(e);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, onCancel]);
+
   if (!isOpen) return null;
 
   const paymentLabel = paymentType === 'credit' ? 'آجل' : 'نقدي فوري';
@@ -32,8 +61,14 @@ export default function DocumentConfirmModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
       dir="rtl"
+      role="dialog"
+      aria-modal="true"
+      onClick={handleClose}
     >
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden transform scale-100 transition-all">
+      <div
+        className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden transform scale-100 transition-all text-right"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -47,10 +82,10 @@ export default function DocumentConfirmModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isSubmitting}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-200/60 transition-colors"
-            title="رجوع"
+            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-200/60 transition-colors cursor-pointer"
+            title={cancelLabel}
           >
             <X className="w-4 h-4" />
           </button>
@@ -58,37 +93,50 @@ export default function DocumentConfirmModal({
 
         {/* Body Confirmation Cards */}
         <div className="p-6 space-y-4">
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-            {/* Party Row */}
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-600">{partyLabel}:</span>
-              <span className="font-bold text-slate-900 text-sm">{partyName || 'غير محدد'}</span>
+          {summaryData ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
+              {Object.entries(summaryData).map(([key, value]) => (
+                <div key={key} className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-0">
+                  <span className="font-semibold text-slate-600">{key}:</span>
+                  <span className="font-bold text-slate-900 text-xs font-mono">{String(value)}</span>
+                </div>
+              ))}
             </div>
+          ) : (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              {/* Party Row */}
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-600">{partyLabel}:</span>
+                <span className="font-bold text-slate-900 text-sm">{partyName || 'غير محدد'}</span>
+              </div>
 
-            {/* Payment Terms Row */}
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200/80">
-              <span className="font-semibold text-slate-600">طريقة الدفع:</span>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${paymentBadgeColor}`}>
-                {paymentLabel}
+              {/* Payment Terms Row */}
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200/80">
+                <span className="font-semibold text-slate-600">طريقة الدفع:</span>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${paymentBadgeColor}`}>
+                  {paymentLabel}
+                </span>
+              </div>
+
+              {/* Extra details if provided */}
+              {extraDetails}
+            </div>
+          )}
+
+          {/* Grand Total Display if totalAmount is present */}
+          {totalAmount > 0 && (
+            <div className="bg-slate-900 text-white rounded-xl p-4 flex items-center justify-between">
+              <span className="text-sm font-bold text-slate-200">الصافي النهائي للمستند:</span>
+              <span className="text-xl font-bold font-mono text-emerald-400">
+                {formatCurrency(totalAmount)}
               </span>
             </div>
-
-            {/* Extra details if provided */}
-            {extraDetails}
-          </div>
-
-          {/* Grand Total Display */}
-          <div className="bg-slate-900 text-white rounded-xl p-4 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-200">الصافي النهائي للمستند:</span>
-            <span className="text-xl font-bold font-mono text-emerald-400">
-              {formatCurrency(totalAmount)}
-            </span>
-          </div>
+          )}
 
           <div className="flex items-start gap-2 p-3 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-900">
             <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
             <span>
-              بالضغط على «تأكيد الإصدار» سيتم اعتماد الفاتورة رسمياً، وتحديث الأرصدة المخزنية والمالية.
+              {message || 'بالضغط على «تأكيد الإصدار» سيتم اعتماد الفاتورة رسمياً، وتحديث الأرصدة المخزنية والمالية.'}
             </span>
           </div>
         </div>
@@ -97,11 +145,11 @@ export default function DocumentConfirmModal({
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isSubmitting}
             className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 bg-white hover:bg-slate-100 font-bold text-sm transition-colors cursor-pointer disabled:opacity-50"
           >
-            رجوع
+            {cancelLabel}
           </button>
           <button
             type="button"
@@ -110,7 +158,7 @@ export default function DocumentConfirmModal({
             className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
           >
             <CheckCircle2 className="w-4 h-4" />
-            <span>{isSubmitting ? 'جاري الاعتماد...' : 'تأكيد الإصدار'}</span>
+            <span>{isSubmitting ? 'جاري الاعتماد...' : confirmLabel}</span>
           </button>
         </div>
       </div>

@@ -377,6 +377,7 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
         confirmLabel="إصدار السند الآن"
         cancelLabel="تعديل البيانات"
         onConfirm={handleConfirmIssue}
+        onClose={() => setShowConfirmModal(false)}
         onCancel={() => setShowConfirmModal(false)}
         isSubmitting={saving}
         summaryData={{

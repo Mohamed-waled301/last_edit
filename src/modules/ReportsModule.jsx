@@ -37,6 +37,7 @@ import { exportToExcel } from '../utils/exportExcel';
 import StockCardPage from './inventory/StockCardPage';
 import { resolveOpeningBalance, resolveOpeningType } from '../logic/balances';
 import { toPiasters, fromPiasters } from '../utils/money';
+import { isValidEgyptianMobile } from '../utils/phone';
 
 export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }) {
   // 'index' or specific report key:
@@ -92,7 +93,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
         },
         {
           key: 'goods-receipts',
-          title: 'تقرير أذون الاستلام المخزني (GRN)',
+          title: 'تقرير أذون الاستلام المخزني',
           desc: 'أذون استلام المشتريات وتوريد الخامات بالمخازن مع تفاصيل البنود والكميات المستلمة',
           icon: Package,
           color: 'blue'
@@ -162,6 +163,13 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
           desc: 'الجهات المسجلة كعميل ومورد في آن واحد (له / عليه / الصافي) مع سجل عمليات المقاصة',
           icon: Scale,
           color: 'purple'
+        },
+        {
+          key: 'invalid-phones',
+          title: 'تقرير أرقام الهواتف غير المطابقة',
+          desc: 'حصر شامل لكافة جهات التعامل والورش والعملاء التي لا تبدأ بـ 01 أو لا تتكون من 11 رقماً بدقة',
+          icon: AlertTriangle,
+          color: 'amber'
         }
       ]
     },
@@ -442,6 +450,25 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
             setReportData(populated);
             break;
           }
+          case 'invalid-phones': {
+            const parties = await db.parties.toArray();
+            const invalid = parties.filter((p) => p.phone && !isValidEgyptianMobile(p.phone));
+            setReportData(invalid.map((p) => {
+              const ph = String(p.phone || '');
+              let reason = 'رقم غير صالح';
+              if (!ph.startsWith('01')) {
+                reason = 'لا يبدأ بـ 01';
+              } else if (ph.length !== 11) {
+                reason = `طول غير مطابق (${ph.length} أرقام بدلاً من 11)`;
+              }
+              return {
+                ...p,
+                phone_status: reason,
+                party_type_label: p.is_supplier && p.is_customer ? 'مورد وعميل' : (p.is_supplier ? 'مورد' : 'عميل')
+              };
+            }));
+            break;
+          }
           case 'production-orders': {
             const res = await api.getProductionOrders();
             setReportData(res.data || res.production_orders || []);
@@ -555,7 +582,15 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
   };
 
   const handlePrint = () => {
-    window.print();
+    try {
+      sessionStorage.setItem('print_preview_payload', JSON.stringify({
+        type: 'report',
+        reportKey: activeReport,
+        reportTitle: currentReportMeta?.title,
+        data: filteredData,
+      }));
+    } catch {}
+    window.location.hash = `#/print-preview?type=report&id=${activeReport}&returnUrl=${encodeURIComponent('#/reports')}`;
   };
 
   // If Stock Card selected: render full StockCardPage component with back button to index!
@@ -964,6 +999,17 @@ function renderTableHeaders(key) {
           <th className="p-3 text-center font-mono">عدد المقاصات</th>
         </tr>
       );
+    case 'invalid-phones':
+      return (
+        <tr>
+          <th className="p-3">الكود</th>
+          <th className="p-3">اسم جهة التعامل</th>
+          <th className="p-3 text-center">الصفة</th>
+          <th className="p-3 font-mono">رقم الهاتف المسجل</th>
+          <th className="p-3 text-center">سبب عدم المطابقة</th>
+          <th className="p-3 text-center">إجراء التصحيح</th>
+        </tr>
+      );
     case 'production-orders':
       return (
         <tr>
@@ -1166,6 +1212,28 @@ function renderTableRow(key, row, idx) {
           <td className="p-3 text-center font-mono font-bold text-emerald-700">{formatCurrency(row.customer_balance)}</td>
           <td className="p-3 text-center font-mono font-bold text-purple-900">{formatCurrency(row.net_balance)}</td>
           <td className="p-3 text-center font-mono">{row.settlements_count}</td>
+        </tr>
+      );
+    case 'invalid-phones':
+      return (
+        <tr key={row.id || idx} className="hover:bg-slate-50">
+          <td className="p-3 font-mono font-bold text-slate-900">{row.code}</td>
+          <td className="p-3 font-bold text-slate-800">{row.name}</td>
+          <td className="p-3 text-center font-semibold text-slate-700">{row.party_type_label}</td>
+          <td className="p-3 font-mono font-bold text-rose-700">{row.phone}</td>
+          <td className="p-3 text-center text-xs text-amber-800 font-bold bg-amber-50/50 rounded">{row.phone_status}</td>
+          <td className="p-3 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                const target = row.is_customer && !row.is_supplier ? 'customers' : 'suppliers';
+                window.location.hash = `#/${target}/${row.id}/edit`;
+              }}
+              className="px-2.5 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-md font-bold hover:bg-blue-100 cursor-pointer"
+            >
+              تصحيح الرقم
+            </button>
+          </td>
         </tr>
       );
     case 'production-orders':

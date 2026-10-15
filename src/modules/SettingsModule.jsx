@@ -198,7 +198,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
             {/* Company Logo Upload (Requirement 5) */}
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
               <label className="block text-sm font-bold text-gray-800">
-                شعار المنشأة (Company Logo)
+                شعار المنشأة
               </label>
               <p className="text-xs text-gray-500">
                 يظهر الشعار بجوار اسم المصنع في الشريط العلوي وعلى جميع المطبوعات والتقارير والفواتير تلقائياً.
@@ -479,7 +479,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">كود الجهاز (Machine ID)</label>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">كود الجهاز</label>
             <div className="w-full h-11 rounded-md bg-gray-50 border border-gray-200 px-3 flex items-center font-mono font-bold text-[#1F3A5F]">
               {licenseInfo?.machineCode || '—'}
             </div>

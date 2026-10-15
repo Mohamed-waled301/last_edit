@@ -13,12 +13,16 @@ import {
   Building2, 
   DollarSign, 
   Filter,
+  FileText,
+  AlertTriangle,
+  Printer,
   X
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, formatNumber, formatDate } from '../../utils/formatters';
 import { exportToExcel } from '../../utils/exportExcel';
+import { isValidEgyptianMobile } from '../../utils/phone';
 
 export default function ManufacturingListPage({ onNotify }) {
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'stage_reports' | 'workshops'
@@ -361,6 +365,17 @@ export default function ManufacturingListPage({ onNotify }) {
                                 <span>تعديل</span>
                               </button>
 
+                              {/* Print Order Action */}
+                              <button
+                                type="button"
+                                onClick={() => { window.location.hash = `#/print-preview?type=cut_order&id=${o.id}&returnUrl=${encodeURIComponent('#/manufacturing')}`; }}
+                                className="px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-100 font-bold rounded-md border border-slate-300 transition-colors cursor-pointer flex items-center gap-1"
+                                title="طباعة أمر القص"
+                              >
+                                <Printer className="w-3.5 h-3.5 text-slate-600" />
+                                <span>طباعة</span>
+                              </button>
+
                               {/* Close Order Action (Requirement 4.2) */}
                               {!isClosed && (
                                 <button
@@ -544,18 +559,44 @@ export default function ManufacturingListPage({ onNotify }) {
                         <td className="p-3 font-semibold text-slate-700">
                           {w.service_stage === 'printing' ? 'مطبعة' : w.service_stage === 'embroidery' ? 'ورشة تطريز' : w.service_stage === 'sewing' ? 'ورشة حياكة' : 'مورد خدمات'}
                         </td>
-                        <td className="p-3 font-mono text-slate-700">{w.phone || '---'}</td>
+                        <td className="p-3 font-mono text-slate-700">
+                          <span className="flex items-center gap-1">
+                            {w.phone || '---'}
+                            {w.phone && !isValidEgyptianMobile(w.phone) && (
+                              <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-amber-100 text-amber-800 font-sans font-bold border border-amber-300"
+                                title="رقم الهاتف غير مطابق للمواصفات (يجب أن يبدأ بـ 01 ويتكون من 11 رقماً)"
+                              >
+                                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                <span>غير مطابق</span>
+                              </span>
+                            )}
+                          </span>
+                        </td>
                         <td className="p-3 text-left font-mono font-bold text-emerald-700">
                           {formatCurrency(w.supplier_balance || 0)}
                         </td>
                         <td className="p-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => { window.location.hash = `#/suppliers/${w.id}/edit`; }}
-                            className="px-2.5 py-1 text-xs text-blue-700 hover:bg-blue-50 font-bold rounded-md border border-blue-200 cursor-pointer"
-                          >
-                            كشف الحساب
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => { window.location.hash = `#/vendors/${w.id}/statement`; }}
+                              className="px-2.5 py-1 text-xs text-blue-700 hover:bg-blue-50 font-bold rounded-md border border-blue-200 cursor-pointer inline-flex items-center gap-1"
+                              title="عرض كشف الحساب"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>كشف الحساب</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { window.location.hash = `#/suppliers/${w.id}/edit`; }}
+                              className="px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-100 font-bold rounded-md border border-slate-300 cursor-pointer inline-flex items-center gap-1"
+                              title="تعديل بيانات الورشة أو المورد"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                              <span>تعديل</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))

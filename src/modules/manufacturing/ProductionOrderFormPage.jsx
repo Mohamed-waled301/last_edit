@@ -42,9 +42,9 @@ import {
 const ALL_SIZES = ['M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
 
 const STAGE_KEYS = [
-  { key: 'printing', title: 'الطباعة (Printing)', icon: Printer, color: 'blue' },
-  { key: 'embroidery', title: 'التطريز (Embroidery)', icon: Sparkles, color: 'purple' },
-  { key: 'sewing', title: 'الحياكة (Sewing)', icon: Cog, color: 'emerald' }
+  { key: 'printing', title: 'الطباعة', icon: Printer, color: 'blue' },
+  { key: 'embroidery', title: 'التطريز', icon: Sparkles, color: 'purple' },
+  { key: 'sewing', title: 'الحياكة', icon: Cog, color: 'emerald' }
 ];
 
 /**
@@ -1033,7 +1033,7 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
           <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl shadow-xs space-y-2">
             <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
               <Lock className="w-4 h-4 text-amber-700" />
-              <span>تنبيه: هذا أمر قص مقفل (Closed). يتطلب التعديل إدخال سبب كتابي لحفظ التعديلات في سجل التدقيق.</span>
+              <span>تنبيه: هذا أمر قص مقفل. يتطلب التعديل إدخال سبب كتابي لحفظ التعديلات في سجل التدقيق.</span>
             </div>
             <div>
               <label className="block text-xs font-bold text-amber-900 mb-1">
@@ -1094,7 +1094,7 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
                 {/* Cutting Name */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    اسم القصة (Cutting Name) *
+                    اسم القصة *
                   </label>
                   <input
                     type="text"
@@ -1131,7 +1131,7 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    نوع القماش (Fabric Type)
+                    نوع القماش
                   </label>
                   <input
                     type="text"
@@ -1144,7 +1144,7 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    اللون (Color)
+                    اللون
                   </label>
                   <input
                     type="text"
@@ -1198,33 +1198,18 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
                 </div>
               </div>
 
-              {/* Notes and Cutting Comment (Requirement 4.2: plain comment, no suspend status) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    تعليق أمر القص (Cutting Order Comment)
-                  </label>
-                  <input
-                    type="text"
-                    value={form.cutting_comment}
-                    onChange={(e) => setForm((prev) => ({ ...prev, cutting_comment: e.target.value }))}
-                    aria-label="تعليق أمر القص"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    ملاحظات عامة
-                  </label>
-                  <input
-                    type="text"
-                    value={form.notes}
-                    onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                    aria-label="ملاحظات عامة"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
-                  />
-                </div>
+              {/* Notes */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  ملاحظات عامة
+                </label>
+                <input
+                  type="text"
+                  value={form.notes}
+                  onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  aria-label="ملاحظات عامة"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
+                />
               </div>
             </div>
 
@@ -1509,7 +1494,7 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
                               : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
                           }`}
                         >
-                          على دفعات (Batches)
+                          على دفعات
                         </button>
                       </div>
 
@@ -1696,83 +1681,102 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
               </div>
             )}
 
-            {/* Add Payment Form */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
-              <div className="text-xs font-bold text-slate-800">تسجيل دفعة مرحلة جديدة</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">المرحلة المستهدفة</label>
+            {/* Record New Payment Form (Requirement 5) */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-sm font-bold text-slate-900">تسجيل دفعة مرحلة جديدة</span>
+                <span className="text-xs text-slate-500">صرف دفعات للمراحل الإنتاجية المختلفة وربطها بالخزائن</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-start">
+                {/* 1. Stage Dropdown */}
+                <div className="flex flex-col">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">المرحلة المستهدفة</label>
                   <select
                     value={newPayment.stage_key}
                     onChange={(e) => setNewPayment(prev => ({ ...prev, stage_key: e.target.value }))}
                     aria-label="المرحلة المستهدفة للدفعة"
-                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold bg-white"
+                    className="w-full h-12 px-3 border border-slate-300 rounded-xl text-xs font-bold bg-white focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
                   >
                     {STAGE_KEYS.map(s => (
-                      <option key={s.key} value={s.key}>{s.title} (متبقي: {formatCurrency(computedStages[s.key]?.remaining || 0)})</option>
+                      <option key={s.key} value={s.key}>{s.title}</option>
                     ))}
                   </select>
+                  <span className="text-[11px] text-slate-500 font-semibold block mt-1.5">
+                    المتبقي: <strong className="text-emerald-700 font-mono">{formatCurrency(computedStages[newPayment.stage_key]?.remaining || 0)}</strong>
+                  </span>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">تاريخ الدفعة</label>
+                {/* 2. Payment Date */}
+                <div className="flex flex-col">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">تاريخ الدفعة</label>
                   <input
                     type="date"
                     value={newPayment.payment_date}
                     onChange={(e) => setNewPayment(prev => ({ ...prev, payment_date: e.target.value }))}
                     aria-label="تاريخ الدفعة"
-                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white"
+                    className="w-full h-12 px-3 border border-slate-300 rounded-xl text-xs font-mono bg-white focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
                   />
+                  <span className="text-[11px] text-slate-400 block mt-1.5">تاريخ تسجيل الحركة</span>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                {/* 3. Amount */}
+                <div className="flex flex-col">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     المبلغ (ج.م) *
                   </label>
                   <MoneyInput
                     value={newPayment.amount}
                     onChange={(val) => setNewPayment(prev => ({ ...prev, amount: val }))}
                     aria-label="مبلغ الدفعة"
-                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold bg-white text-emerald-800"
+                    className="w-full h-12 px-3 border border-slate-300 rounded-xl text-xs font-mono font-bold bg-white text-emerald-800 focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
                   />
+                  <span className="text-[11px] text-slate-400 block mt-1.5">مبلغ الدفعة المصروفة</span>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">الخزينة المنصرف منها</label>
+                {/* 4. Treasury Account */}
+                <div className="flex flex-col">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">الخزينة المنصرف منها</label>
                   <select
                     value={newPayment.account_id}
                     onChange={(e) => setNewPayment(prev => ({ ...prev, account_id: e.target.value }))}
                     aria-label="الخزينة المنصرف منها"
-                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-bold"
+                    className="w-full h-12 px-3 border border-slate-300 rounded-xl text-xs bg-white font-bold focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
                   >
                     {treasuryAccounts.map(a => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} ({formatCurrency(a.current_balance)})
-                      </option>
+                      <option key={a.id} value={a.id}>{a.name}</option>
                     ))}
                   </select>
+                  <span className="text-[11px] text-slate-500 font-semibold block mt-1.5">
+                    الرصيد: <strong className="text-blue-700 font-mono">{formatCurrency(treasuryAccounts.find(a => String(a.id) === String(newPayment.account_id))?.current_balance || 0)}</strong>
+                  </span>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">ملاحظات وبيان الدفعة</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newPayment.notes}
-                      onChange={(e) => setNewPayment(prev => ({ ...prev, notes: e.target.value }))}
-                      aria-label="ملاحظات وبيان الدفعة"
-                      className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddStagePayment}
-                      disabled={paymentSubmitting}
-                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>{paymentSubmitting ? 'تسجيل...' : 'تسجيل'}</span>
-                    </button>
-                  </div>
+                {/* 5. Notes */}
+                <div className="flex flex-col">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">ملاحظات وبيان الدفعة</label>
+                  <input
+                    type="text"
+                    value={newPayment.notes}
+                    onChange={(e) => setNewPayment(prev => ({ ...prev, notes: e.target.value }))}
+                    aria-label="ملاحظات وبيان الدفعة"
+                    className="w-full h-12 px-3 border border-slate-300 rounded-xl text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
+                  />
+                  <span className="text-[11px] text-slate-400 block mt-1.5">تفاصيل أو رقم سند الصرف</span>
+                </div>
+
+                {/* 6. Submit Button aligned with inputs */}
+                <div className="flex flex-col">
+                  <label className="block text-xs font-bold text-transparent mb-1 select-none hidden sm:block">إجراء</label>
+                  <button
+                    type="button"
+                    onClick={handleAddStagePayment}
+                    disabled={paymentSubmitting}
+                    className="w-full h-12 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{paymentSubmitting ? 'جاري التسجيل...' : 'تسجيل الدفعة'}</span>
+                  </button>
+                  <span className="text-[11px] text-transparent select-none hidden sm:block mt-1.5">-</span>
                 </div>
               </div>
             </div>

@@ -149,7 +149,7 @@ export const BackupModule = ({ onBack, onNotify }) => {
         <div className="flex items-start gap-3">
           <ShieldCheck className="w-6 h-6 text-[#1F3A5F] shrink-0 mt-0.5" />
           <div className="text-sm">
-            <h3 className="font-bold text-[#1F2937] mb-1">قاعدة البيانات المحلية الآمنة (SQLite)</h3>
+            <h3 className="font-bold text-[#1F2937] mb-1">قاعدة البيانات المحلية الآمنة</h3>
             <p className="text-gray-600 leading-relaxed">
               بيانات النظام محفوظة محلياً بالكامل على جهازك داخل قاعدة بيانات SQLite مشفرة ومؤمنة في مجلد بيانات التطبيق. يمكنك في أي وقت إنشاء نسخة احتياطية آمنة أو استرجاعها مباشرة.
             </p>

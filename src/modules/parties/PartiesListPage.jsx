@@ -12,13 +12,14 @@ import {
   CreditCard,
   ShieldCheck,
   Trash2,
+  FileText,
   X
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { exportToExcel } from '../../utils/exportExcel';
-import { isValidPhoneForWhatsApp, openWhatsAppChat } from '../../utils/phone';
+import { isValidPhoneForWhatsApp, isValidEgyptianMobile, openWhatsAppChat } from '../../utils/phone';
 import { MoneyInput } from '../../components/MoneyInput';
 
 export default function PartiesListPage({ mode = 'suppliers', defaultTab = null, onNotify }) {
@@ -291,7 +292,18 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
 
                       <td className="p-3 text-gray-700 font-mono">
                         <div className="flex flex-col gap-1 items-start">
-                          <span className="font-bold text-xs">{p.phone || '-'}</span>
+                          <span className="font-bold text-xs flex items-center gap-1">
+                            {p.phone || '-'}
+                            {p.phone && !isValidEgyptianMobile(p.phone) && (
+                              <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-amber-100 text-amber-800 font-sans font-bold border border-amber-300"
+                                title="رقم الهاتف غير مطابق للمواصفات (يجب أن يبدأ بـ 01 ويتكون من 11 رقماً)"
+                              >
+                                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                <span>غير مطابق</span>
+                              </span>
+                            )}
+                          </span>
                           {p.phone && (
                             <div className="flex items-center gap-1">
                               <button
@@ -398,6 +410,17 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                       {/* Actions */}
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              window.location.hash = `#/vendors/${p.id}/statement`;
+                            }}
+                            className="px-2.5 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md font-bold transition-colors inline-flex items-center gap-1 border border-blue-200 cursor-pointer"
+                            title="عرض كشف الحساب التفصيلي"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>كشف حساب</span>
+                          </button>
                           <button
                             type="button"
                             onClick={() => {

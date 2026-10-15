@@ -1,20 +1,47 @@
 /**
- * Shared Egyptian mobile phone helpers (أرقام الموبايل المصرية).
+ * Shared Egyptian mobile phone helpers for code systems ERP.
  *
  * Rules:
- * - Egyptian mobiles are 11 digits, start with "01", second prefix one of 010/011/012/015.
- * - New forms default the input value to "01" (prefix only, NOT a dummy full number).
- * - A value of "" / "0" / "01" is treated as "untouched / empty" (optional field).
+ * - Digits only, starts with 01, exactly 11 digits (no more, no less): /^01\d{9}$/
+ * - Converts Arabic-Indic numerals (٠-٩) to Western (0-9).
+ * - Strips spaces, dashes, parentheses, '+', and blocks any non-digit character as typed.
+ * - Error message: "رقم الهاتف يجب أن يبدأ بـ 01 ويتكون من 11 رقماً".
+ * - Untouched "01" default is treated as empty for optional fields.
+ * - For WhatsApp, valid 01xxxxxxxxx becomes 201xxxxxxxxx (e.g. 01012345678 -> 201012345678).
  */
 
 export const DEFAULT_PHONE_VALUE = '01';
 export const EGYPT_MOBILE_LENGTH = 11;
-export const EGYPT_MOBILE_PREFIXES = ['010', '011', '012', '015'];
-export const EGYPT_MOBILE_REGEX = /^01[0125]\d{8}$/;
+export const PHONE_ERROR_MESSAGE = 'رقم الهاتف يجب أن يبدأ بـ 01 ويتكون من 11 رقماً';
 
-/** Keep digits only, cap at 11 chars. */
+// Starts with 01, followed by exactly 9 digits (total 11 digits)
+export const EGYPT_MOBILE_REGEX = /^01\d{9}$/;
+
+/**
+ * Extract raw digits, converting Arabic-Indic numerals and normalizing international prefix.
+ */
+export function getRawPhoneDigits(value) {
+  if (value === null || value === undefined) return '';
+  let str = String(value);
+  // Convert Arabic-Indic digits (٠-٩)
+  str = str.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+  // Strip spaces, dashes, '+', and all other non-numeric characters
+  str = str.replace(/[^0-9]/g, '');
+  // Normalize international prefixes (00201... or 201...) to 01...
+  if (str.startsWith('00201') && str.length >= 13) {
+    str = str.slice(4);
+  } else if (str.startsWith('201') && str.length >= 12) {
+    str = '0' + str.slice(2);
+  }
+  return str;
+}
+
+/**
+ * Convert Arabic-Indic digits to Western digits, strip all non-digits, cap at 11 digits for input typing.
+ */
 export function sanitizeEgyptianPhoneInput(value) {
-  return String(value ?? '').replace(/[^0-9]/g, '').slice(0, EGYPT_MOBILE_LENGTH);
+  const raw = getRawPhoneDigits(value);
+  return raw.slice(0, EGYPT_MOBILE_LENGTH);
 }
 
 /** True when the field still holds only the untouched "01" prefix (or empty). */
@@ -23,22 +50,22 @@ export function isUntouchedPhoneDefault(value) {
   return digits === '' || digits === '0' || digits === DEFAULT_PHONE_VALUE;
 }
 
-/** Strict check for a complete Egyptian mobile number. */
+/** Strict check for a valid Egyptian mobile number: starts with 01 and exactly 11 digits (no more, no less). */
 export function isValidEgyptianMobile(value) {
-  return EGYPT_MOBILE_REGEX.test(sanitizeEgyptianPhoneInput(value));
+  const raw = getRawPhoneDigits(value);
+  return raw.length === EGYPT_MOBILE_LENGTH && raw.startsWith('01');
 }
 
 /**
  * onChange handler factory for Egyptian phone inputs.
- * Keeps digits only (max 11). Never clears the "01" prefix to empty while typing:
- * deleting everything resets back to "01".
+ * Sanitizes digits, converts Arabic-Indic numerals, maintains 11-digit cap.
  */
 export function handleEgyptianPhoneChange(event, setValue) {
-  const digits = sanitizeEgyptianPhoneInput(event?.target?.value ?? '');
+  const raw = event?.target?.value ?? String(event ?? '');
+  const digits = sanitizeEgyptianPhoneInput(raw);
   const next = digits === '' ? DEFAULT_PHONE_VALUE : digits;
   if (typeof setValue === 'function') {
     setValue(next);
-    return next;
   }
   return next;
 }
@@ -46,6 +73,7 @@ export function handleEgyptianPhoneChange(event, setValue) {
 /**
  * Normalize a phone value for persistence.
  * Untouched "01" prefix is stored as "" (no dummy numbers in the DB).
+ * Existing stored numbers are preserved as-is.
  */
 export function normalizePhoneForSave(value) {
   if (isUntouchedPhoneDefault(value)) return '';
@@ -54,51 +82,40 @@ export function normalizePhoneForSave(value) {
 
 /**
  * Validate an Egyptian phone field.
- * - Optional by default: "" / "01" passes when not required.
- * - Otherwise must match 010/011/012/015 + 11 digits.
- * Returns an Arabic error message or null.
+ * - If empty / untouched and not required -> null (passes).
+ * - If required and empty / untouched -> "رقم الهاتف مطلوب".
+ * - If filled and does not start with 01 or not 11 digits -> PHONE_ERROR_MESSAGE.
+ * Returns Arabic error string or null.
  */
 export function validateEgyptianMobile(value, { required = false, label = 'رقم الهاتف' } = {}) {
   const digits = sanitizeEgyptianPhoneInput(value);
   if (digits === '' || digits === '0' || digits === DEFAULT_PHONE_VALUE) {
-    return required ? `${label} مطلوب (أكمل رقم موبايل مصري يبدأ بـ 01)` : null;
+    return required ? `${label} مطلوب` : null;
   }
   if (!isValidEgyptianMobile(digits)) {
-    return `${label} يجب أن يكون رقم موبايل مصري صحيح (010 أو 011 أو 012 أو 015) ومكوّن من 11 رقماً`;
+    return PHONE_ERROR_MESSAGE;
   }
   return null;
 }
 
 /**
+ * Shared validator function for general use.
+ */
+export function validatePhone(value, isRequired = false) {
+  return validateEgyptianMobile(value, { required: isRequired });
+}
+
+/**
  * Normalize number for WhatsApp link:
- * - Drops spaces, dashes, parentheses and symbols
- * - Drops leading '+' or '00'
- * - If Egyptian mobile starting with 01 (11 digits): drops leading '0' and adds '+20' -> '201XXXXXXXXX'
- * - If already has country code (e.g. starts with 20... or other international code), keeps it
- * Returns clean digits string or null if invalid/missing.
+ * - Valid Egyptian mobile (starts with 01, 11 digits) becomes 201xxxxxxxxx for wa.me.
+ * Returns clean digits string or null if invalid.
  */
 export function normalizePhoneForWhatsApp(phone) {
   if (!phone) return null;
-  let digits = String(phone).replace(/[^0-9+]/g, '');
-  if (!digits) return null;
-
-  if (digits.startsWith('+')) {
-    digits = digits.slice(1);
-  } else if (digits.startsWith('00')) {
-    digits = digits.slice(2);
-  }
-
-  // Egyptian mobile starting with '01' (11 digits: e.g. 01012345678)
-  if (digits.startsWith('01') && digits.length === 11) {
-    digits = '20' + digits.slice(1);
-  } else if (digits.startsWith('1') && digits.length === 10) {
-    // Missing leading 0
-    digits = '20' + digits;
-  }
-
-  // A valid WhatsApp number should have at least 9-15 digits
-  if (digits.length >= 9 && digits.length <= 15) {
-    return digits;
+  const digits = sanitizeEgyptianPhoneInput(phone);
+  if (isValidEgyptianMobile(digits)) {
+    // 01xxxxxxxxx -> 201xxxxxxxxx
+    return '2' + digits;
   }
   return null;
 }
@@ -117,7 +134,7 @@ export function isValidPhoneForWhatsApp(phone) {
 export function openWhatsAppChat(phone, message = '') {
   const normalized = normalizePhoneForWhatsApp(phone);
   if (!normalized) {
-    alert('رقم الهاتف غير مسجل أو غير صالح لإجراء محادثة واتساب');
+    alert(PHONE_ERROR_MESSAGE);
     return false;
   }
 
@@ -137,7 +154,7 @@ export function openWhatsAppChat(phone, message = '') {
 export default {
   DEFAULT_PHONE_VALUE,
   EGYPT_MOBILE_LENGTH,
-  EGYPT_MOBILE_PREFIXES,
+  PHONE_ERROR_MESSAGE,
   EGYPT_MOBILE_REGEX,
   sanitizeEgyptianPhoneInput,
   isUntouchedPhoneDefault,
@@ -145,8 +162,8 @@ export default {
   handleEgyptianPhoneChange,
   normalizePhoneForSave,
   validateEgyptianMobile,
+  validatePhone,
   normalizePhoneForWhatsApp,
   isValidPhoneForWhatsApp,
   openWhatsAppChat,
 };
-

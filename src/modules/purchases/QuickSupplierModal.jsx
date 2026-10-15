@@ -16,7 +16,7 @@ export default function QuickSupplierModal({
     phone: '',
     address: '',
     tax_number: '',
-    supplier_type: 'goods',
+    supplier_type: '',
     opening_balance: '0',
     opening_balance_type: 'credit',
     notes: ''
@@ -41,6 +41,10 @@ export default function QuickSupplierModal({
       if (duplicate) {
         errs.name = 'يوجد مورد مسجل بهذا الاسم بالفعل';
       }
+    }
+
+    if (!form.supplier_type) {
+      errs.supplier_type = 'برجاء اختيار نوع نشاط المورد';
     }
 
     if (form.phone) {
@@ -97,7 +101,7 @@ export default function QuickSupplierModal({
         phone: '',
         address: '',
         tax_number: '',
-        supplier_type: 'goods',
+        supplier_type: '',
         opening_balance: '0',
         opening_balance_type: 'credit',
         notes: ''
@@ -167,6 +171,27 @@ export default function QuickSupplierModal({
               required
             />
             <FieldError error={errors.name} />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              نوع نشاط المورد *
+            </label>
+            <select
+              value={form.supplier_type}
+              onChange={(e) => {
+                setForm((prev) => ({ ...prev, supplier_type: e.target.value }));
+                if (errors.supplier_type) setErrors((prev) => ({ ...prev, supplier_type: null }));
+              }}
+              className={`w-full px-3.5 py-2 border rounded-lg text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 ${
+                errors.supplier_type ? 'border-rose-500 bg-rose-50/30' : 'border-slate-300'
+              }`}
+            >
+              <option value="">-- اختر نوع نشاط المورد --</option>
+              <option value="goods">توريد خامات ومستلزمات إنتاج</option>
+              <option value="service">مصنع تشغيل خارجي لدى الغير (تطريز / غسيل / حياكة)</option>
+            </select>
+            <FieldError error={errors.supplier_type} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

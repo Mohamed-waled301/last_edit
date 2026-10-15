@@ -22,6 +22,8 @@ import ItemSectionFormPage from './modules/items/ItemSectionFormPage';
 import StockCardPage from './modules/inventory/StockCardPage';
 import PartiesListPage from './modules/parties/PartiesListPage';
 import PartyFormPage from './modules/parties/PartyFormPage';
+import VendorStatementPage from './modules/parties/VendorStatementPage';
+import PrintPreviewPage from './modules/print/PrintPreviewPage';
 import PurchasesListPage from './modules/purchases/PurchasesListPage';
 import PurchaseOrderFormPage from './modules/purchases/PurchaseOrderFormPage';
 import InventoryListPage from './modules/inventory/InventoryListPage';
@@ -494,10 +496,13 @@ export default function App() {
           />
         );
 
-      // B) Parties (Suppliers & Customers)
+      // B) Parties (Suppliers & Customers & Vendors)
       case 'suppliers':
         if (action === 'new') {
           return <PartyFormPage initialType="supplier" onBack={() => navigateTo('suppliers')} onNotify={showNotification} />;
+        }
+        if (subAction === 'statement' && parts[1]) {
+          return <VendorStatementPage vendorId={parts[1]} onBack={() => navigateTo('suppliers')} onNotify={showNotification} />;
         }
         if (subAction === 'edit' && parts[1]) {
           return <PartyFormPage partyId={parts[1]} initialType="supplier" onBack={() => navigateTo('suppliers')} onNotify={showNotification} />;
@@ -508,10 +513,38 @@ export default function App() {
         if (action === 'new') {
           return <PartyFormPage initialType="customer" onBack={() => navigateTo('customers')} onNotify={showNotification} />;
         }
+        if (subAction === 'statement' && parts[1]) {
+          return <VendorStatementPage vendorId={parts[1]} onBack={() => navigateTo('customers')} onNotify={showNotification} />;
+        }
         if (subAction === 'edit' && parts[1]) {
           return <PartyFormPage partyId={parts[1]} initialType="customer" onBack={() => navigateTo('customers')} onNotify={showNotification} />;
         }
         return <PartiesListPage mode="customers" defaultTab="customers" onNavigate={navigateTo} onNotify={showNotification} />;
+
+      case 'vendors':
+        if (subAction === 'statement' && parts[1]) {
+          return <VendorStatementPage vendorId={parts[1]} onBack={() => window.history.back()} onNotify={showNotification} />;
+        }
+        if (subAction === 'edit' && parts[1]) {
+          return <PartyFormPage partyId={parts[1]} initialType="supplier" onBack={() => window.history.back()} onNotify={showNotification} />;
+        }
+        return <PartiesListPage mode="suppliers" defaultTab="suppliers" onNavigate={navigateTo} onNotify={showNotification} />;
+
+      // In-App Print Preview (Item 8)
+      case 'print-preview':
+        return (
+          <PrintPreviewPage
+            searchParams={route.queryParams}
+            onBack={() => {
+              const returnUrl = route.queryParams.get('returnUrl');
+              if (returnUrl) {
+                navigateTo(returnUrl.replace(/^#\/?/, ''));
+              } else {
+                window.history.back();
+              }
+            }}
+          />
+        );
 
       // C) Purchases
       case 'purchases':
@@ -722,7 +755,7 @@ export default function App() {
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-red-800 flex items-center justify-center shrink-0 font-bold text-lg">!</div>
               <div>
-                <div className="font-bold text-sm">تنبيه سلامة قاعدة البيانات المحلية (Database Integrity Error)</div>
+                <div className="font-bold text-sm">تنبيه سلامة قاعدة البيانات المحلية</div>
                 <div className="text-xs text-red-100">
                   تم اكتشاف عدم تكامل في بنية قاعدة البيانات المحلية (SQLite). يرجى استرجاع أحدث نسخة احتياطية سليمة لضمان سلامة العمليات.
                 </div>

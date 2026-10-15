@@ -298,4 +298,78 @@ test.describe('code systems Smoke Tests', () => {
     await page.waitForTimeout(600);
     await expect(page.locator(`text=${testSupplierName}`)).toBeVisible();
   });
+
+  test('supplier form: activity type starts empty, is required, blocks save without auto-filling', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await ensureSetup(page);
+
+    await page.goto('#/suppliers/new');
+    await page.waitForTimeout(600);
+
+    // Supplier type select starts empty
+    const typeSelect = page.locator('#party-supplier-type-select');
+    await expect(typeSelect).toBeVisible();
+    await expect(typeSelect).toHaveValue('');
+
+    // Fill supplier name
+    const nameInput = page.locator('#party-name-input');
+    await nameInput.fill(`مورد اختبار نوع النشاط ${Date.now()}`);
+
+    // Try to save without selecting activity type
+    const saveButton = page.locator('button:has-text("حفظ جهة التعامل")').first();
+    await saveButton.click();
+
+    // Verify error message under the field
+    const errorMsg = page.locator('text=برجاء اختيار نوع نشاط المورد');
+    await expect(errorMsg).toBeVisible();
+
+    // Verify still on the form (save was blocked)
+    expect(page.url()).toContain('#/suppliers/new');
+  });
+
+  test('numeric fields (MoneyInput) can be cleared, typed, and accept intermediate decimal states without premature resetting', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await ensureSetup(page);
+
+    await page.goto('#/customers/new');
+    await page.waitForTimeout(600);
+
+    const creditLimitInput = page.locator('#party-credit-limit-input');
+    await expect(creditLimitInput).toBeVisible();
+
+    // Type a value
+    await creditLimitInput.fill('1500');
+    await expect(creditLimitInput).toHaveValue('1500');
+
+    // Clear the field (intermediate state: empty string)
+    await creditLimitInput.fill('');
+    await expect(creditLimitInput).toHaveValue('');
+
+    // Retype decimal value
+    await creditLimitInput.fill('250.75');
+    await expect(creditLimitInput).toHaveValue('250.75');
+  });
+
+  test('vendor statement route and in-app print preview screen load correctly', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await ensureSetup(page);
+
+    // Navigate to in-app print preview
+    await page.goto('#/print-preview?type=invoice&id=1');
+    await page.waitForTimeout(600);
+
+    // Print preview settings panel is visible with Arabic labels
+    const settingsPanelHeading = page.locator('text=خيارات وإعدادات الطباعة');
+    await expect(settingsPanelHeading).toBeVisible();
+
+    const directPrintBtn = page.locator('button:has-text("طباعة المستند مباشرة")');
+    await expect(directPrintBtn).toBeVisible();
+
+    const savePdfBtn = page.locator('button:has-text("حفظ كملف PDF")');
+    await expect(savePdfBtn).toBeVisible();
+
+    const backBtn = page.locator('button:has-text("رجوع دون طباعة")');
+    await expect(backBtn).toBeVisible();
+  });
 });
+

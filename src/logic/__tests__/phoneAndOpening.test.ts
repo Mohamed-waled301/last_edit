@@ -20,17 +20,22 @@ describe('Egyptian phone defaults & validation', () => {
     expect(DEFAULT_PHONE_VALUE).toBe('01');
   });
 
-  it('accepts valid Egyptian mobiles (010/011/012/015, 11 digits)', () => {
+  it('accepts valid Egyptian mobiles (starts with 01, exactly 11 digits)', () => {
     expect(isValidEgyptianMobile('01012345678')).toBe(true);
     expect(isValidEgyptianMobile('01112345678')).toBe(true);
     expect(isValidEgyptianMobile('01212345678')).toBe(true);
     expect(isValidEgyptianMobile('01512345678')).toBe(true);
+    // Arabic-Indic numerals converted and validated
+    expect(isValidEgyptianMobile('٠١٠١٢٣٤٥٦٧٨')).toBe(true);
+    expect(sanitizeEgyptianPhoneInput('٠١٠١٢٣٤٥٦٧٨')).toBe('01012345678');
   });
 
-  it('rejects non-Egyptian or incomplete numbers', () => {
-    expect(isValidEgyptianMobile('01312345678')).toBe(false); // 013 not mobile
+  it('rejects invalid cases (10 digits, 12 digits, starting with 02 or 00, letters)', () => {
     expect(isValidEgyptianMobile('0101234567')).toBe(false); // 10 digits
-    expect(isValidEgyptianMobile('02123456789')).toBe(false); // landline
+    expect(isValidEgyptianMobile('03012345678')).toBe(false); // does not start with 01
+    expect(isValidEgyptianMobile('02123456789')).toBe(false); // starts with 02
+    expect(isValidEgyptianMobile('00123456789')).toBe(false); // starts with 00
+    expect(isValidEgyptianMobile('010abc45678')).toBe(false); // letters
     expect(isValidEgyptianMobile('01')).toBe(false);
   });
 

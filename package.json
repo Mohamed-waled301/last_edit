@@ -48,7 +48,7 @@
     "xlsx": "^0.18.5"
   },
   "build": {
-    "appId": "com.codesystems.app",
+    "appId": "com.apexapparelerp.app",
     "productName": "code systems",
     "copyright": "Copyright © 2026 code systems",
     "npmRebuild": false,
