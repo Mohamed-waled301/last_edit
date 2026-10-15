@@ -77,42 +77,26 @@ test.describe('Part B: Dashboard KPI Live Reactivity & Consistency', () => {
     // Perform an action via Dexie directly in the page to trigger liveQuery
     const changeAmount = 750;
     await page.evaluate(async (amt) => {
-      // Find primary treasury and add a cash inflow transaction
-      const accounts = await window.indexedDB.databases();
-      // Use indexedDB transaction directly or dispatch via window
-      const req = indexedDB.open('ApexEnterpriseERP_DB_v5');
-      await new Promise((resolve, reject) => {
-        req.onsuccess = (e) => {
-          const idb = e.target.result;
-          const tx = idb.transaction(['cash_transactions', 'treasury_accounts'], 'readwrite');
-          const accStore = tx.objectStore('treasury_accounts');
-          const txStore = tx.objectStore('cash_transactions');
+      const dbInstance = window.__ERP_DB__;
+      if (!dbInstance) return;
 
-          const getAccReq = accStore.getAll();
-          getAccReq.onsuccess = () => {
-            const accs = getAccReq.result;
-            const target = accs[0] || { id: 'acc-main', current_balance: 0 };
-            const oldBal = Number(target.current_balance) || 0;
-            const newBal = oldBal + amt;
-            target.current_balance = newBal;
-            accStore.put(target);
+      const accs = await dbInstance.treasury_accounts.toArray();
+      const target = accs[0] || { id: 'acc-main', current_balance: 0 };
+      const oldBal = Number(target.current_balance) || 0;
+      const newBal = oldBal + amt;
 
-            txStore.add({
-              id: `tx-live-${Date.now()}`,
-              account_id: target.id,
-              tx_type: 'inflow',
-              category: 'sales_invoices',
-              amount: amt,
-              balance_after: newBal,
-              status: 'posted',
-              created_at: new Date().toISOString()
-            });
-          };
-
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        };
-        req.onerror = () => reject(req.error);
+      await dbInstance.transaction('rw', [dbInstance.treasury_accounts, dbInstance.cash_transactions], async () => {
+        await dbInstance.treasury_accounts.put({ ...target, current_balance: newBal });
+        await dbInstance.cash_transactions.add({
+          id: `tx-live-${Date.now()}`,
+          account_id: target.id,
+          tx_type: 'inflow',
+          category: 'sales_invoices',
+          amount: amt,
+          balance_after: newBal,
+          status: 'posted',
+          created_at: new Date().toISOString()
+        });
       });
     }, changeAmount);
 

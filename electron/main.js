@@ -29,20 +29,28 @@ if (!gotSingleInstanceLock) {
 
 // Explicitly preserve the existing userData folder to guarantee no data or license loss
 const testUserDataDir = process.env.TEST_USER_DATA_DIR;
+const activeEdition = process.env.EDITION || (app.name && app.name.includes('standard') ? 'standard' : 'cutting');
+
 if (testUserDataDir) {
   app.setPath('userData', testUserDataDir);
 } else {
-  const existingUserDataPath = path.join(app.getPath('appData'), 'apex-apparel-erp');
-  const tempNewPath = path.join(app.getPath('appData'), 'code-systems');
+  if (activeEdition === 'standard') {
+    const standardPath = path.join(app.getPath('appData'), 'code-systems-standard');
+    app.setPath('userData', standardPath);
+  } else {
+    // Cutting edition: preserves legacy data folder so existing clients never lose data
+    const existingUserDataPath = path.join(app.getPath('appData'), 'apex-apparel-erp');
+    const tempNewPath = path.join(app.getPath('appData'), 'code-systems');
 
-  if (!fs.existsSync(existingUserDataPath) && fs.existsSync(tempNewPath)) {
-    try {
-      fs.cpSync(tempNewPath, existingUserDataPath, { recursive: true });
-    } catch (migErr) {
-      console.warn('[UserData Restore Warning]:', migErr);
+    if (!fs.existsSync(existingUserDataPath) && fs.existsSync(tempNewPath)) {
+      try {
+        fs.cpSync(tempNewPath, existingUserDataPath, { recursive: true });
+      } catch (migErr) {
+        console.warn('[UserData Restore Warning]:', migErr);
+      }
     }
+    app.setPath('userData', existingUserDataPath);
   }
-  app.setPath('userData', existingUserDataPath);
 }
 
 let mainWindow = null;
@@ -73,7 +81,7 @@ async function createWindow() {
     height: 900,
     minWidth: 1280,
     minHeight: 720,
-    title: 'code systems',
+    title: activeEdition === 'standard' ? 'code systems - الإصدار القياسي' : 'code systems - إصدار مصانع الملابس وقص المراحل',
     backgroundColor: '#F4F5F7',
     show: false,
     icon: iconPath,

@@ -2,6 +2,7 @@ import db, { ensureDatabaseIntegrity } from '../db';
 import * as XLSX from 'xlsx';
 import settingsRepo from './settingsRepo';
 import auditRepo from './auditRepo';
+import { getActiveEdition, getActiveEditionConfig, validateBackupCompatibility } from '../../editions/editionConfig';
 
 export const backupRepo = {
   /**
@@ -15,9 +16,14 @@ export const backupRepo = {
       backupData[name] = await db.table(name).toArray();
     }
 
+    const activeEdition = getActiveEdition();
+    const config = getActiveEditionConfig();
+
     return {
-      app: 'ClothingFactoryERP',
-      version: 4,
+      app: 'CodeSystemsERP',
+      edition: activeEdition,
+      editionName: config.nameArabic,
+      version: 5,
       exportedAt: new Date().toISOString(),
       tablesCount: tableNames.length,
       data: backupData,
@@ -37,7 +43,8 @@ export const backupRepo = {
     const dateStr = new Date().toISOString().slice(0, 10);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `نسخة_احتياطية_مصنع_الملابس_${dateStr}.json`;
+    const prefix = payload.edition === 'standard' ? 'نسخة_احتياطية_الاصدار_القياسي' : 'نسخة_احتياطية_مصنع_الملابس';
+    a.download = `${prefix}_${dateStr}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -61,6 +68,12 @@ export const backupRepo = {
 
     if (!parsed || !parsed.data) {
       throw new Error('صيغة ملف النسخة الاحتياطية غير معتمدة');
+    }
+
+    // Reject cross-edition restore attempts with clear Arabic explanation
+    const validation = validateBackupCompatibility(parsed.edition, getActiveEdition());
+    if (!validation.compatible) {
+      throw new Error(validation.message);
     }
 
     await ensureDatabaseIntegrity();

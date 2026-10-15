@@ -553,12 +553,16 @@ export const itemsRepo = {
       throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود (${grCount}) بند في أذون استلام بضاعة مرتبطة به.`);
     }
 
-    const pmuCount = await db.production_material_usage.where('raw_material_id').equals(id).count().catch(() => 0);
+    const pmuCount = db.production_material_usage
+      ? await db.production_material_usage.where('raw_material_id').equals(id).count().catch(() => 0)
+      : 0;
     if (pmuCount > 0) {
       throw new Error(`لا يمكن حذف الصنف "${current.name}" لدخوله في استهلاك خامات أوامر إنتاج.`);
     }
 
-    const mfgProdCount = await db.production_orders.where('product_id').equals(id).count().catch(() => 0);
+    const mfgProdCount = db.production_orders
+      ? await db.production_orders.where('product_id').equals(id).count().catch(() => 0)
+      : 0;
     if (mfgProdCount > 0) {
       throw new Error(`لا يمكن حذف الصنف "${current.name}" لوجود أوامر تصنيع مرتبطة به.`);
     }

@@ -41,8 +41,8 @@ export const reportsRepo = {
 
   async getCostBreakdown() {
     const products = await productsRepo.getAll();
-    const stage1Orders = await db.production_orders.toArray();
-    const stage2Orders = await db.finishing_orders.toArray();
+    const stage1Orders = db.production_orders ? await db.production_orders.toArray().catch(() => []) : [];
+    const stage2Orders = db.finishing_orders ? await db.finishing_orders.toArray().catch(() => []) : [];
 
     return products.map(p => {
       // Find latest completed stage 1 order for this product

@@ -7,8 +7,9 @@ import { itemsRepo } from '../../data/repositories/itemsRepo';
 import { treasuriesRepo } from '../../data/repositories/treasuriesRepo';
 import { manufacturingRepo } from '../../data/repositories/manufacturingRepo';
 import { auditRepo } from '../../data/repositories/auditRepo';
+import { isFeatureEnabled } from '../../editions/editionConfig';
 
-describe('Requirements 2 & 4: Cash Screens, Shared Supplier Payments, and Cut Order Overhaul', () => {
+describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens, Shared Supplier Payments, and Cut Order Overhaul', () => {
   beforeEach(async () => {
     await db.parties.clear();
     await db.treasury_accounts.clear();

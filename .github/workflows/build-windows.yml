@@ -1,4 +1,4 @@
-name: Build Windows Application
+name: Build Windows Application (Both Editions)
 
 on:
   push:
@@ -8,8 +8,11 @@ on:
 
 jobs:
   build:
-    name: Build Windows .exe (Installer & Portable)
+    name: Build Windows ${{ matrix.edition }} Edition
     runs-on: windows-latest
+    strategy:
+      matrix:
+        edition: [cutting, standard]
 
     permissions:
       contents: write
@@ -27,24 +30,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run automated test suite
-        run: npm test
+      - name: Run automated test suite for ${{ matrix.edition }}
+        run: npm run test:${{ matrix.edition }}
 
-      - name: Build web application assets
-        run: npm run build
+      - name: Build web application assets for ${{ matrix.edition }}
+        run: npm run build:${{ matrix.edition }}
 
-      - name: Build Windows desktop executables
+      - name: Build Windows desktop executables for ${{ matrix.edition }}
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           WIN_CSC_LINK: ${{ secrets.CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: npx electron-builder --win --x64
+        run: npm run electron:build:${{ matrix.edition }}
 
-      - name: Upload build artifacts
+      - name: Upload build artifacts (${{ matrix.edition }})
         uses: actions/upload-artifact@v4
         with:
-          name: windows-binaries
+          name: windows-${{ matrix.edition }}-binaries
           path: |
             release/*.exe
             release/*.blockmap

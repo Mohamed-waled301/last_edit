@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { APP_VERSION } from '../version';
+import { getActiveEditionConfig, isFeatureEnabled } from '../editions/editionConfig';
 
 export default function Sidebar({
   currentScreen,
@@ -274,7 +275,9 @@ export default function Sidebar({
 
         {/* Navigation Items List */}
         <nav className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden">
-          {navItems.map((item) => {
+          {navItems
+            .filter((item) => item.id !== 'manufacturing' || isFeatureEnabled('cutting'))
+            .map((item) => {
             const Icon = item.icon;
             const isActive = currentScreen === item.id;
             return (
@@ -369,6 +372,9 @@ export default function Sidebar({
           <div className="p-2.5 border-t border-gray-200 shrink-0 text-center select-none bg-slate-50/50">
             <span className="text-xs font-bold text-slate-700 block tracking-wide">
               code systems
+            </span>
+            <span className="text-[10px] font-semibold text-blue-700 block mt-0.5 truncate bg-blue-50/80 py-0.5 px-1.5 rounded">
+              {getActiveEditionConfig().nameArabic}
             </span>
             <span
               className="text-[11px] font-semibold text-slate-500 block mt-0.5 truncate"

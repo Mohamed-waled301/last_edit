@@ -11,6 +11,7 @@ import ActivationScreen from './components/ActivationScreen';
 import UnsavedChangesModal from './components/UnsavedChangesModal';
 import { navigationGuard } from './utils/navigationGuard';
 import { AlertTriangle } from 'lucide-react';
+import { isFeatureEnabled } from './editions/editionConfig';
 
 // Master Data & Full-Page Modules
 import ItemsListPage from './modules/items/ItemsListPage';
@@ -544,19 +545,22 @@ export default function App() {
       case 'locations':
         return <StorageLocationsPage onBack={() => navigateTo('inventory')} onNotify={showNotification} />;
 
-      // E) Manufacturing
+      // E) Manufacturing & Cutting (Cutting Edition only)
       case 'manufacturing':
-        if (action === 'new') {
-          return <ProductionOrderFormPage onBack={() => navigateTo('manufacturing')} onNotify={showNotification} />;
-        }
-        if (subAction === 'edit' && parts[1]) {
-          return <ProductionOrderFormPage orderId={parts[1]} onBack={() => navigateTo('manufacturing')} onNotify={showNotification} />;
-        }
-        return <ManufacturingListPage onNavigate={navigateTo} onNotify={showNotification} />;
-
-      // Outsourced Manufacturing (التصنيع لدى الغير)
       case 'outsourced':
       case 'finishing':
+        if (!isFeatureEnabled('cutting')) {
+          return <HomeScreen onNavigate={navigateTo} userRole={activeUserRole} />;
+        }
+        if (root === 'manufacturing') {
+          if (action === 'new') {
+            return <ProductionOrderFormPage onBack={() => navigateTo('manufacturing')} onNotify={showNotification} />;
+          }
+          if (subAction === 'edit' && parts[1]) {
+            return <ProductionOrderFormPage orderId={parts[1]} onBack={() => navigateTo('manufacturing')} onNotify={showNotification} />;
+          }
+          return <ManufacturingListPage onNavigate={navigateTo} onNotify={showNotification} />;
+        }
         if (action === 'new') {
           return <OutsourcedOrderFormPage onBack={() => navigateTo('outsourced')} onNotify={showNotification} />;
         }

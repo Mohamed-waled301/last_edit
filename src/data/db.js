@@ -1,10 +1,11 @@
 import Dexie from 'dexie';
+import { getActiveEditionConfig, isFeatureEnabled } from '../editions/editionConfig';
 
 /**
- * Apex Enterprise ERP - In-Browser IndexedDB Database via Dexie
- * Complete offline-first storage for Clothing Factory operations.
+ * Code Systems ERP - In-Browser IndexedDB Database via Dexie
+ * Complete offline-first storage supporting Cutting and Standard editions.
  */
-export const DB_NAME = 'ApexEnterpriseERP_DB_v5';
+export const DB_NAME = getActiveEditionConfig().dbName;
 
 export const SCHEMA_V1 = {
   // Core System & Security
@@ -54,14 +55,16 @@ export const SCHEMA_V1 = {
   payments: 'id, payment_number, supplier_id, invoice_id, account_id, payment_date, created_at',
   supplier_returns: 'id, return_number, supplier_id, material_id, return_date, created_at',
 
-  // Manufacturing & Outsourcing
-  production_orders: 'id, order_number, cutting_number, product_id, status, start_date, created_at',
-  production_material_usage: 'id, production_order_id, raw_material_id',
-  cutting_printing_payments: 'id, production_order_id, payment_date, created_at',
-  outsourced_orders: 'id, order_number, production_order_id, supplier_id, status, transfer_date, created_at',
-  finishing_orders: 'id, finishing_number, production_order_id, product_id, status, transfer_date, created_at',
-  finishing_materials: 'id, finishing_order_id, raw_material_id',
-  overheads: 'id, month_year, created_at',
+  // Manufacturing & Outsourcing (Only registered if cutting feature is active)
+  ...(isFeatureEnabled('cutting') ? {
+    production_orders: 'id, order_number, cutting_number, product_id, status, start_date, created_at',
+    production_material_usage: 'id, production_order_id, raw_material_id',
+    cutting_printing_payments: 'id, production_order_id, payment_date, created_at',
+    outsourced_orders: 'id, order_number, production_order_id, supplier_id, status, transfer_date, created_at',
+    finishing_orders: 'id, finishing_number, production_order_id, product_id, status, transfer_date, created_at',
+    finishing_materials: 'id, finishing_order_id, raw_material_id',
+    overheads: 'id, month_year, created_at',
+  } : {}),
 
   // Sales & Outlets
   sales_outlets: 'id, name, is_active, created_at',
@@ -72,8 +75,8 @@ export const SCHEMA_V1 = {
 };
 
 export class WorkshopDatabase extends Dexie {
-  constructor() {
-    super(DB_NAME);
+  constructor(customDbName = DB_NAME) {
+    super(customDbName);
 
     this.version(1).stores(SCHEMA_V1);
     this.version(2).stores(SCHEMA_V1);
@@ -85,13 +88,18 @@ export class WorkshopDatabase extends Dexie {
     this.version(8).stores({
       item_suppliers: 'id, item_id, supplier_id, is_preferred',
     });
-    this.version(9).stores({
-      cutting_printing_payments: 'id, production_order_id, payment_date, created_at',
-    });
+    if (isFeatureEnabled('cutting')) {
+      this.version(9).stores({
+        cutting_printing_payments: 'id, production_order_id, payment_date, created_at',
+      });
+    }
   }
 }
 
 export const db = new WorkshopDatabase();
+if (typeof window !== 'undefined') {
+  window.__ERP_DB__ = db;
+}
 
 // Silently cleanup legacy databases in the browser
 try {

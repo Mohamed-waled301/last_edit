@@ -6,8 +6,9 @@ import { manufacturingRepo } from '../../data/repositories/manufacturingRepo';
 import { itemsRepo } from '../../data/repositories/itemsRepo';
 import { navigationGuard } from '../../utils/navigationGuard';
 import { getTodayDateString } from '../../utils/formatters';
+import { isFeatureEnabled } from '../../editions/editionConfig';
 
-describe('Cutting and Printing Workflow & Requirements Verification', () => {
+describe.skipIf(!isFeatureEnabled('cutting'))('Cutting and Printing Workflow & Requirements Verification', () => {
   beforeEach(async () => {
     if (!db.isOpen()) {
       await db.open();

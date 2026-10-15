@@ -12,8 +12,9 @@ import {
   calculateUnitCost
 } from '../productionOrderCalculations';
 import { getTodayDateString } from '../../utils/formatters';
+import { isFeatureEnabled } from '../../editions/editionConfig';
 
-describe('Production Order Cost Formulas, Stock Effect, and Constraints (Requirement C)', () => {
+describe.skipIf(!isFeatureEnabled('cutting'))('Production Order Cost Formulas, Stock Effect, and Constraints (Requirement C)', () => {
   beforeEach(async () => {
     if (!db.isOpen()) {
       await db.open();

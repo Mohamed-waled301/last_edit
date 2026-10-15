@@ -64,6 +64,7 @@ export const manufacturingRepo = {
   },
 
   async getAll() {
+    if (!db.production_orders) return [];
     const orders = await db.production_orders.reverse().sortBy('created_at');
     const products = await db.products.toArray();
     const items = await db.items.toArray();
@@ -998,6 +999,7 @@ export const manufacturingRepo = {
   },
 
   async getOverheads() {
+    if (!db.overheads) return [];
     return await db.overheads.reverse().sortBy('month_year');
   },
 

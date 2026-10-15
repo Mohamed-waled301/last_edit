@@ -43,6 +43,7 @@ import {
   computeCustomerReceivables,
   computeLowStockAlerts,
 } from '../logic/dashboardMetrics';
+import { isFeatureEnabled } from '../editions/editionConfig';
 
 export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, initialReport = 'index' }) {
   // 'index' or specific report key:
@@ -184,7 +185,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
         }
       ]
     },
-    {
+    ...(isFeatureEnabled('cutting') ? [{
       group: 'التصنيع والإنتاج',
       reports: [
         {
@@ -202,7 +203,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
           color: 'indigo'
         }
       ]
-    },
+    }] : []),
     {
       group: 'الخزينة والمالية والرقابة',
       reports: [

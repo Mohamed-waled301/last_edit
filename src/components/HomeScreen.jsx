@@ -14,6 +14,7 @@ import db from '../data/db';
 import { getDashboardMetrics } from '../logic/dashboardMetrics';
 import { formatCurrency, formatNumber, formatDate } from '../utils/formatters';
 import DataTable from './DataTable';
+import { isFeatureEnabled } from '../editions/editionConfig';
 
 /**
  * Format currency split into numeric digits and Arabic currency symbol
@@ -379,7 +380,7 @@ export default function HomeScreen({ onNavigate, userRole }) {
                   بعد التكاليف والمصروفات
                 </span>
               </div>
-            ) : (
+            ) : isFeatureEnabled('cutting') ? (
               <div
                 id="kpi-production-batches"
                 onClick={() => onNavigate && onNavigate('manufacturing')}
@@ -401,6 +402,30 @@ export default function HomeScreen({ onNavigate, userRole }) {
                   title="قيد التشغيل على خطوط الإنتاج"
                 >
                   قيد التشغيل بالخطوط
+                </span>
+              </div>
+            ) : (
+              <div
+                id="kpi-customers-count"
+                onClick={() => onNavigate && onNavigate('customers')}
+                className="bg-white border border-gray-200 rounded-md p-3.5 flex flex-col justify-between overflow-hidden shadow-none cursor-pointer hover:border-gray-400 hover:shadow-xs transition-all"
+                title="إجمالي العملاء: اضغط للانتقال لدليل العملاء"
+              >
+                <span className="text-xs font-semibold text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis block font-sans">
+                  إجمالي جهات العملاء
+                </span>
+                <div
+                  className="text-2xl font-bold text-gray-900 mt-1 leading-tight tracking-tight whitespace-nowrap overflow-hidden text-ellipsis flex items-baseline gap-1.5"
+                  style={{ direction: 'ltr', unicodeBidi: 'isolate' }}
+                >
+                  <span className="tabular-nums font-bold tracking-tight">{dashboard.customersBreakdown?.length || 0}</span>
+                  <span className="text-sm font-semibold text-gray-500 font-sans tracking-normal select-none">عميل</span>
+                </div>
+                <span
+                  className="text-[11px] text-gray-400 font-medium mt-1 whitespace-nowrap overflow-hidden text-ellipsis block font-sans"
+                  title="عملاء مسجلين بالنظام"
+                >
+                  عملاء مسجلين بالنظام
                 </span>
               </div>
             )}

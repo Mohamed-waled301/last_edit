@@ -8,6 +8,7 @@ export const finishingRepo = {
    * Get all outsourced / finishing manufacturing orders
    */
   async getAll() {
+    if (!db.finishing_orders) return [];
     const orders = await db.finishing_orders.reverse().sortBy('created_at');
     const products = await db.products.toArray();
     const prodMap = new Map(products.map(p => [p.id, p]));
