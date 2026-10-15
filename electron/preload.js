@@ -1,12 +1,34 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-let activeEdition = process.env.EDITION;
-try {
-  activeEdition = ipcRenderer.sendSync('edition:get-sync') || activeEdition;
-} catch {}
-if (!activeEdition) {
-  activeEdition = 'cutting';
+function resolvePreloadEdition() {
+  if (process.env.EDITION === 'standard' || process.env.EDITION === 'cutting') {
+    return process.env.EDITION;
+  }
+  try {
+    const syncEdition = ipcRenderer.sendSync('edition:get-sync');
+    if (syncEdition === 'standard' || syncEdition === 'cutting') {
+      return syncEdition;
+    }
+  } catch {}
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const edFile = path.join(__dirname, 'edition.json');
+    if (fs.existsSync(edFile)) {
+      const parsed = JSON.parse(fs.readFileSync(edFile, 'utf8'));
+      if (parsed?.edition === 'standard' || parsed?.edition === 'cutting') {
+        return parsed.edition;
+      }
+    }
+  } catch {}
+  const execLower = (process.execPath || '').toLowerCase();
+  if (execLower.includes('standard')) {
+    return 'standard';
+  }
+  return 'cutting';
 }
+
+const activeEdition = resolvePreloadEdition();
 
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,

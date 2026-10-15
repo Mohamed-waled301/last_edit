@@ -47,6 +47,7 @@ tools/license-generator/keys/
 *.lic
 license-state.json
 *.node
+electron/edition.json
 
 # Local Database & Migration Dumps - Never commit local databases
 *.db

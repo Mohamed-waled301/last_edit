@@ -10,7 +10,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ActivationScreen from './components/ActivationScreen';
 import UnsavedChangesModal from './components/UnsavedChangesModal';
 import { navigationGuard } from './utils/navigationGuard';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { isFeatureEnabled } from './editions/editionConfig';
 
 // Master Data & Full-Page Modules
@@ -764,10 +764,10 @@ export default function App() {
               </button>
               <button
                 onClick={() => setDbIntegrityError(null)}
-                className="px-2 py-1 text-red-200 hover:text-white rounded hover:bg-red-800 cursor-pointer text-sm font-bold transition-colors"
+                className="p-1 text-red-200 hover:text-white rounded hover:bg-red-800 cursor-pointer transition-colors"
                 title="إغلاق التنبيه"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>

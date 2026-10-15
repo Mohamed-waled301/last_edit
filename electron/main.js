@@ -27,9 +27,31 @@ if (!gotSingleInstanceLock) {
   process.exit(0);
 }
 
-// Explicitly preserve the existing userData folder to guarantee no data or license loss
-const testUserDataDir = process.env.TEST_USER_DATA_DIR;
-const activeEdition = process.env.EDITION || (app.name && app.name.includes('standard') ? 'standard' : 'cutting');
+// Robust Multi-tier Edition Detection (supports binary path, stamped edition.json, and env)
+function detectActiveEdition() {
+  if (process.env.EDITION === 'standard' || process.env.EDITION === 'cutting') {
+    return process.env.EDITION;
+  }
+  try {
+    const editionFilePath = path.join(__dirname, 'edition.json');
+    if (fs.existsSync(editionFilePath)) {
+      const parsed = JSON.parse(fs.readFileSync(editionFilePath, 'utf8'));
+      if (parsed && (parsed.edition === 'standard' || parsed.edition === 'cutting')) {
+        return parsed.edition;
+      }
+    }
+  } catch {}
+  const execLower = (process.execPath || '').toLowerCase();
+  const nameLower = (app.name || '').toLowerCase();
+  const titleLower = (typeof app.getName === 'function' ? app.getName() : '').toLowerCase();
+  if (execLower.includes('standard') || nameLower.includes('standard') || titleLower.includes('standard')) {
+    return 'standard';
+  }
+  return 'cutting';
+}
+
+const activeEdition = detectActiveEdition();
+process.env.EDITION = activeEdition;
 
 if (testUserDataDir) {
   app.setPath('userData', testUserDataDir);
