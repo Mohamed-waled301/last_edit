@@ -4,67 +4,38 @@ import suppliersRepo from './suppliersRepo';
 import salesRepo from './salesRepo';
 import productsRepo from './productsRepo';
 import materialsRepo from './materialsRepo';
+import { getDashboardMetrics } from '../../logic/dashboardMetrics';
 
 export const reportsRepo = {
   async getDashboard(userRole = 'owner') {
     const isOwner = userRole === 'owner';
-
-    // 1. Sales & Profit
-    const salesInvoices = await db.sales_invoices.toArray();
-    let totalSales = 0;
-    let totalProfit = 0;
-    let monthProfit = 0;
     const currentMonth = new Date().toISOString().slice(0, 7);
+    const metrics = await getDashboardMetrics(db, currentMonth, { userRole });
 
-    for (const inv of salesInvoices) {
-      if (inv.status !== 'cancelled') {
-        const invTotal = Number(inv.total_invoice_amount) || 0;
-        const profit = Number(inv.net_profit) || 0;
-        totalSales += invTotal;
-        totalProfit += profit;
-        if (inv.invoice_date && inv.invoice_date.startsWith(currentMonth)) {
-          monthProfit += profit;
-        }
-      }
-    }
-
-    // 2. Treasury Liquidity
-    const accounts = await db.treasury_accounts.toArray();
-    const treasuryBalance = Number(accounts.reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0).toFixed(2));
-
-    // 3. Customer Receivables ("فلوس لينا بره")
-    const customers = await salesRepo.getCustomers();
-    const customerBalanceDue = Number(customers.reduce((sum, c) => sum + (Number(c.balance_due) || 0), 0).toFixed(2));
-
-    // 4. Supplier Payables ("فلوس علينا للموردين")
-    const suppliers = await suppliersRepo.getAll();
-    const supplierBalanceDue = Number(suppliers.reduce((sum, s) => sum + (Number(s.balance_due) || 0), 0).toFixed(2));
-
-    // 5. Due Invoices ("فواتير مستحقة قريباً")
-    const supplierInvoices = await suppliersRepo.getSupplierInvoices();
+    // Due Invoices ("فواتير مستحقة قريباً")
+    const supplierInvoices = await suppliersRepo.getSupplierInvoices().catch(() => []);
     const dueInvoices = supplierInvoices
       .filter(i => i.status !== 'paid' && i.status !== 'cancelled')
       .slice(0, 10);
 
-    // 6. Low Stock Materials ("خامات قربت تخلص")
-    const lowStockMaterials = await materialsRepo.getLowStockAlerts();
-
-    const inProdCount = await db.production_orders.where('status').equals('in_production').count();
-
     return {
-      totalSales: Number(totalSales.toFixed(2)),
-      netProfit: isOwner ? Number(totalProfit.toFixed(2)) : null,
-      monthProfit: isOwner ? Number(monthProfit.toFixed(2)) : null,
-      treasuryBalance,
-      cashBalance: treasuryBalance,
-      customerBalanceDue,
-      customerReceivables: customerBalanceDue,
-      supplierBalanceDue,
-      supplierDebts: supplierBalanceDue,
+      totalSales: metrics.monthProfit !== null ? metrics.monthProfit : 0,
+      netProfit: isOwner ? metrics.monthProfit : null,
+      monthProfit: isOwner ? metrics.monthProfit : null,
+      treasuryBalance: metrics.treasuryBalance,
+      cashBalance: metrics.cashBalance,
+      customerBalanceDue: metrics.customerReceivables,
+      customerReceivables: metrics.customerReceivables,
+      supplierBalanceDue: metrics.supplierDebts,
+      supplierDebts: metrics.supplierDebts,
       dueInvoices,
-      lowStockMaterials: lowStockMaterials.slice(0, 10),
-      lowStockCount: lowStockMaterials.length,
-      inProductionCount: inProdCount,
+      lowStockMaterials: metrics.lowStockItems.slice(0, 10),
+      lowStockCount: metrics.lowStockCount,
+      inProductionCount: metrics.inProductionCount,
+      suppliersBreakdown: metrics.suppliersBreakdown,
+      customersBreakdown: metrics.customersBreakdown,
+      treasuriesBreakdown: metrics.treasuriesBreakdown,
+      lowStockItems: metrics.lowStockItems,
     };
   },
 

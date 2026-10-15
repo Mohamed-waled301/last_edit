@@ -44,6 +44,7 @@ builder-debug.yml
 # Licensing Security - Never commit private keys or state
 tools/license-generator/keys/
 *.pem
+*.lic
 license-state.json
 *.node
 

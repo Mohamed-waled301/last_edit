@@ -631,6 +631,7 @@ export default function App() {
             onNavigate={navigateTo}
             userRole={activeUserRole}
             onNotify={showNotification}
+            initialReport={route.queryParams?.get('tab') || route.param || 'index'}
           />
         );
 

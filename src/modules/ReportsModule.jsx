@@ -38,16 +38,27 @@ import StockCardPage from './inventory/StockCardPage';
 import { resolveOpeningBalance, resolveOpeningType } from '../logic/balances';
 import { toPiasters, fromPiasters } from '../utils/money';
 import { isValidEgyptianMobile } from '../utils/phone';
+import {
+  computeSupplierDebts,
+  computeCustomerReceivables,
+  computeLowStockAlerts,
+} from '../logic/dashboardMetrics';
 
-export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }) {
+export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, initialReport = 'index' }) {
   // 'index' or specific report key:
   // 'items' | 'stock-card' | 'low-stock' | 'goods-receipts' | 'stock-adjustments' |
   // 'purchase-orders' | 'supplier-statements' | 'installments-due' |
   // 'sales-invoices' | 'customer-statements' | 'returns' | 'dual-netting' |
   // 'production-orders' | 'outsourced-manufacturing' |
   // 'disbursements-by-expense' | 'audit-log'
-  const [activeReport, setActiveReport] = useState('index');
+  const [activeReport, setActiveReport] = useState(initialReport || 'index');
   const [indexSearch, setIndexSearch] = useState('');
+
+  useEffect(() => {
+    if (initialReport && initialReport !== 'index') {
+      setActiveReport(initialReport);
+    }
+  }, [initialReport]);
 
   // General Filter States across active reports
   const [searchTerm, setSearchTerm] = useState('');
@@ -229,9 +240,13 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
             break;
           }
           case 'low-stock': {
-            const res = await api.getItems();
-            const list = res.data || res.items || [];
-            setReportData(list.filter((i) => (Number(i.actual_balance ?? i.current_stock ?? 0)) <= (Number(i.min_issue_qty) || 1)));
+            const [items, materials, movements] = await Promise.all([
+              db.items.toArray(),
+              db.materials.toArray(),
+              db.stock_movements.toArray()
+            ]);
+            const alerts = computeLowStockAlerts(items, materials, movements);
+            setReportData(alerts.items);
             break;
           }
           case 'goods-receipts': {
@@ -266,76 +281,18 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
             break;
           }
           case 'supplier-statements': {
-            const [sups, rawSuppliers, supplierInvoices, purchaseOrders, payments] = await Promise.all([
+            const [sups, rawSuppliers, supplierInvoices, purchaseOrders, payments, returns, cutOrders, settlements] = await Promise.all([
               db.parties.filter((p) => p.is_supplier === 1).toArray(),
               db.suppliers.toArray(),
               db.supplier_invoices.toArray(),
               db.purchase_orders.toArray(),
-              db.payments.toArray()
+              db.payments.toArray(),
+              db.supplier_returns.toArray(),
+              db.production_orders ? db.production_orders.toArray().catch(() => []) : Promise.resolve([]),
+              db.party_settlements ? db.party_settlements.toArray().catch(() => []) : Promise.resolve([]),
             ]);
-
-            const map = new Map();
-            for (const s of sups) map.set(s.id, { ...s, is_supplier: 1 });
-            for (const s of rawSuppliers) {
-              if (!map.has(s.id)) {
-                map.set(s.id, { ...s, is_supplier: 1 });
-              } else {
-                map.set(s.id, { ...s, ...map.get(s.id) });
-              }
-            }
-            const allSuppliers = Array.from(map.values());
-
-            const populated = allSuppliers.map((sup) => {
-              const opening = resolveOpeningBalance(sup, 'supplier');
-              const openingType = resolveOpeningType(sup, 'supplier');
-
-              // Credit purchase invoices for this supplier
-              const creditInvoices = supplierInvoices.filter(
-                (inv) => (inv.supplier_id === sup.id || inv.party_id === sup.id) &&
-                         inv.payment_terms === 'credit' &&
-                         inv.status !== 'cancelled'
-              );
-              const creditPOs = purchaseOrders.filter(
-                (po) => (po.supplier_id === sup.id || po.party_id === sup.id) &&
-                        po.payment_terms === 'credit' &&
-                        po.status !== 'cancelled' &&
-                        !creditInvoices.some((inv) => inv.po_id === po.id || inv.id === po.id)
-              );
-              const creditInvoicesTotal = [...creditInvoices, ...creditPOs].reduce(
-                (sum, inv) => sum + (Number(inv.total_amount ?? inv.grand_total) || 0),
-                0
-              );
-
-              // Supplier payments
-              const supPayments = payments.filter(
-                (p) => (p.supplier_id === sup.id || p.party_id === sup.id) &&
-                       p.status !== 'cancelled'
-              );
-              const supplierPaymentsTotal = supPayments.reduce(
-                (sum, p) => sum + (Number(p.amount) || 0),
-                0
-              );
-
-              // Formula: Opening Balance + Credit Purchase Invoices - Supplier Payments
-              const signedOpening = openingType === 'debit' ? -opening : opening;
-              const supplierDebt = Math.max(0, fromPiasters(toPiasters(signedOpening) + toPiasters(creditInvoicesTotal) - toPiasters(supplierPaymentsTotal)));
-
-              return {
-                ...sup,
-                opening_balance: opening,
-                supplier_opening_balance: opening,
-                customer_opening_balance: 0,
-                opening_balance_type: openingType,
-                supplier_opening_type: openingType,
-                credit_invoices_total: creditInvoicesTotal,
-                supplier_payments_total: supplierPaymentsTotal,
-                supplier_balance: supplierDebt,
-                current_balance: supplierDebt,
-                balance_due: supplierDebt
-              };
-            });
-
-            setReportData(populated);
+            const debts = computeSupplierDebts(sups, rawSuppliers, supplierInvoices, purchaseOrders, payments, returns, cutOrders, settlements);
+            setReportData(debts.suppliersBreakdown);
             break;
           }
           case 'installments-due': {
@@ -349,69 +306,16 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
             break;
           }
           case 'customer-statements': {
-            const [custs, rawCustomers, salesInvoices, customerPayments] = await Promise.all([
+            const [custs, rawCustomers, salesInvoices, customerPayments, customerReturns, settlements] = await Promise.all([
               db.parties.filter((p) => p.is_customer === 1).toArray(),
               db.customers.toArray(),
               db.sales_invoices.toArray(),
-              db.customer_payments.toArray()
+              db.customer_payments.toArray(),
+              db.customer_returns.toArray(),
+              db.party_settlements ? db.party_settlements.toArray().catch(() => []) : Promise.resolve([]),
             ]);
-
-            const map = new Map();
-            for (const c of custs) map.set(c.id, { ...c, is_customer: 1 });
-            for (const c of rawCustomers) {
-              if (!map.has(c.id)) {
-                map.set(c.id, { ...c, is_customer: 1 });
-              } else {
-                map.set(c.id, { ...c, ...map.get(c.id) });
-              }
-            }
-            const allCustomers = Array.from(map.values());
-
-            const populated = allCustomers.map((cust) => {
-              const opening = resolveOpeningBalance(cust, 'customer');
-              const openingType = resolveOpeningType(cust, 'customer');
-
-              // Credit sales invoices
-              const creditInvoices = salesInvoices.filter(
-                (inv) => (inv.customer_id === cust.id || inv.party_id === cust.id) &&
-                         inv.payment_terms === 'credit' &&
-                         inv.status !== 'cancelled'
-              );
-              const creditInvoicesTotal = creditInvoices.reduce(
-                (sum, inv) => sum + (Number(inv.net_amount ?? inv.grand_total ?? inv.total_invoice_amount ?? inv.total_amount) || 0),
-                0
-              );
-
-              // Customer payments
-              const custPayments = customerPayments.filter(
-                (p) => (p.customer_id === cust.id || p.party_id === cust.id) &&
-                       p.status !== 'cancelled'
-              );
-              const customerPaymentsTotal = custPayments.reduce(
-                (sum, p) => sum + (Number(p.amount) || 0),
-                0
-              );
-
-              // Formula: Opening Balance + Credit Sales Invoices - Customer Payments
-              const signedOpening = openingType === 'credit' ? -opening : opening;
-              const customerDebt = Math.max(0, fromPiasters(toPiasters(signedOpening) + toPiasters(creditInvoicesTotal) - toPiasters(customerPaymentsTotal)));
-
-              return {
-                ...cust,
-                opening_balance: opening,
-                customer_opening_balance: opening,
-                supplier_opening_balance: 0,
-                opening_balance_type: openingType,
-                customer_opening_type: openingType,
-                credit_invoices_total: creditInvoicesTotal,
-                customer_payments_total: customerPaymentsTotal,
-                customer_balance: customerDebt,
-                current_balance: customerDebt,
-                balance_due: customerDebt
-              };
-            });
-
-            setReportData(populated);
+            const receivables = computeCustomerReceivables(custs, rawCustomers, salesInvoices, customerPayments, customerReturns, settlements);
+            setReportData(receivables.customersBreakdown);
             break;
           }
           case 'returns': {
@@ -828,6 +732,33 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate }
             <span className="text-xs text-slate-500 block mb-1">الصفحة الحالية:</span>
             <span className="text-xl font-bold font-mono text-blue-700">{currentPage} من {totalPages}</span>
           </div>
+
+          {activeReport === 'supplier-statements' && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+              <span className="text-xs text-slate-500 block mb-1">إجمالي ديون الموردين:</span>
+              <span className="text-xl font-bold font-mono text-red-600">
+                {formatCurrency(filteredData.reduce((sum, r) => sum + (Number(r.balance_due ?? r.supplier_balance ?? r.current_balance ?? 0)), 0))}
+              </span>
+            </div>
+          )}
+
+          {activeReport === 'customer-statements' && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+              <span className="text-xs text-slate-500 block mb-1">إجمالي مستحقات العملاء:</span>
+              <span className="text-xl font-bold font-mono text-emerald-600">
+                {formatCurrency(filteredData.reduce((sum, r) => sum + (Number(r.balance_due ?? r.customer_balance ?? r.current_balance ?? 0)), 0))}
+              </span>
+            </div>
+          )}
+
+          {activeReport === 'low-stock' && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+              <span className="text-xs text-slate-500 block mb-1">إجمالي نواقص المخزون:</span>
+              <span className="text-xl font-bold font-mono text-red-600">
+                {formatNumber(filteredData.length)} أصناف
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Dynamic Table Rendering based on Active Report */}
