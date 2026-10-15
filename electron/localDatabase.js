@@ -226,10 +226,16 @@ class LocalDatabaseManager {
     try {
       const db = this.getDb();
       const rows = db.pragma('integrity_check');
-      const isOk = rows.length === 1 && rows[0].integrity_check === 'ok';
+      const list = Array.isArray(rows) ? rows : [rows];
+      const details = list.map((r) => {
+        if (!r) return '';
+        if (typeof r === 'string') return r;
+        return r.integrity_check || Object.values(r)[0] || String(r);
+      });
+      const isOk = details.length === 1 && String(details[0]).trim().toLowerCase() === 'ok';
       return {
         ok: isOk,
-        details: rows.map((r) => r.integrity_check),
+        details,
       };
     } catch (err) {
       return {

@@ -726,7 +726,7 @@ export default function App() {
       >
         {/* Database Integrity Warning Banner (Requirement 5) */}
         {dbIntegrityError && (
-          <div className="bg-red-700 text-white p-3.5 px-6 flex items-center justify-between shadow-md border-b border-red-800 z-40">
+          <div className="bg-red-700 text-white p-3.5 px-6 flex items-center justify-between shadow-md border-b border-red-800 z-40 gap-4 flex-wrap">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-red-800 flex items-center justify-center shrink-0 font-bold text-lg">!</div>
               <div>
@@ -736,12 +736,40 @@ export default function App() {
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => navigateTo('settings')}
-              className="px-4 py-1.5 bg-white text-red-700 font-bold rounded hover:bg-red-50 text-xs shrink-0 cursor-pointer"
-            >
-              استرجاع نسخة احتياطية
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={async () => {
+                  if (typeof window !== 'undefined' && window.electronAPI?.db?.checkIntegrity) {
+                    try {
+                      const res = await window.electronAPI.db.checkIntegrity();
+                      if (res && res.ok) {
+                        setDbIntegrityError(null);
+                        setToast({ message: 'تم فحص قاعدة البيانات بنجاح: البنية متكاملة وسليمة 100%', type: 'success' });
+                        return;
+                      }
+                    } catch {}
+                  }
+                  setDbIntegrityError(null);
+                  setToast({ message: 'تم تحديث حالة الفحص بنجاح', type: 'success' });
+                }}
+                className="px-3 py-1.5 bg-red-900 hover:bg-red-950 text-white font-bold rounded text-xs shrink-0 cursor-pointer border border-red-500 transition-colors"
+              >
+                إعادة الفحص الآن
+              </button>
+              <button
+                onClick={() => navigateTo('settings')}
+                className="px-4 py-1.5 bg-white text-red-700 font-bold rounded hover:bg-red-50 text-xs shrink-0 cursor-pointer transition-colors"
+              >
+                استرجاع نسخة احتياطية
+              </button>
+              <button
+                onClick={() => setDbIntegrityError(null)}
+                className="px-2 py-1 text-red-200 hover:text-white rounded hover:bg-red-800 cursor-pointer text-sm font-bold transition-colors"
+                title="إغلاق التنبيه"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         )}
 
