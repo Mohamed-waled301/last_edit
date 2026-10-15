@@ -103,6 +103,11 @@ jobs:
       - name: Audit app.asar integrity & secret stripping
         run: node scripts/verify-packaged-asar.cjs release
 
+      # Clean up internal builder diagnostic files
+      - name: Clean up internal builder diagnostic files
+        shell: bash
+        run: rm -f release/builder-debug.yml release/builder-effective-config.yaml
+
       # Security & Hardening Step 2: Strict Allow-List check on release output
       - name: Enforce strict release artifact allow-list
         run: node scripts/verify-release-artifacts.cjs release

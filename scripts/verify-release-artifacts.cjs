@@ -93,6 +93,15 @@ function verifyReleaseArtifacts(releaseDir, autoUpdateEnabled = false) {
       continue;
     }
 
+    // Clean up internal builder diagnostic files so they are never bundled or uploaded
+    if (fileName === 'builder-debug.yml' || fileName === 'builder-effective-config.yaml') {
+      try {
+        fs.unlinkSync(fullPath);
+        console.log(`  [Excluded & Removed] Internal builder config cleaned up: ${fileName}`);
+      } catch {}
+      continue;
+    }
+
     // Check against forbidden list
     const isForbidden = FORBIDDEN_PATTERNS.some((pattern) => pattern.test(fileName));
     if (isForbidden) {
