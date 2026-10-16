@@ -107,7 +107,7 @@ jobs:
             cp release/code-systems-cutting-Setup-*.exe release/code-systems-cutting-Setup.exe
           fi
           if compgen -G "release/code-systems-standard-Setup-*.exe" > /dev/null; then
-            cp release/code-systems-standard-Setup-*.exe release/code-systems-standard.exe
+            cp release/code-systems-standard-Setup-*.exe release/code-systems-standard-Setup.exe
           fi
 
       # Security & Hardening Step 1: Inspect packed asar contents
