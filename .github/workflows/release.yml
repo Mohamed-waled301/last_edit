@@ -99,6 +99,17 @@ jobs:
           WIN_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: npm run electron:build:standard
 
+      # Create canonical unversioned setup copies for permanent latest download links
+      - name: Create canonical latest setup copies
+        shell: bash
+        run: |
+          if compgen -G "release/code-systems-cutting-Setup-*.exe" > /dev/null; then
+            cp release/code-systems-cutting-Setup-*.exe release/code-systems-cutting-Setup.exe
+          fi
+          if compgen -G "release/code-systems-standard-Setup-*.exe" > /dev/null; then
+            cp release/code-systems-standard-Setup-*.exe release/code-systems-standard.exe
+          fi
+
       # Security & Hardening Step 1: Inspect packed asar contents
       - name: Audit app.asar integrity & secret stripping
         run: node scripts/verify-packaged-asar.cjs release

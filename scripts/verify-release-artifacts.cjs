@@ -15,6 +15,8 @@ const APPROVED_EXE_PATTERNS = [
   /^code-systems-cutting-Portable-[\d\w.-]+\.exe$/i,
   /^code-systems-standard-Setup-[\d\w.-]+\.exe$/i,
   /^code-systems-standard-Portable-[\d\w.-]+\.exe$/i,
+  /^code-systems-cutting-Setup\.exe$/i,
+  /^code-systems-standard-Setup\.exe$/i,
 ];
 
 // Explicit Forbidden File Extensions and Names

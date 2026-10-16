@@ -21,8 +21,8 @@
 
 | الإصدار | نوع النشاط | رابط التحميل المباشر |
 | :--- | :--- | :--- |
-| **إصدار مصانع الملابس (Cutting)** | مصانع الملابس والورش وأوامر التشغيل | **[تحميل مثبت ويندوز (Setup.exe)](https://github.com/Mohamed-waled301/code-systems-releases/releases/latest/download/code-systems-cutting-Setup-1.0.4.exe)** |
-| **الإصدار القياسي (Standard)** | تجاري، شركات، معارض، ومخازن | **[تحميل مثبت ويندوز (Setup.exe)](https://github.com/Mohamed-waled301/code-systems-releases/releases/latest/download/code-systems-standard-Setup-1.0.4.exe)** |
+| **إصدار مصانع الملابس (Cutting)** | مصانع الملابس والورش وأوامر التشغيل | **[تحميل مثبت ويندوز (Setup.exe)](https://github.com/Mohamed-waled301/code-systems-releases/releases/latest/download/code-systems-cutting-Setup.exe)** |
+| **الإصدار القياسي (Standard)** | تجاري، شركات، معارض، ومخازن | **[تحميل مثبت ويندوز (Setup.exe)](https://github.com/Mohamed-waled301/code-systems-releases/releases/latest/download/code-systems-standard-Setup.exe)** |
 
 * **[سجل جميع التحديثات وبصمات التحقق (All Releases & SHA-256 Checksums)](https://github.com/Mohamed-waled301/code-systems-releases/releases)**
 

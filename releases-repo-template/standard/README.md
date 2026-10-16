@@ -6,7 +6,7 @@
 
 ## 📥 روابط التحميل المباشرة (Direct Download Links)
 
-* **[تحميل مثبت ويندوز المعتمد (Setup.exe)](https://github.com/Mohamed-waled301/code-systems-releases/releases/latest/download/code-systems-standard-Setup-1.0.4.exe)**
+* **[تحميل مثبت ويندوز المعتمد (Setup.exe)](https://github.com/Mohamed-waled301/code-systems-releases/releases/latest/download/code-systems-standard-Setup.exe)**
 * **[سجل جميع التحديثات وبصمات التحقق (All Releases & SHA-256 Checksums)](https://github.com/Mohamed-waled301/code-systems-releases/releases)**
 
 ---
@@ -23,7 +23,7 @@
 
 ## ⚙️ خطوات التثبيت وتنبيه الحماية (Installation & Windows SmartScreen)
 
-1. حمّل ملف التثبيت المعتمد `code-systems-standard-Setup-1.0.4.exe`.
+1. حمّل ملف التثبيت المعتمد `code-systems-standard-Setup.exe`.
 2. شغّل ملف التثبيت بصلاحيات المستخدم أو المسؤول.
 3. **تنبيه حماية الشاشة (Windows Defender SmartScreen):**
    * نظراً لأن ملف التثبيت تم بناؤه وتوزيعه بدون شهادة رقمية تجارية مدفوعة (EV Code Signing)، قد يظهر نظام Windows تنبيهاً يفيد بأن الناشر غير معروف (Unknown Publisher).
