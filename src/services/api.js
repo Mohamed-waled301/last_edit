@@ -697,6 +697,10 @@ export const api = {
     const list = await salesRepo.getSalesInvoices(userOutletId);
     return { success: true, data: list, invoices: list };
   },
+  getSalesReport: async (filters = {}) => {
+    const res = await salesRepo.getSalesReport(filters);
+    return { success: true, data: res.customerRows, ...res };
+  },
   createSalesInvoice: async (data) => {
     const res = await salesRepo.createSalesInvoice(data, currentUserId);
     syncPush('sales_invoices', 'insert', res);

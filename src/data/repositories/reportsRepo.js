@@ -249,6 +249,10 @@ export const reportsRepo = {
     }
 
     return combined;
+  },
+
+  async getSalesReport(filters = {}) {
+    return await salesRepo.getSalesReport(filters);
   }
 };
 

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import DocumentConfirmModal from '../../components/DocumentConfirmModal';
+import PostIssuePrintDialog from '../../components/PostIssuePrintDialog';
 import MoneyInput, { NumberInput } from '../../components/MoneyInput';
 import { api, getActiveUser } from '../../services/api';
 import { formatCurrency, getTodayDateString, addDaysToDateString } from '../../utils/formatters';
@@ -22,6 +23,7 @@ import { Validators, FieldError } from '../../utils/validation';
 import { handleFormKeyDown } from '../../utils/formNavigation';
 import { navigationGuard } from '../../utils/navigationGuard';
 import QuickOutletModal from '../outlets/QuickOutletModal';
+import { generateSalesInvoiceHtml } from '../print/invoicePrintTemplates';
 
 export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
   const activeUser = getActiveUser();
@@ -38,6 +40,8 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
   const [showQuickOutletModal, setShowQuickOutletModal] = useState(false);
   const [defaultCreditDays, setDefaultCreditDays] = useState(30);
   const [focusedItem, setFocusedItem] = useState(null);
+  const [issuedInvoice, setIssuedInvoice] = useState(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
   const quantityInputRefs = useRef([]);
   const isSavedRef = useRef(false);
 
@@ -487,6 +491,44 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
     setShowConfirmModal(true);
   };
 
+  const handlePostIssueDone = () => {
+    setShowPrintModal(false);
+    setIssuedInvoice(null);
+    if (onSaved) {
+      onSaved();
+    } else {
+      window.location.hash = '#/sales';
+    }
+  };
+
+  const handleExecutePrint = async ({ paperSize, printerName, documentData }) => {
+    const doc = documentData || issuedInvoice;
+    if (window.electronAPI?.printHtml) {
+      try {
+        const settingsRes = await api.getSettings().catch(() => null);
+        const html = generateSalesInvoiceHtml(doc, settingsRes, paperSize);
+        const res = await window.electronAPI.printHtml(html, {
+          silent: Boolean(printerName),
+          printerName,
+          paperSize: paperSize === '80mm' ? '80mm' : 'A4',
+        });
+        return res;
+      } catch (err) {
+        return { error: err.message || 'فشلت الطباعة' };
+      }
+    } else {
+      const docId = doc?.id || doc?.invoice_number;
+      window.location.hash = `#/print-preview?type=${paperSize === '80mm' ? 'sales_invoice_thermal' : 'sales_invoice'}&id=${docId}&paper=${paperSize}`;
+      return { success: true };
+    }
+  };
+
+  const handleExecutePreview = ({ paperSize, documentData }) => {
+    const doc = documentData || issuedInvoice;
+    const docId = doc?.id || doc?.invoice_number;
+    window.location.hash = `#/print-preview?type=${paperSize === '80mm' ? 'sales_invoice_thermal' : 'sales_invoice'}&id=${docId}&paper=${paperSize}`;
+  };
+
   const handleConfirmIssue = async () => {
     try {
       setSaving(true);
@@ -494,9 +536,9 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
         invoice_number: form.invoice_number,
         customer_id: form.customer_id,
         outlet_id: form.outlet_id,
-        payment_terms: form.payment_terms,
         invoice_date: form.invoice_date,
-        due_date: form.payment_terms === 'credit' ? form.due_date : null, // Cash has NO due date
+        payment_terms: form.payment_terms,
+        due_date: form.payment_terms === 'credit' ? form.due_date : null,
         notes: form.notes,
         items: form.items.map(it => ({
           product_id: it.product_id,
@@ -515,11 +557,39 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
       setShowConfirmModal(false);
       if (onNotify) onNotify('تم إصدار فاتورة المبيعات بنجاح');
 
-      if (onSaved) {
-        onSaved();
-      } else {
-        window.location.hash = '#/sales';
+      // Check settings for post-issue print behavior
+      const settingsRes = await api.getSettings().catch(() => null);
+      const printMode = settingsRes?.post_issue_print_sales || 'ask'; // 'ask' | 'auto' | 'none'
+
+      if (printMode === 'none') {
+        handlePostIssueDone();
+        return;
       }
+
+      setIssuedInvoice(res);
+
+      if (printMode === 'auto') {
+        try {
+          const savedPref = JSON.parse(localStorage.getItem('erp_post_issue_print_sales_invoice') || '{}');
+          const paperSize = savedPref.paperSize || 'a4';
+          const printerName = savedPref.printerName || '';
+          if (window.electronAPI?.printHtml) {
+            const html = generateSalesInvoiceHtml(res, settingsRes, paperSize);
+            await window.electronAPI.printHtml(html, {
+              silent: Boolean(printerName),
+              printerName,
+              paperSize: paperSize === '80mm' ? '80mm' : 'A4',
+            });
+          }
+        } catch (e) {
+          console.warn('Auto print error:', e);
+        }
+        handlePostIssueDone();
+        return;
+      }
+
+      // Default: 'ask' -> open PostIssuePrintDialog
+      setShowPrintModal(true);
     } catch (err) {
       alert(err.message || 'فشل في حفظ الفاتورة');
     } finally {
@@ -1068,6 +1138,19 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
         paymentType={form.payment_terms}
         totalAmount={invoiceTotal}
         isSubmitting={saving}
+      />
+
+      {/* Post-Issue Print Dialog (Requirement 2) */}
+      <PostIssuePrintDialog
+        isOpen={showPrintModal}
+        onClose={handlePostIssueDone}
+        onFinished={handlePostIssueDone}
+        documentType="sales_invoice"
+        documentNumber={issuedInvoice?.invoice_number || form.invoice_number}
+        documentTitle={`تم إصدار فاتورة المبيعات رقم ${issuedInvoice?.invoice_number || form.invoice_number}`}
+        documentData={issuedInvoice}
+        onPrint={handleExecutePrint}
+        onPreview={handleExecutePreview}
       />
     </PageContainer>
   );

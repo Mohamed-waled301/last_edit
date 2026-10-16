@@ -9,6 +9,7 @@ import BalanceCalculator, {
 } from '../../logic/balances';
 import auditRepo from './auditRepo';
 import { validateNotPastDate } from '../../utils/formatters';
+import { toPiasters, fromPiasters } from '../../utils/money';
 
 export const salesRepo = {
   async getCustomers() {
@@ -346,6 +347,136 @@ export const salesRepo = {
         remaining_amount: Math.max(0, Number(((Number(i.total_invoice_amount) || 0) - (Number(i.paid_amount) || 0)).toFixed(2))),
       };
     });
+  },
+
+  /**
+   * Sales Report (تقرير المبيعات المعتمدة وتجميع مبيعات العملاء)
+   * Strictly includes ONLY customers who actually have issued sales invoices
+   * matching active filters (date range, payment type, status).
+   * Customers with zero matching invoices are completely excluded from rows and customer count summaries.
+   * All aggregations are computed with integer-piaster precision.
+   */
+  async getSalesReport(filters = {}) {
+    const { startDate, endDate, paymentType, status, customerId } = filters;
+    let invoices = await db.sales_invoices.toArray();
+
+    // 1. Filter ONLY valid issued invoices matching active filters
+    invoices = invoices.filter(inv => {
+      // Must not be cancelled unless explicitly requested as cancelled
+      if (!status && inv.status === 'cancelled') return false;
+      if (status && status !== 'all' && inv.status !== status) return false;
+
+      // Payment terms filter ('cash' | 'credit')
+      if (paymentType && paymentType !== 'all' && inv.payment_terms !== paymentType) return false;
+
+      // Date range filter
+      const invDate = inv.invoice_date || inv.date || (inv.created_at ? String(inv.created_at).split('T')[0] : '');
+      if (startDate && invDate && invDate < startDate) return false;
+      if (endDate && invDate && invDate > endDate) return false;
+      if ((startDate || endDate) && !invDate) return false;
+
+      // Specific customer filter
+      if (customerId && customerId !== 'all' && inv.customer_id !== customerId && inv.party_id !== customerId) {
+        return false;
+      }
+
+      return true;
+    });
+
+    // 2. Discover UNIQUE customers that actually have matching invoices
+    const activeCustomerIds = new Set();
+    for (const inv of invoices) {
+      const cId = inv.customer_id || inv.party_id;
+      if (cId) activeCustomerIds.add(cId);
+    }
+
+    // 3. Load customer metadata ONLY for customers with matching invoices
+    const allCustomers = await db.customers.toArray();
+    const allParties = await db.parties.where('is_customer').equals(1).toArray().catch(() => []);
+    const custMap = new Map();
+    for (const c of allCustomers) custMap.set(c.id, c);
+    for (const p of allParties) {
+      if (!custMap.has(p.id)) custMap.set(p.id, p);
+      else custMap.set(p.id, { ...custMap.get(p.id), ...p });
+    }
+
+    // 4. Build Customer Aggregations in integer piasters
+    let overallSubtotalPiasters = 0;
+    let overallDiscountPiasters = 0;
+    let overallTotalSalesPiasters = 0;
+    let overallPaidPiasters = 0;
+    let overallRemainingPiasters = 0;
+
+    const customerRows = [];
+    for (const cId of activeCustomerIds) {
+      const custInvoices = invoices.filter(i => (i.customer_id === cId || i.party_id === cId));
+      if (custInvoices.length === 0) continue; // Guarantees zero-invoice customers NEVER included
+
+      const custObj = custMap.get(cId) || {};
+      let subPiasters = 0;
+      let discPiasters = 0;
+      let totalPiastersVal = 0;
+      let paidPiastersVal = 0;
+
+      for (const inv of custInvoices) {
+        const netAmt = inv.net_amount ?? inv.grand_total ?? inv.total_invoice_amount ?? inv.total_amount ?? 0;
+        const subAmt = inv.subtotal ?? netAmt;
+        const discAmt = inv.discount_value ?? inv.discount ?? 0;
+        const paidAmt = inv.paid_amount ?? (inv.payment_terms === 'cash' ? netAmt : 0);
+
+        subPiasters += toPiasters(subAmt);
+        discPiasters += toPiasters(discAmt);
+        totalPiastersVal += toPiasters(netAmt);
+        paidPiastersVal += toPiasters(paidAmt);
+      }
+
+      const remainingPiastersVal = Math.max(0, totalPiastersVal - paidPiastersVal);
+
+      overallSubtotalPiasters += subPiasters;
+      overallDiscountPiasters += discPiasters;
+      overallTotalSalesPiasters += totalPiastersVal;
+      overallPaidPiasters += paidPiastersVal;
+      overallRemainingPiasters += remainingPiastersVal;
+
+      customerRows.push({
+        id: cId,
+        customer_id: cId,
+        code: custObj.code || cId,
+        name: custObj.name || custInvoices[0]?.customer_name || 'عميل',
+        phone: custObj.phone || custInvoices[0]?.customer_phone || '-',
+        invoices_count: custInvoices.length,
+        subtotal: fromPiasters(subPiasters),
+        discount_total: fromPiasters(discPiasters),
+        total_sales: fromPiasters(totalPiastersVal),
+        paid_total: fromPiasters(paidPiastersVal),
+        balance_remaining: fromPiasters(remainingPiastersVal),
+        invoices: custInvoices,
+      });
+    }
+
+    // Sort customers by total sales descending
+    customerRows.sort((a, b) => b.total_sales - a.total_sales);
+
+    // Format individual invoices with resolved customer names
+    const populatedInvoices = invoices.map(i => ({
+      ...i,
+      customer_name: custMap.get(i.customer_id)?.name || custMap.get(i.party_id)?.name || i.customer_name || 'عميل',
+      customer_code: custMap.get(i.customer_id)?.code || custMap.get(i.party_id)?.code || '',
+    }));
+
+    return {
+      customerRows,
+      invoices: populatedInvoices,
+      summary: {
+        uniqueCustomersCount: customerRows.length,
+        invoicesCount: invoices.length,
+        totalSales: fromPiasters(overallTotalSalesPiasters),
+        totalSubtotal: fromPiasters(overallSubtotalPiasters),
+        totalDiscount: fromPiasters(overallDiscountPiasters),
+        totalPaid: fromPiasters(overallPaidPiasters),
+        totalRemaining: fromPiasters(overallRemainingPiasters),
+      }
+    };
   },
 
   async createSalesInvoice(data, userId = 'usr-accountant') {

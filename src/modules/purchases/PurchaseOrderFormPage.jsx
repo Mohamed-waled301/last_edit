@@ -22,6 +22,7 @@ import {
 import PageContainer from '../../components/PageContainer';
 import DocumentConfirmModal from '../../components/DocumentConfirmModal';
 import QuickSupplierModal from './QuickSupplierModal';
+import PostIssuePrintDialog from '../../components/PostIssuePrintDialog';
 import MoneyInput, { NumberInput } from '../../components/MoneyInput';
 import { navigationGuard } from '../../utils/navigationGuard';
 import { api } from '../../services/api';
@@ -29,6 +30,7 @@ import { formatCurrency, formatNumber, getTodayDateString } from '../../utils/fo
 import { Validators, FieldError } from '../../utils/validation';
 import { handleFormKeyDown } from '../../utils/formNavigation';
 import { calculatePurchaseOrderTotals } from '../../logic/purchaseOrderCalculations';
+import { generatePurchaseInvoiceHtml } from '../print/invoicePrintTemplates';
 
 export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCancel, onNotify, onBack }) {
   const isEdit = Boolean(orderId);
@@ -43,6 +45,8 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
   const [saving, setSaving] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
+  const [issuedOrder, setIssuedOrder] = useState(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
   const isSavedRef = useRef(false);
   const [suggestedSupplier, setSuggestedSupplier] = useState(null);
 
@@ -742,6 +746,44 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     setShowConfirmModal(true);
   };
 
+  const handlePostIssueDone = () => {
+    setShowPrintModal(false);
+    setIssuedOrder(null);
+    if (onSaved) {
+      onSaved();
+    } else {
+      handleBack();
+    }
+  };
+
+  const handleExecutePrint = async ({ paperSize, printerName, documentData }) => {
+    const doc = documentData || issuedOrder;
+    if (window.electronAPI?.printHtml) {
+      try {
+        const settingsRes = await api.getSettings().catch(() => null);
+        const html = generatePurchaseInvoiceHtml(doc, settingsRes, paperSize);
+        const res = await window.electronAPI.printHtml(html, {
+          silent: Boolean(printerName),
+          printerName,
+          paperSize: paperSize === '80mm' ? '80mm' : 'A4',
+        });
+        return res;
+      } catch (err) {
+        return { error: err.message || 'فشلت الطباعة' };
+      }
+    } else {
+      const docId = doc?.id || doc?.po_number;
+      window.location.hash = `#/print-preview?type=${paperSize === '80mm' ? 'purchase_invoice_thermal' : 'purchase_invoice'}&id=${docId}&paper=${paperSize}`;
+      return { success: true };
+    }
+  };
+
+  const handleExecutePreview = ({ paperSize, documentData }) => {
+    const doc = documentData || issuedOrder;
+    const docId = doc?.id || doc?.po_number;
+    window.location.hash = `#/print-preview?type=${paperSize === '80mm' ? 'purchase_invoice_thermal' : 'purchase_invoice'}&id=${docId}&paper=${paperSize}`;
+  };
+
   const handleConfirmIssue = async () => {
     try {
       setSaving(true);
@@ -772,7 +814,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         }))
       };
 
-      await api.createPurchaseOrder(payload);
+      const res = await api.createPurchaseOrder(payload);
       isSavedRef.current = true;
       navigationGuard.unregister();
       setShowConfirmModal(false);
@@ -780,11 +822,39 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         onNotify('تم إصدار فاتورة الشراء واعتماد استلام المخزون وحساب المورد بنجاح');
       }
 
-      if (onSaved) {
-        onSaved();
-      } else {
-        handleBack();
+      // Check settings for post-issue print behavior
+      const settingsRes = await api.getSettings().catch(() => null);
+      const printMode = settingsRes?.post_issue_print_purchase || 'ask'; // 'ask' | 'auto' | 'none'
+
+      if (printMode === 'none') {
+        handlePostIssueDone();
+        return;
       }
+
+      setIssuedOrder(res);
+
+      if (printMode === 'auto') {
+        try {
+          const savedPref = JSON.parse(localStorage.getItem('erp_post_issue_print_purchase_invoice') || '{}');
+          const paperSize = savedPref.paperSize || 'a4';
+          const printerName = savedPref.printerName || '';
+          if (window.electronAPI?.printHtml) {
+            const html = generatePurchaseInvoiceHtml(res, settingsRes, paperSize);
+            await window.electronAPI.printHtml(html, {
+              silent: Boolean(printerName),
+              printerName,
+              paperSize: paperSize === '80mm' ? '80mm' : 'A4',
+            });
+          }
+        } catch (e) {
+          console.warn('Auto print error:', e);
+        }
+        handlePostIssueDone();
+        return;
+      }
+
+      // Default: 'ask' -> open PostIssuePrintDialog
+      setShowPrintModal(true);
     } catch (err) {
       alert(err.message || 'حدث خطأ أثناء إصدار الفاتورة');
     } finally {
@@ -1746,6 +1816,19 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         onClose={() => setShowAddSupplierModal(false)}
         existingSuppliers={suppliers}
         onSupplierCreated={handleSupplierCreated}
+      />
+
+      {/* Post-Issue Print Dialog (Requirement 2) */}
+      <PostIssuePrintDialog
+        isOpen={showPrintModal}
+        onClose={handlePostIssueDone}
+        onFinished={handlePostIssueDone}
+        documentType="purchase_invoice"
+        documentNumber={issuedOrder?.po_number || form.po_number}
+        documentTitle={`تم إصدار فاتورة الشراء رقم ${issuedOrder?.po_number || form.po_number}`}
+        documentData={issuedOrder}
+        onPrint={handleExecutePrint}
+        onPreview={handleExecutePreview}
       />
     </PageContainer>
   );

@@ -68,6 +68,9 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [partyFilter, setPartyFilter] = useState('');
+  const [salesViewMode, setSalesViewMode] = useState('customers'); // 'customers' | 'invoices'
+  const [paymentFilter, setPaymentFilter] = useState('all'); // 'all' | 'cash' | 'credit'
+  const [salesReportSummary, setSalesReportSummary] = useState(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -302,8 +305,14 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
             break;
           }
           case 'sales-invoices': {
-            const res = await api.getSalesInvoices();
-            setReportData(res.data || res.sales_invoices || []);
+            const salesRep = await api.getSalesReport({
+              startDate,
+              endDate,
+              paymentType: paymentFilter,
+              status: statusFilter,
+            });
+            setSalesReportSummary(salesRep.summary);
+            setReportData(salesViewMode === 'customers' ? salesRep.customerRows : salesRep.invoices);
             break;
           }
           case 'customer-statements': {
@@ -315,8 +324,22 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
               db.customer_returns.toArray(),
               db.party_settlements ? db.party_settlements.toArray().catch(() => []) : Promise.resolve([]),
             ]);
-            const receivables = computeCustomerReceivables(custs, rawCustomers, salesInvoices, customerPayments, customerReturns, settlements);
-            setReportData(receivables.customersBreakdown);
+            let filteredInvoices = salesInvoices;
+            if (startDate || endDate) {
+              filteredInvoices = salesInvoices.filter(i => {
+                const d = i.invoice_date || i.date;
+                if (startDate && d && d < startDate) return false;
+                if (endDate && d && d > endDate) return false;
+                return true;
+              });
+            }
+            const receivables = computeCustomerReceivables(custs, rawCustomers, filteredInvoices, customerPayments, customerReturns, settlements);
+            let breakdown = receivables.customersBreakdown;
+            if (startDate || endDate) {
+              const activeCustIds = new Set(filteredInvoices.map(i => i.customer_id || i.party_id));
+              breakdown = breakdown.filter(c => activeCustIds.has(c.id) || (c.credit_sales_total > 0));
+            }
+            setReportData(breakdown);
             break;
           }
           case 'returns': {
@@ -437,7 +460,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
     }
 
     fetchReportData();
-  }, [activeReport]);
+  }, [activeReport, startDate, endDate, statusFilter, paymentFilter, salesViewMode]);
 
   // Filtered dataset
   const filteredData = useMemo(() => {
@@ -453,8 +476,8 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
         if (!matchesTerm) return false;
       }
 
-      // Date filtering
-      if (startDate || endDate) {
+      // Date filtering (for reports where API doesn't pre-filter)
+      if (activeReport !== 'sales-invoices' && (startDate || endDate)) {
         const rowDate = row.date || row.order_date || row.invoice_date || row.receipt_date || row.payment_date || row.created_at?.split('T')[0];
         if (rowDate) {
           if (startDate && rowDate < startDate) return false;
@@ -462,14 +485,14 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
         }
       }
 
-      // Status filtering
-      if (statusFilter && row.status && row.status !== statusFilter) {
+      // Status filtering (for reports where API doesn't pre-filter)
+      if (activeReport !== 'sales-invoices' && statusFilter && row.status && row.status !== statusFilter) {
         return false;
       }
 
       return true;
     });
-  }, [reportData, searchTerm, startDate, endDate, statusFilter]);
+  }, [reportData, searchTerm, startDate, endDate, statusFilter, activeReport]);
 
   // Pagination calculation
   const totalRecords = filteredData.length;
@@ -713,26 +736,120 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
                   setStartDate('');
                   setEndDate('');
                   setStatusFilter('');
+                  setPaymentFilter('all');
                 }}
-                className="w-full px-3 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                className="w-full px-3 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
               >
                 إعادة ضبط الفلاتر
               </button>
             </div>
           </div>
+
+          {activeReport === 'sales-invoices' && (
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-700">طريقة العرض:</span>
+                <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setSalesViewMode('customers')}
+                    className={`px-3 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                      salesViewMode === 'customers'
+                        ? 'bg-white text-blue-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    تجميع حسب العملاء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSalesViewMode('invoices')}
+                    className={`px-3 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                      salesViewMode === 'invoices'
+                        ? 'bg-white text-blue-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    تفصيلي حسب الفواتير
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-slate-700">طريقة الدفع:</span>
+                  <select
+                    value={paymentFilter}
+                    onChange={(e) => setPaymentFilter(e.target.value)}
+                    className="px-2.5 py-1 border border-slate-300 rounded-lg bg-slate-50 font-semibold text-slate-800"
+                  >
+                    <option value="all">الكل</option>
+                    <option value="cash">نقدي</option>
+                    <option value="credit">آجل</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-slate-700">الحالة:</span>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="px-2.5 py-1 border border-slate-300 rounded-lg bg-slate-50 font-semibold text-slate-800"
+                  >
+                    <option value="">الكل (غير الملغاة)</option>
+                    <option value="paid">مدفوعة بالكامل</option>
+                    <option value="unpaid">غير مدفوعة</option>
+                    <option value="partially_paid">مدفوعة جزئياً</option>
+                    <option value="cancelled">ملغاة</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Summary Info Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-            <span className="text-xs text-slate-500 block mb-1">عدد السجلات المطابقة:</span>
-            <span className="text-xl font-bold font-mono text-slate-900">{formatNumber(totalRecords)}</span>
+            <span className="text-xs text-slate-500 block mb-1">
+              {activeReport === 'sales-invoices' && salesViewMode === 'customers'
+                ? 'عدد العملاء المطابقين:'
+                : 'عدد السجلات المطابقة:'}
+            </span>
+            <span className="text-xl font-bold font-mono text-slate-900">
+              {activeReport === 'sales-invoices' && salesReportSummary
+                ? formatNumber(salesViewMode === 'customers' ? salesReportSummary.uniqueCustomersCount : salesReportSummary.invoicesCount)
+                : formatNumber(totalRecords)}
+            </span>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-            <span className="text-xs text-slate-500 block mb-1">الصفحة الحالية:</span>
-            <span className="text-xl font-bold font-mono text-blue-700">{currentPage} من {totalPages}</span>
+            <span className="text-xs text-slate-500 block mb-1">
+              {activeReport === 'sales-invoices' ? 'إجمالي عدد الفواتير:' : 'الصفحة الحالية:'}
+            </span>
+            <span className="text-xl font-bold font-mono text-blue-700">
+              {activeReport === 'sales-invoices' && salesReportSummary
+                ? `${salesReportSummary.invoicesCount} فاتورة`
+                : `${currentPage} من ${totalPages}`}
+            </span>
           </div>
+
+          {activeReport === 'sales-invoices' && salesReportSummary && (
+            <>
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+                <span className="text-xs text-slate-500 block mb-1">إجمالي المبيعات الصافية:</span>
+                <span className="text-xl font-bold font-mono text-emerald-600">
+                  {formatCurrency(salesReportSummary.totalSales)}
+                </span>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+                <span className="text-xs text-slate-500 block mb-1">المتبقي (الآجل غير المسدد):</span>
+                <span className="text-xl font-bold font-mono text-rose-600">
+                  {formatCurrency(salesReportSummary.totalRemaining)}
+                </span>
+              </div>
+            </>
+          )}
 
           {activeReport === 'supplier-statements' && (
             <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
@@ -767,7 +884,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
           <div className="overflow-x-auto">
             <table className="w-full text-right border-collapse text-xs">
               <thead className="bg-slate-800 text-white font-semibold sticky top-0">
-                {renderTableHeaders(activeReport)}
+                {renderTableHeaders(activeReport, salesViewMode)}
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
@@ -783,7 +900,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
                     </td>
                   </tr>
                 ) : (
-                  pagedData.map((row, idx) => renderTableRow(activeReport, row, idx))
+                  pagedData.map((row, idx) => renderTableRow(activeReport, row, idx, salesViewMode))
                 )}
               </tbody>
             </table>
@@ -824,7 +941,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
 }
 
 // Helper: Render Table Headers
-function renderTableHeaders(key) {
+function renderTableHeaders(key, salesViewMode = 'customers') {
   switch (key) {
     case 'items':
     case 'low-stock':
@@ -900,6 +1017,19 @@ function renderTableHeaders(key) {
         </tr>
       );
     case 'sales-invoices':
+      if (salesViewMode === 'customers') {
+        return (
+          <tr>
+            <th className="p-3">كود العميل</th>
+            <th className="p-3">اسم العميل</th>
+            <th className="p-3">الهاتف</th>
+            <th className="p-3 text-center font-mono">عدد الفواتير</th>
+            <th className="p-3 text-left font-mono">إجمالي المبيعات</th>
+            <th className="p-3 text-left font-mono">المسدد</th>
+            <th className="p-3 text-left font-mono">المتبقي</th>
+          </tr>
+        );
+      }
       return (
         <tr>
           <th className="p-3">رقم الفاتورة</th>
@@ -1001,7 +1131,7 @@ function renderTableHeaders(key) {
 }
 
 // Helper: Render Table Row
-function renderTableRow(key, row, idx) {
+function renderTableRow(key, row, idx, salesViewMode = 'customers') {
   switch (key) {
     case 'items':
     case 'low-stock':
@@ -1115,6 +1245,19 @@ function renderTableRow(key, row, idx) {
         </tr>
       );
     case 'sales-invoices':
+      if (row.invoices_count !== undefined) {
+        return (
+          <tr key={row.id || idx} className="hover:bg-slate-50">
+            <td className="p-3 font-mono font-bold text-slate-900">{row.code || row.customer_id}</td>
+            <td className="p-3 font-bold text-slate-800">{row.name}</td>
+            <td className="p-3 font-mono">{row.phone || '-'}</td>
+            <td className="p-3 text-center font-mono font-bold text-blue-700">{row.invoices_count}</td>
+            <td className="p-3 text-left font-mono font-bold text-slate-900">{formatCurrency(row.total_sales || 0)}</td>
+            <td className="p-3 text-left font-mono text-emerald-700">{formatCurrency(row.paid_total || 0)}</td>
+            <td className="p-3 text-left font-mono font-bold text-rose-700">{formatCurrency(row.balance_remaining || 0)}</td>
+          </tr>
+        );
+      }
       return (
         <tr key={row.id || idx} className="hover:bg-slate-50">
           <td className="p-3 font-mono font-bold text-slate-900">{row.invoice_number}</td>

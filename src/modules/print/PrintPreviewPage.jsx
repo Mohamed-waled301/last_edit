@@ -20,7 +20,9 @@ import {
   Hash
 } from 'lucide-react';
 import { api } from '../../services/api';
+import db from '../../data/db';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
+import { generatePurchaseInvoiceHtml, generateSalesInvoiceHtml } from './invoicePrintTemplates';
 
 export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   const params = useMemo(() => {
@@ -35,9 +37,10 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     return new URLSearchParams();
   }, [searchParams]);
 
-  const docType = params.get('type') || 'invoice'; // 'sales_invoice' | 'sales_invoice_thermal' | 'invoice' | 'customer_receipt' | 'supplier_payment' | 'statement' | 'cut_order' | 'report' | 'stock_card'
+  const docType = params.get('type') || 'invoice'; // 'sales_invoice' | 'sales_invoice_thermal' | 'purchase_invoice' | 'purchase_invoice_thermal' | 'purchase_order' | 'invoice' | 'customer_receipt' | 'supplier_payment' | 'statement' | 'cut_order' | 'report' | 'stock_card'
   const docId = params.get('id');
   const returnUrl = params.get('returnUrl');
+  const paperParam = params.get('paper');
 
   const [settings, setSettings] = useState(null);
   const [documentData, setDocumentData] = useState(null);
@@ -47,7 +50,10 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   // Printers & Print Settings
   const [printers, setPrinters] = useState([]);
   const [selectedPrinter, setSelectedPrinter] = useState('');
-  const [paperSize, setPaperSize] = useState(docType === 'sales_invoice_thermal' ? '80mm' : 'A4');
+  const initialPaperSize = paperParam
+    ? (paperParam === '80mm' ? '80mm' : 'A4')
+    : (docType === 'sales_invoice_thermal' || docType === 'purchase_invoice_thermal' ? '80mm' : 'A4');
+  const [paperSize, setPaperSize] = useState(initialPaperSize);
   const [orientation, setOrientation] = useState('portrait'); // 'portrait' | 'landscape'
   const [margins, setMargins] = useState(docType === 'sales_invoice_thermal' ? 'none' : 'default'); // 'default' | 'minimal' | 'none'
   const [copies, setCopies] = useState(1);
@@ -137,6 +143,20 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           }
           if (!found) {
             found = invoices[0] || null;
+          }
+          setDocumentData(found);
+        } else if (docType === 'purchase_invoice' || docType === 'purchase_order' || docType === 'purchase_invoice_thermal') {
+          const res = await api.getPurchaseOrders();
+          const orders = Array.isArray(res.data) ? res.data : (res.purchase_orders || (Array.isArray(res) ? res : []));
+          let found = orders.find(o => String(o.id) === String(docId) || String(o.po_number) === String(docId));
+          if (!found && docId) {
+            try {
+              const poFromDb = await db.purchase_orders.get(docId);
+              if (poFromDb) found = poFromDb;
+            } catch {}
+          }
+          if (!found) {
+            found = orders[0] || null;
           }
           setDocumentData(found);
         } else if (docType === 'customer_receipt') {
@@ -336,6 +356,25 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     const companyLogo = settings?.company_logo || '/logo.png';
     const isThermal = paperSize === '80mm';
 
+    // 0. Purchase Invoice Rendering (Both 80mm Thermal and A4 Official)
+    if (docType === 'purchase_invoice' || docType === 'purchase_order' || docType === 'purchase_invoice_thermal') {
+      const po = documentData;
+      if (!po) {
+        return (
+          <div className="p-8 text-center text-slate-500 font-bold">
+            لم يتم العثور على أمر التوريد / فاتورة الشراء المطلوبة.
+          </div>
+        );
+      }
+      return (
+        <div
+          dangerouslySetInnerHTML={{
+            __html: generatePurchaseInvoiceHtml(po, settings, paperSize)
+          }}
+        />
+      );
+    }
+
     // 1. Sales Invoice Rendering (Both 80mm Thermal and A4 Tax Invoice)
     if (docType === 'sales_invoice' || docType === 'invoice' || docType === 'sales_invoice_thermal') {
       const invoice = documentData;
@@ -346,303 +385,12 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           </div>
         );
       }
-
-      const items = Array.isArray(invoice.items) ? invoice.items : [];
-      const totalAmount = Number(invoice.total_amount ?? invoice.total_invoice_amount ?? invoice.subtotal ?? 0);
-      const subtotal = Number(invoice.subtotal ?? totalAmount);
-      const discount = Number(invoice.discount ?? 0);
-      const taxAmount = Number(invoice.tax_amount ?? 0);
-      const paidAmount = Number(invoice.paid_amount ?? 0);
-      const remainingAmount = Number(invoice.remaining_amount ?? (totalAmount - paidAmount));
-
-      // 1.A) 80mm Thermal Receipt Layout
-      if (isThermal) {
-        return (
-          <div className="p-3 bg-white text-slate-900 font-mono text-xs w-[80mm] max-w-[80mm] mx-auto select-text" dir="rtl">
-            {/* Thermal Header */}
-            <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
-              <img
-                src={companyLogo}
-                alt="Logo"
-                className="h-12 w-auto max-w-[110px] object-contain mx-auto mb-1.5"
-                onError={(e) => {
-                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-                }}
-              />
-              <h2 className="font-extrabold text-sm text-slate-900">{companyName}</h2>
-              <div className="text-[11px] font-bold text-[#1F3A5F]">نظام نقاط البيع والمبيعات - code systems</div>
-              {settings?.address && <p className="text-[10px] text-slate-600 mt-0.5">{settings.address}</p>}
-              {settings?.phone && <p className="text-[10px] text-slate-600">هاتف: <span className="font-mono">{settings.phone}</span></p>}
-              {settings?.tax_number && <p className="text-[10px] text-slate-600">الرقم الضريبي: <span className="font-mono">{settings.tax_number}</span></p>}
-              
-              <div className="mt-2 text-right pt-2 border-t border-dotted border-slate-300 space-y-0.5 text-[11px]">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">رقم الفاتورة:</span>
-                  <span className="font-bold text-slate-900">{invoice.invoice_number}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">التاريخ:</span>
-                  <span>{formatDate(invoice.invoice_date || invoice.created_at)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">العميل:</span>
-                  <span className="font-bold">{invoice.customer_name || 'عميل نقدي'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">طريقة السداد:</span>
-                  <span className="font-bold">{invoice.payment_terms === 'credit' ? 'آجل' : 'نقدي'}</span>
-                </div>
-                {invoice.outlet_name && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">الفرع:</span>
-                    <span>{invoice.outlet_name}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Thermal Items List */}
-            <div className="border-b border-dashed border-slate-400 pb-2 mb-2">
-              <div className="flex justify-between font-bold border-b border-slate-300 pb-1 mb-1 text-[11px] text-slate-800">
-                <span className="w-1/2">الصنف</span>
-                <span className="w-1/4 text-center">الكمية × السعر</span>
-                <span className="w-1/4 text-left">الإجمالي</span>
-              </div>
-              {items.map((it, idx) => {
-                const qty = Number(it.quantity) || 1;
-                const price = Number(it.unit_price || it.unit_selling_price || 0);
-                const lineTotal = Number(it.total_price || (qty * price));
-                return (
-                  <div key={idx} className="flex justify-between py-1 text-[11px] border-b border-dotted border-slate-200">
-                    <div className="w-1/2 truncate pr-0.5">
-                      <span className="font-bold">{it.product_name || it.name}</span>
-                      {it.variant_label && <span className="text-slate-500 block text-[9px]">{it.variant_label}</span>}
-                    </div>
-                    <div className="w-1/4 text-center font-mono">
-                      {qty} × {price}
-                    </div>
-                    <div className="w-1/4 text-left font-bold font-mono">
-                      {lineTotal.toFixed(2)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Thermal Totals */}
-            <div className="space-y-1 text-right text-xs border-b border-dashed border-slate-400 pb-2 mb-3">
-              {discount > 0 && (
-                <div className="flex justify-between text-slate-600">
-                  <span>الخصم التجاري:</span>
-                  <span className="font-mono text-rose-700">-{formatCurrency(discount)}</span>
-                </div>
-              )}
-              {taxAmount > 0 && (
-                <div className="flex justify-between text-slate-600">
-                  <span>ضريبة القيمة المضافة:</span>
-                  <span className="font-mono">{formatCurrency(taxAmount)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-sm font-bold pt-1 border-t border-slate-300 text-slate-900">
-                <span>الصافي المطلوب:</span>
-                <span className="font-mono text-[#1F3A5F]">{formatCurrency(totalAmount)}</span>
-              </div>
-              {invoice.payment_terms === 'credit' && (
-                <>
-                  <div className="flex justify-between text-[11px] text-emerald-700">
-                    <span>المبلغ المسدد:</span>
-                    <span className="font-mono font-bold">{formatCurrency(paidAmount)}</span>
-                  </div>
-                  <div className="flex justify-between text-[11px] text-rose-700 font-bold">
-                    <span>المتبقي المستحق:</span>
-                    <span className="font-mono">{formatCurrency(remainingAmount)}</span>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Thermal Footer */}
-            <div className="text-center text-[10px] text-slate-600 space-y-1 pb-2">
-              <p className="font-bold">البضاعة المباعة ترد وتستبدل خلال 14 يوماً مع الفاتورة</p>
-              <p>شكراً لتعاملكم معنا ونسعد بخدمتكم دائماً</p>
-              <p className="font-mono text-[9px] text-slate-400 mt-2">code systems ERP • {new Date().toLocaleDateString('ar-EG')}</p>
-            </div>
-          </div>
-        );
-      }
-
-      // 1.B) A4 / A5 Official Tax Invoice Layout
       return (
-        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
-          {/* Header */}
-          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
-            <div className="flex items-center gap-4">
-              <img
-                src={companyLogo}
-                alt="Logo"
-                className="h-16 w-auto max-w-[140px] object-contain rounded"
-                onError={(e) => {
-                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-                }}
-              />
-              <div>
-                <h2 className="text-2xl font-bold text-[#1F3A5F]">{companyName}</h2>
-                <div className="text-xs font-bold text-slate-500">نظام إدارة المؤسسات المتكامل - code systems ERP</div>
-                {settings?.address && <p className="text-xs text-slate-600 mt-1">{settings.address}</p>}
-                {settings?.phone && <p className="text-xs text-slate-600">هاتف: <span className="font-mono">{settings.phone}</span></p>}
-                {settings?.tax_number && <p className="text-xs text-slate-600">الرقم الضريبي: <span className="font-mono">{settings.tax_number}</span></p>}
-              </div>
-            </div>
-
-            <div className="text-left font-mono">
-              <span className="inline-block px-3.5 py-1.5 bg-[#1F3A5F] text-white font-bold text-sm rounded shadow-xs mb-2">
-                فاتورة مبيعات ضريبية
-              </span>
-              <div className="text-xs text-slate-600 font-bold">
-                رقم الفاتورة: <span className="text-slate-900 text-sm">{invoice.invoice_number}</span>
-              </div>
-              <div className="text-xs text-slate-600 font-bold mt-1">
-                تاريخ الإصدار: <span>{formatDate(invoice.invoice_date || invoice.created_at)}</span>
-              </div>
-              <div className="text-xs text-slate-600 font-bold mt-1">
-                طريقة السداد: <span className={invoice.payment_terms === 'credit' ? 'text-rose-700' : 'text-emerald-700'}>
-                  {invoice.payment_terms === 'credit' ? 'آجل' : 'نقدي'}
-                </span>
-              </div>
-              {invoice.due_date && invoice.payment_terms === 'credit' && (
-                <div className="text-xs text-rose-700 font-bold mt-1">
-                  تاريخ الاستحقاق: <span>{formatDate(invoice.due_date)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Customer & Outlet Details */}
-          <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
-            <div>
-              <span className="text-slate-500 block mb-1">بيانات العميل:</span>
-              <div className="text-sm font-bold text-slate-900">{invoice.customer_name || 'عميل نقدي'}</div>
-              {invoice.customer_code && <div className="text-slate-600 font-mono mt-0.5">كود العميل: {invoice.customer_code}</div>}
-            </div>
-            <div className="text-left">
-              <span className="text-slate-500 block mb-1">الفرع / المنفذ البيعي:</span>
-              <div className="text-sm font-bold text-slate-900">{invoice.outlet_name || 'الفرع الرئيسي'}</div>
-              <div className="text-slate-600 mt-0.5 font-normal">حالة الفاتورة: معتمدة ومسجلة بالمخزن</div>
-            </div>
-          </div>
-
-          {/* Items Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse text-xs">
-              <thead className="bg-[#1F3A5F] text-white font-bold">
-                <tr>
-                  <th className="p-3 w-10 text-center">#</th>
-                  <th className="p-3">بيان الصنف والمقاس واللون</th>
-                  <th className="p-3 w-24 text-center font-mono">الكمية</th>
-                  <th className="p-3 w-28 text-left font-mono">سعر الوحدة</th>
-                  <th className="p-3 w-24 text-center font-mono">الخصم</th>
-                  <th className="p-3 w-28 text-left font-mono">صافي السعر</th>
-                  <th className="p-3 w-32 text-left font-mono">الإجمالي</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {items.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-4 text-center text-slate-500 font-semibold">
-                      لا توجد بنود مفصلة مسجلة في هذه الفاتورة.
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item, idx) => {
-                    const qty = Number(item.quantity) || 1;
-                    const price = Number(item.price_before_discount || item.unit_price || item.unit_selling_price || 0);
-                    const disc = Number(item.discount_value || 0);
-                    const netPrice = Number(item.unit_selling_price || (price - disc));
-                    const lineTotal = Number(item.total_price || (qty * netPrice));
-
-                    return (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="p-3 text-center text-slate-500 font-mono">{idx + 1}</td>
-                        <td className="p-3 font-bold text-slate-900">
-                          {item.product_name || item.name}
-                          {item.variant_label && <span className="text-slate-500 font-normal"> ({item.variant_label})</span>}
-                          {item.product_code && <span className="text-slate-400 font-mono text-[10px] block">{item.product_code}</span>}
-                        </td>
-                        <td className="p-3 text-center font-mono font-bold">{qty}</td>
-                        <td className="p-3 text-left font-mono">{formatCurrency(price)}</td>
-                        <td className="p-3 text-center font-mono text-rose-600">{disc > 0 ? formatCurrency(disc) : '-'}</td>
-                        <td className="p-3 text-left font-mono font-bold text-emerald-800">{formatCurrency(netPrice)}</td>
-                        <td className="p-3 text-left font-mono font-bold text-slate-900">{formatCurrency(lineTotal)}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Totals Summary */}
-          <div className="flex justify-end pt-4 border-t-2 border-slate-200">
-            <div className="w-80 space-y-2 text-xs">
-              <div className="flex justify-between text-slate-600 font-semibold">
-                <span>إجمالي الفاتورة:</span>
-                <span className="font-mono font-bold">{formatCurrency(subtotal)}</span>
-              </div>
-              {discount > 0 && (
-                <div className="flex justify-between text-rose-700 font-semibold">
-                  <span>إجمالي الخصم الممنوح:</span>
-                  <span className="font-mono font-bold">-{formatCurrency(discount)}</span>
-                </div>
-              )}
-              {taxAmount > 0 && (
-                <div className="flex justify-between text-slate-600 font-semibold">
-                  <span>ضريبة القيمة المضافة:</span>
-                  <span className="font-mono font-bold">+{formatCurrency(taxAmount)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-[#1F3A5F] text-base font-bold pt-2 border-t-2 border-slate-300">
-                <span>الصافي المطلوب سداده:</span>
-                <span className="font-mono">{formatCurrency(totalAmount)}</span>
-              </div>
-              {invoice.payment_terms === 'credit' && (
-                <div className="pt-2 border-t border-dashed border-slate-300 space-y-1">
-                  <div className="flex justify-between text-emerald-700">
-                    <span>المدفوع:</span>
-                    <span className="font-mono font-bold">{formatCurrency(paidAmount)}</span>
-                  </div>
-                  <div className="flex justify-between text-rose-700 font-bold">
-                    <span>المتبقي:</span>
-                    <span className="font-mono">{formatCurrency(remainingAmount)}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Signatures */}
-          <div className="grid grid-cols-4 gap-4 pt-12 text-center text-xs font-bold text-slate-700">
-            <div className="space-y-8">
-              <span>المستلم / العميل</span>
-              <div className="border-b border-slate-400 w-28 mx-auto"></div>
-            </div>
-            <div className="space-y-8">
-              <span>أمين المخزن</span>
-              <div className="border-b border-slate-400 w-28 mx-auto"></div>
-            </div>
-            <div className="space-y-8">
-              <span>المحاسب المسؤول</span>
-              <div className="border-b border-slate-400 w-28 mx-auto"></div>
-            </div>
-            <div className="space-y-8">
-              <span>الاعتماد الإداري</span>
-              <div className="border-b border-slate-400 w-28 mx-auto"></div>
-            </div>
-          </div>
-
-          <div className="text-center text-[10px] text-slate-400 pt-6 border-t border-slate-100">
-            مستند مبيعات رسمي صادر عن نظام code systems ERP • البضاعة المباعة ترد وتستبدل خلال 14 يوماً مع أصل الفاتورة
-          </div>
-        </div>
+        <div
+          dangerouslySetInnerHTML={{
+            __html: generateSalesInvoiceHtml(invoice, settings, paperSize)
+          }}
+        />
       );
     }
 
@@ -1422,10 +1170,11 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               type="button"
               onClick={handlePrint}
               disabled={isPrinting}
+              title="طباعة المستند مباشرة"
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Printer className="w-4 h-4" />
-              <span>{isPrinting ? 'جاري إرسال الأمر للطابعة...' : 'طباعة المستند الآن'}</span>
+              <span>{isPrinting ? 'جاري إرسال الأمر للطابعة...' : 'طباعة المستند مباشرة'}</span>
             </button>
 
             <button

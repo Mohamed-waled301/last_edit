@@ -30,7 +30,9 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
     vat_enabled: false,
     vat_rate_percent: 14.00,
     currency_symbol: 'ج.م',
-    default_profit_margin_percent: 0
+    default_profit_margin_percent: 0,
+    post_issue_print_purchase: 'ask',
+    post_issue_print_sales: 'ask'
   });
   const [auditLogs, setAuditLogs] = useState([]);
   const [lastBackup, setLastBackup] = useState(null);
@@ -345,6 +347,48 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
                   <span className="text-xs text-gray-500 font-semibold">% (14% في مصر)</span>
                 </div>
               )}
+            </div>
+
+            {/* Post-Issue Print Settings (Requirement 2.3) */}
+            <div className="p-4 bg-gray-50 rounded-md border border-gray-200 space-y-4">
+              <div className="border-b border-gray-200 pb-2">
+                <span className="text-sm font-bold text-gray-800 block">إعدادات الطباعة بعد الإصدار</span>
+                <span className="text-xs text-gray-500 font-medium">التحكم في ظهور نافذة الطباعة تلقائياً فور اعتماد الفاتورة</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="settings-print-purchase-select" className="block text-xs font-bold text-gray-700 mb-1">
+                    فواتير المشتريات:
+                  </label>
+                  <select
+                    id="settings-print-purchase-select"
+                    value={settings.post_issue_print_purchase || 'ask'}
+                    onChange={(e) => setSettings({ ...settings, post_issue_print_purchase: e.target.value })}
+                    className="w-full h-10 rounded border border-gray-300 px-3 text-xs font-semibold bg-white text-gray-800 focus:outline-hidden focus:border-[#1F3A5F]"
+                  >
+                    <option value="ask">اسأل كل مرة (افتراضي)</option>
+                    <option value="auto">طباعة تلقائية بالإعدادات المحفوظة</option>
+                    <option value="none">بدون طباعة</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="settings-print-sales-select" className="block text-xs font-bold text-gray-700 mb-1">
+                    فواتير المبيعات:
+                  </label>
+                  <select
+                    id="settings-print-sales-select"
+                    value={settings.post_issue_print_sales || 'ask'}
+                    onChange={(e) => setSettings({ ...settings, post_issue_print_sales: e.target.value })}
+                    className="w-full h-10 rounded border border-gray-300 px-3 text-xs font-semibold bg-white text-gray-800 focus:outline-hidden focus:border-[#1F3A5F]"
+                  >
+                    <option value="ask">اسأل كل مرة (افتراضي)</option>
+                    <option value="auto">طباعة تلقائية بالإعدادات المحفوظة</option>
+                    <option value="none">بدون طباعة</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             <div className="pt-2">

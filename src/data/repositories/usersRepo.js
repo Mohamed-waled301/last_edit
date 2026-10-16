@@ -4,7 +4,22 @@ import auditRepo from './auditRepo';
 
 export const usersRepo = {
   async getAll() {
-    return await db.users.filter(u => u.is_active === 1).toArray();
+    let list = await db.users.filter(u => u.is_active === 1).toArray();
+    if (list.length > 0 && !list.some(u => u.id === 'usr-storekeeper')) {
+      const storekeeper = {
+        id: 'usr-storekeeper',
+        username: 'storekeeper',
+        full_name: 'أمين مستودع الخامات',
+        password_hash: '',
+        password_salt: '',
+        role: 'storekeeper',
+        is_active: 1,
+        created_at: new Date().toISOString()
+      };
+      await db.users.put(storekeeper).catch(() => {});
+      list.push(storekeeper);
+    }
+    return list;
   },
 
   async getById(id) {

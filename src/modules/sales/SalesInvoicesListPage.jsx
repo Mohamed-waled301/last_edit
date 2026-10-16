@@ -196,7 +196,7 @@ export default function SalesInvoicesListPage({ onNotify }) {
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => { window.location.hash = `#/sales/${inv.id}/print`; }}
+                            onClick={() => { window.location.hash = `#/print-preview?type=sales_invoice&id=${inv.id}&returnUrl=${encodeURIComponent('#/sales')}`; }}
                             className="px-2.5 py-1 text-xs text-[#1F3A5F] hover:bg-blue-50 border border-gray-200 rounded font-bold cursor-pointer inline-flex items-center gap-1 shadow-2xs"
                             title="معاينة وطباعة الفاتورة قياس كامل وحراري"
                           >

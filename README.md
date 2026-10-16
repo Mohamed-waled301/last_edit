@@ -1,4 +1,4 @@
-# نظام إدارة وتخطيط موارد مصانع الملابس الجاهزة المتكامل (code systems v1.0.4) 🏢🧵👗
+# نظام إدارة وتخطيط موارد مصانع الملابس الجاهزة المتكامل (code systems v1.0.8) 🏢🧵👗
 ### الحل السحابي المركزي والمحلي المتكامل لمصانع ومتاجر الملابس الجاهزة (Cloud MySQL & Offline-Ready Apparel ERP)
 
 [![Vite](https://img.shields.io/badge/Vite-8.x-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
