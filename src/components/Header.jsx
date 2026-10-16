@@ -16,7 +16,8 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
   const loadHeaderData = async () => {
     try {
       const uList = await usersRepo.getAll();
-      setUsers(uList);
+      const filteredUsers = uList.filter(u => u.role !== 'cashier' && u.id !== 'usr-cashier');
+      setUsers(filteredUsers);
       const settings = await settingsRepo.getSettings();
       if (settings?.factory_name) {
         setFactoryName(settings.factory_name);
@@ -24,7 +25,14 @@ export default function Header({ currentScreen, onNavigate, onNotify, onLockSess
       if (settings?.company_logo) {
         setCompanyLogo(settings.company_logo);
       }
-      setCurrentUser(getActiveUser());
+      const active = getActiveUser();
+      if (active?.role === 'cashier' && filteredUsers.length > 0) {
+        const fallbackUser = filteredUsers[0];
+        setActiveUser(fallbackUser.id, fallbackUser.role, fallbackUser.full_name);
+        setCurrentUser({ id: fallbackUser.id, role: fallbackUser.role, full_name: fallbackUser.full_name });
+      } else {
+        setCurrentUser(active);
+      }
     } catch (e) {
       console.warn('Header load error:', e);
     }
