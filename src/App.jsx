@@ -161,18 +161,32 @@ export default function App() {
 
     // Check Local SQLite Database Integrity (Desktop Mode)
     if (typeof window !== 'undefined' && window.electronAPI?.db) {
-      window.electronAPI.db
-        .checkIntegrity()
-        .then((res) => {
+      const verifyIntegrity = async (initialInfo = null) => {
+        try {
+          const res = initialInfo || (await window.electronAPI.db.checkIntegrity());
           if (res && !res.ok) {
-            setDbIntegrityError(res);
+            // Re-verify after 600ms to allow concurrent startup locks to settle
+            setTimeout(async () => {
+              try {
+                const secondCheck = await window.electronAPI.db.checkIntegrity();
+                if (secondCheck && !secondCheck.ok) {
+                  setDbIntegrityError(secondCheck);
+                } else {
+                  setDbIntegrityError(null);
+                }
+              } catch {}
+            }, 600);
+          } else {
+            setDbIntegrityError(null);
           }
-        })
-        .catch(() => {});
+        } catch {}
+      };
+
+      verifyIntegrity();
 
       if (window.electronAPI.db.onIntegrityWarning) {
         window.electronAPI.db.onIntegrityWarning((info) => {
-          setDbIntegrityError(info);
+          verifyIntegrity(info);
         });
       }
     }

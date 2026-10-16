@@ -8,10 +8,18 @@ function createSqliteConnection(dbPath, customOptions = {}) {
   try {
     const BetterSqlite3 = require('better-sqlite3');
     const opts = { ...customOptions };
-    if (process.versions.electron && bindingExists && !opts.nativeBinding) {
+    if (process.versions.electron && bindingExists && !opts.nativeBinding && !electronBinding.includes('app.asar')) {
       opts.nativeBinding = electronBinding;
     }
-    return new BetterSqlite3(dbPath, opts);
+    try {
+      return new BetterSqlite3(dbPath, opts);
+    } catch (bindErr) {
+      if (opts.nativeBinding) {
+        delete opts.nativeBinding;
+        return new BetterSqlite3(dbPath, opts);
+      }
+      throw bindErr;
+    }
   } catch (betterSqliteErr) {
     try {
       const { DatabaseSync } = require('node:sqlite');
@@ -222,26 +230,56 @@ class LocalDatabaseManager {
     return { appliedCount };
   }
 
-  checkIntegrity() {
-    try {
-      const db = this.getDb();
-      const rows = db.pragma('integrity_check');
-      const list = Array.isArray(rows) ? rows : [rows];
-      const details = list.map((r) => {
-        if (!r) return '';
-        if (typeof r === 'string') return r;
-        return r.integrity_check || Object.values(r)[0] || String(r);
-      });
-      const isOk = details.length === 1 && String(details[0]).trim().toLowerCase() === 'ok';
-      return {
-        ok: isOk,
-        details,
-      };
-    } catch (err) {
-      return {
-        ok: false,
-        details: [err.message],
-      };
+  checkIntegrity(retries = 3, delayMs = 250) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const db = this.getDb();
+        const rows = db.pragma('integrity_check');
+        const list = Array.isArray(rows) ? rows : [rows];
+        const details = list
+          .map((r) => {
+            if (!r) return '';
+            if (typeof r === 'string') return r;
+            return r.integrity_check || Object.values(r)[0] || String(r);
+          })
+          .filter(Boolean);
+
+        const isOk = details.length > 0 && details.every((d) => String(d).trim().toLowerCase() === 'ok');
+        if (isOk) {
+          return {
+            ok: true,
+            details: ['ok'],
+          };
+        }
+
+        // If not ok, check if this is a transient lock/busy condition
+        const isBusy = details.some((d) => /busy|locked/i.test(String(d)));
+        if (isBusy && attempt < retries) {
+          try {
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
+          } catch {}
+          continue;
+        }
+
+        return {
+          ok: false,
+          details,
+        };
+      } catch (err) {
+        const isBusy = /busy|locked/i.test(err?.message || '');
+        if (isBusy && attempt < retries) {
+          try {
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
+          } catch {}
+          continue;
+        }
+        if (attempt === retries) {
+          return {
+            ok: false,
+            details: [err?.message || 'تعذر التحقق من سلامة قاعدة البيانات'],
+          };
+        }
+      }
     }
   }
 

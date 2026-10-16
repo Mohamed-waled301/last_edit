@@ -6,13 +6,18 @@ import {
   ZoomIn, 
   ZoomOut, 
   Maximize2, 
-  ChevronRight, 
-  ChevronLeft, 
   Settings as SettingsIcon, 
   CheckCircle2, 
   AlertCircle, 
   Building2,
-  FileText
+  FileText,
+  Scissors,
+  User,
+  Calendar,
+  CreditCard,
+  MapPin,
+  Phone,
+  Hash
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
@@ -30,7 +35,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     return new URLSearchParams();
   }, [searchParams]);
 
-  const docType = params.get('type') || 'invoice'; // 'sales_invoice' | 'customer_receipt' | 'supplier_payment' | 'statement' | 'cut_order' | 'custom'
+  const docType = params.get('type') || 'invoice'; // 'sales_invoice' | 'sales_invoice_thermal' | 'invoice' | 'customer_receipt' | 'supplier_payment' | 'statement' | 'cut_order' | 'report' | 'stock_card'
   const docId = params.get('id');
   const returnUrl = params.get('returnUrl');
 
@@ -44,12 +49,10 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   const [selectedPrinter, setSelectedPrinter] = useState('');
   const [paperSize, setPaperSize] = useState(docType === 'sales_invoice_thermal' ? '80mm' : 'A4');
   const [orientation, setOrientation] = useState('portrait'); // 'portrait' | 'landscape'
-  const [margins, setMargins] = useState('default'); // 'default' | 'minimal' | 'none'
+  const [margins, setMargins] = useState(docType === 'sales_invoice_thermal' ? 'none' : 'default'); // 'default' | 'minimal' | 'none'
   const [copies, setCopies] = useState(1);
   const [colorMode, setColorMode] = useState('color'); // 'color' | 'grayscale'
   const [zoomLevel, setZoomLevel] = useState(100); // 50 to 150
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
   // Status messages
   const [printStatus, setPrintStatus] = useState(null); // { type: 'success' | 'error', text: '' }
@@ -57,6 +60,16 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   const [isSavingPdf, setIsSavingPdf] = useState(false);
 
   const printFrameRef = useRef(null);
+
+  // Sync default margin when paper size changes
+  useEffect(() => {
+    if (paperSize === '80mm') {
+      setMargins('none');
+      setOrientation('portrait');
+    } else if (margins === 'none' && paperSize !== '80mm') {
+      setMargins('default');
+    }
+  }, [paperSize]);
 
   // Load Settings and Printers
   useEffect(() => {
@@ -112,33 +125,47 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         }
 
         // Fetch based on docType and docId
-        if (docType === 'sales_invoice' || docType === 'invoice') {
+        if (docType === 'sales_invoice' || docType === 'invoice' || docType === 'sales_invoice_thermal') {
           const res = await api.getSalesInvoices();
-          const invoices = Array.isArray(res.data) ? res.data : (res.invoices || []);
-          const found = invoices.find(i => String(i.id) === String(docId) || String(i.invoice_number) === String(docId)) || invoices[0];
-          setDocumentData(found || null);
+          const invoices = Array.isArray(res.data) ? res.data : (res.invoices || (Array.isArray(res) ? res : []));
+          let found = invoices.find(i => String(i.id) === String(docId) || String(i.invoice_number) === String(docId));
+          if (!found && docId && api.getSalesInvoice) {
+            try {
+              const sRes = await api.getSalesInvoice(docId);
+              found = sRes?.data || sRes?.invoice || sRes;
+            } catch {}
+          }
+          if (!found) {
+            found = invoices[0] || null;
+          }
+          setDocumentData(found);
         } else if (docType === 'customer_receipt') {
           const res = await api.getCustomerReceipts();
-          const receipts = Array.isArray(res.data) ? res.data : (res.receipts || []);
+          const receipts = Array.isArray(res.data) ? res.data : (res.receipts || (Array.isArray(res) ? res : []));
           const found = receipts.find(r => String(r.id) === String(docId) || String(r.receipt_number) === String(docId)) || receipts[0];
           setDocumentData(found || null);
         } else if (docType === 'supplier_payment') {
           const res = await api.getSupplierPayments();
-          const payments = Array.isArray(res.data) ? res.data : (res.payments || []);
+          const payments = Array.isArray(res.data) ? res.data : (res.payments || (Array.isArray(res) ? res : []));
           const found = payments.find(p => String(p.id) === String(docId) || String(p.payment_number) === String(docId)) || payments[0];
           setDocumentData(found || null);
         } else if (docType === 'statement') {
-          const res = await api.getSupplierStatement(docId).catch(() => null);
-          const pRes = await api.getParty(docId).catch(() => null);
+          const [res, pRes] = await Promise.all([
+            api.getSupplierStatement ? api.getSupplierStatement(docId).catch(() => null) : null,
+            api.getParty ? api.getParty(docId).catch(() => null) : null
+          ]);
           setDocumentData({
-            statementData: res?.data || null,
-            party: pRes?.data || null
+            statementData: res?.data || res || null,
+            party: pRes?.data || pRes || null
           });
         } else if (docType === 'cut_order') {
           const res = await api.getProductionOrders();
-          const orders = Array.isArray(res.data) ? res.data : (res.production_orders || []);
+          const orders = Array.isArray(res.data) ? res.data : (res.production_orders || (Array.isArray(res) ? res : []));
           const found = orders.find(o => String(o.id) === String(docId) || String(o.cutting_number) === String(docId) || String(o.order_number) === String(docId)) || orders[0];
           setDocumentData(found || null);
+        } else if (docType === 'stock_card') {
+          const res = await (api.getStockMovements ? api.getStockMovements(docId) : Promise.resolve(null)).catch(() => null);
+          setDocumentData(res?.data || res || null);
         }
       } catch (err) {
         console.error('Failed to load document for print preview:', err);
@@ -166,38 +193,64 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     if (!printFrameRef.current) return '';
     const content = printFrameRef.current.innerHTML;
     const isThermal = paperSize === '80mm';
+
     const pageCss = isThermal
-      ? `@page { size: 80mm auto; margin: 0; } body { width: 80mm; margin: 0; padding: 4mm; font-family: Cairo, 'Segoe UI', Tahoma, sans-serif; direction: rtl; }`
-      : `@page { size: ${paperSize} ${orientation}; margin: ${margins === 'none' ? '0' : margins === 'minimal' ? '5mm' : '10mm'}; } body { margin: 0; font-family: Cairo, 'Segoe UI', Tahoma, sans-serif; direction: rtl; }`;
+      ? `@page { size: 80mm auto; margin: 0; }
+         html, body {
+           width: 80mm !important;
+           max-width: 80mm !important;
+           margin: 0 auto !important;
+           padding: 2mm 3mm !important;
+           font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+           direction: rtl;
+           background: #ffffff !important;
+           color: #000000 !important;
+           -webkit-print-color-adjust: exact;
+           print-color-adjust: exact;
+         }`
+      : `@page { size: ${paperSize} ${orientation}; margin: ${margins === 'none' ? '0' : margins === 'minimal' ? '5mm' : '10mm'}; }
+         html, body {
+           margin: 0 !important;
+           padding: 0 !important;
+           font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+           direction: rtl;
+           background: #ffffff !important;
+           color: #111827 !important;
+           -webkit-print-color-adjust: exact;
+           print-color-adjust: exact;
+         }`;
+
+    // Extract all stylesheets and style tags currently in document so Tailwind classes render
+    const collectedStyles = typeof document !== 'undefined'
+      ? Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+          .map(node => node.outerHTML)
+          .join('\n')
+      : '';
 
     return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <title>code systems - طباعة مستند</title>
+  ${collectedStyles}
   <style>
     * { box-sizing: border-box; }
     ${pageCss}
-    body {
-      background: #ffffff;
-      color: #111827;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
     .font-mono { font-family: 'Consolas', 'Courier New', monospace; font-variant-numeric: tabular-nums; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #e5e7eb; padding: 6px; text-align: right; }
-    th { background: #f3f4f6; font-weight: bold; }
     .no-print { display: none !important; }
+    ${colorMode === 'grayscale' ? 'html, body { filter: grayscale(100%) !important; -webkit-filter: grayscale(100%) !important; }' : ''}
   </style>
 </head>
 <body class="${colorMode === 'grayscale' ? 'grayscale' : ''}">
-  ${content}
+  <div style="${isThermal ? 'width: 100%; max-width: 76mm; margin: 0 auto;' : 'width: 100%;'}">
+    ${content}
+  </div>
 </body>
 </html>`;
   };
 
-  // Direct Silent Print without native Windows dialog
+  // Direct Silent Print
   const handlePrint = async () => {
     setPrintStatus(null);
     setIsPrinting(true);
@@ -218,18 +271,18 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         });
 
         if (res && res.success) {
-          setPrintStatus({ type: 'success', text: 'تم إرسال المستند للطابعة بنجاح' });
+          setPrintStatus({ type: 'success', text: 'تم إرسال أمر الطباعة بنجاح' });
         } else {
-          setPrintStatus({ type: 'error', text: res?.error || 'فشلت الطباعة، تأكد من اتصال الطابعة' });
+          setPrintStatus({ type: 'error', text: res?.error || 'فشلت الطباعة، تأكد من توصيل الطابعة' });
         }
       } else {
         // Browser fallback: window.print()
         window.print();
-        setPrintStatus({ type: 'success', text: 'تم فتح نافذة الطباعة' });
+        setPrintStatus({ type: 'success', text: 'تم فتح أمر الطباعة بنجاح' });
       }
     } catch (err) {
       console.error('Print execution failed:', err);
-      setPrintStatus({ type: 'error', text: 'فشلت الطباعة، تأكد من اتصال الطابعة' });
+      setPrintStatus({ type: 'error', text: 'فشلت الطباعة، يرجى إعادة المحاولة' });
     } finally {
       setIsPrinting(false);
     }
@@ -242,7 +295,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
     try {
       const html = getDocumentHtml();
-      const defaultFilename = `${docType}-${docId || 'document'}.pdf`;
+      const defaultFilename = `${docType}-${documentData?.invoice_number || documentData?.code || docId || 'document'}.pdf`;
 
       if (typeof window !== 'undefined' && window.electronAPI?.savePdf) {
         const res = await window.electronAPI.savePdf({
@@ -253,7 +306,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         });
 
         if (res && res.success) {
-          setPrintStatus({ type: 'success', text: 'تم حفظ ملف PDF بنجاح' });
+          setPrintStatus({ type: 'success', text: 'تم تصدير وحفظ ملف PDF بنجاح' });
         } else if (!res?.canceled) {
           setPrintStatus({ type: 'error', text: res?.error || 'فشل حفظ ملف PDF' });
         }
@@ -263,7 +316,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       }
     } catch (err) {
       console.error('Save PDF failed:', err);
-      setPrintStatus({ type: 'error', text: 'حدث خطأ أثناء حفظ ملف PDF' });
+      setPrintStatus({ type: 'error', text: 'حدث خطأ أثناء تصدير ملف PDF' });
     } finally {
       setIsSavingPdf(false);
     }
@@ -271,7 +324,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
   // Dimensions of Preview Frame
   const frameWidthStyle = useMemo(() => {
-    if (paperSize === '80mm') return 'w-[320px]';
+    if (paperSize === '80mm') return 'w-[320px] max-w-[320px]';
     if (paperSize === 'A5') return orientation === 'landscape' ? 'w-[793px]' : 'w-[559px]';
     // A4
     return orientation === 'landscape' ? 'w-[1123px]' : 'w-[794px]';
@@ -279,13 +332,324 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
   // Document Content Renderer
   const renderDocumentContent = () => {
+    const companyName = settings?.factory_name || 'code systems';
+    const companyLogo = settings?.company_logo || '/logo.png';
+    const isThermal = paperSize === '80mm';
+
+    // 1. Sales Invoice Rendering (Both 80mm Thermal and A4 Tax Invoice)
+    if (docType === 'sales_invoice' || docType === 'invoice' || docType === 'sales_invoice_thermal') {
+      const invoice = documentData;
+      if (!invoice) {
+        return (
+          <div className="p-8 text-center text-slate-500 font-bold">
+            لم يتم العثور على الفاتورة المطلوبة.
+          </div>
+        );
+      }
+
+      const items = Array.isArray(invoice.items) ? invoice.items : [];
+      const totalAmount = Number(invoice.total_amount ?? invoice.total_invoice_amount ?? invoice.subtotal ?? 0);
+      const subtotal = Number(invoice.subtotal ?? totalAmount);
+      const discount = Number(invoice.discount ?? 0);
+      const taxAmount = Number(invoice.tax_amount ?? 0);
+      const paidAmount = Number(invoice.paid_amount ?? 0);
+      const remainingAmount = Number(invoice.remaining_amount ?? (totalAmount - paidAmount));
+
+      // 1.A) 80mm Thermal Receipt Layout
+      if (isThermal) {
+        return (
+          <div className="p-3 bg-white text-slate-900 font-mono text-xs w-[80mm] max-w-[80mm] mx-auto select-text" dir="rtl">
+            {/* Thermal Header */}
+            <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-12 w-auto max-w-[110px] object-contain mx-auto mb-1.5"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <h2 className="font-extrabold text-sm text-slate-900">{companyName}</h2>
+              <div className="text-[11px] font-bold text-[#1F3A5F]">نظام نقاط البيع والمبيعات - code systems</div>
+              {settings?.address && <p className="text-[10px] text-slate-600 mt-0.5">{settings.address}</p>}
+              {settings?.phone && <p className="text-[10px] text-slate-600">هاتف: <span className="font-mono">{settings.phone}</span></p>}
+              {settings?.tax_number && <p className="text-[10px] text-slate-600">الرقم الضريبي: <span className="font-mono">{settings.tax_number}</span></p>}
+              
+              <div className="mt-2 text-right pt-2 border-t border-dotted border-slate-300 space-y-0.5 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">رقم الفاتورة:</span>
+                  <span className="font-bold text-slate-900">{invoice.invoice_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">التاريخ:</span>
+                  <span>{formatDate(invoice.invoice_date || invoice.created_at)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">العميل:</span>
+                  <span className="font-bold">{invoice.customer_name || 'عميل نقدي'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">طريقة السداد:</span>
+                  <span className="font-bold">{invoice.payment_terms === 'credit' ? 'آجل' : 'نقدي'}</span>
+                </div>
+                {invoice.outlet_name && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">الفرع:</span>
+                    <span>{invoice.outlet_name}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Thermal Items List */}
+            <div className="border-b border-dashed border-slate-400 pb-2 mb-2">
+              <div className="flex justify-between font-bold border-b border-slate-300 pb-1 mb-1 text-[11px] text-slate-800">
+                <span className="w-1/2">الصنف</span>
+                <span className="w-1/4 text-center">الكمية × السعر</span>
+                <span className="w-1/4 text-left">الإجمالي</span>
+              </div>
+              {items.map((it, idx) => {
+                const qty = Number(it.quantity) || 1;
+                const price = Number(it.unit_price || it.unit_selling_price || 0);
+                const lineTotal = Number(it.total_price || (qty * price));
+                return (
+                  <div key={idx} className="flex justify-between py-1 text-[11px] border-b border-dotted border-slate-200">
+                    <div className="w-1/2 truncate pr-0.5">
+                      <span className="font-bold">{it.product_name || it.name}</span>
+                      {it.variant_label && <span className="text-slate-500 block text-[9px]">{it.variant_label}</span>}
+                    </div>
+                    <div className="w-1/4 text-center font-mono">
+                      {qty} × {price}
+                    </div>
+                    <div className="w-1/4 text-left font-bold font-mono">
+                      {lineTotal.toFixed(2)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Thermal Totals */}
+            <div className="space-y-1 text-right text-xs border-b border-dashed border-slate-400 pb-2 mb-3">
+              {discount > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>الخصم التجاري:</span>
+                  <span className="font-mono text-rose-700">-{formatCurrency(discount)}</span>
+                </div>
+              )}
+              {taxAmount > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>ضريبة القيمة المضافة:</span>
+                  <span className="font-mono">{formatCurrency(taxAmount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-bold pt-1 border-t border-slate-300 text-slate-900">
+                <span>الصافي المطلوب:</span>
+                <span className="font-mono text-[#1F3A5F]">{formatCurrency(totalAmount)}</span>
+              </div>
+              {invoice.payment_terms === 'credit' && (
+                <>
+                  <div className="flex justify-between text-[11px] text-emerald-700">
+                    <span>المبلغ المسدد:</span>
+                    <span className="font-mono font-bold">{formatCurrency(paidAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-rose-700 font-bold">
+                    <span>المتبقي المستحق:</span>
+                    <span className="font-mono">{formatCurrency(remainingAmount)}</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Thermal Footer */}
+            <div className="text-center text-[10px] text-slate-600 space-y-1 pb-2">
+              <p className="font-bold">البضاعة المباعة ترد وتستبدل خلال 14 يوماً مع الفاتورة</p>
+              <p>شكراً لتعاملكم معنا ونسعد بخدمتكم دائماً</p>
+              <p className="font-mono text-[9px] text-slate-400 mt-2">code systems ERP • {new Date().toLocaleDateString('ar-EG')}</p>
+            </div>
+          </div>
+        );
+      }
+
+      // 1.B) A4 / A5 Official Tax Invoice Layout
+      return (
+        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
+          {/* Header */}
+          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
+            <div className="flex items-center gap-4">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-16 w-auto max-w-[140px] object-contain rounded"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <div>
+                <h2 className="text-2xl font-bold text-[#1F3A5F]">{companyName}</h2>
+                <div className="text-xs font-bold text-slate-500">نظام إدارة المؤسسات المتكامل - code systems ERP</div>
+                {settings?.address && <p className="text-xs text-slate-600 mt-1">{settings.address}</p>}
+                {settings?.phone && <p className="text-xs text-slate-600">هاتف: <span className="font-mono">{settings.phone}</span></p>}
+                {settings?.tax_number && <p className="text-xs text-slate-600">الرقم الضريبي: <span className="font-mono">{settings.tax_number}</span></p>}
+              </div>
+            </div>
+
+            <div className="text-left font-mono">
+              <span className="inline-block px-3.5 py-1.5 bg-[#1F3A5F] text-white font-bold text-sm rounded shadow-xs mb-2">
+                فاتورة مبيعات ضريبية
+              </span>
+              <div className="text-xs text-slate-600 font-bold">
+                رقم الفاتورة: <span className="text-slate-900 text-sm">{invoice.invoice_number}</span>
+              </div>
+              <div className="text-xs text-slate-600 font-bold mt-1">
+                تاريخ الإصدار: <span>{formatDate(invoice.invoice_date || invoice.created_at)}</span>
+              </div>
+              <div className="text-xs text-slate-600 font-bold mt-1">
+                طريقة السداد: <span className={invoice.payment_terms === 'credit' ? 'text-rose-700' : 'text-emerald-700'}>
+                  {invoice.payment_terms === 'credit' ? 'آجل' : 'نقدي'}
+                </span>
+              </div>
+              {invoice.due_date && invoice.payment_terms === 'credit' && (
+                <div className="text-xs text-rose-700 font-bold mt-1">
+                  تاريخ الاستحقاق: <span>{formatDate(invoice.due_date)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Customer & Outlet Details */}
+          <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
+            <div>
+              <span className="text-slate-500 block mb-1">بيانات العميل:</span>
+              <div className="text-sm font-bold text-slate-900">{invoice.customer_name || 'عميل نقدي'}</div>
+              {invoice.customer_code && <div className="text-slate-600 font-mono mt-0.5">كود العميل: {invoice.customer_code}</div>}
+            </div>
+            <div className="text-left">
+              <span className="text-slate-500 block mb-1">الفرع / المنفذ البيعي:</span>
+              <div className="text-sm font-bold text-slate-900">{invoice.outlet_name || 'الفرع الرئيسي'}</div>
+              <div className="text-slate-600 mt-0.5 font-normal">حالة الفاتورة: معتمدة ومسجلة بالمخزن</div>
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-right border-collapse text-xs">
+              <thead className="bg-[#1F3A5F] text-white font-bold">
+                <tr>
+                  <th className="p-3 w-10 text-center">#</th>
+                  <th className="p-3">بيان الصنف والمقاس واللون</th>
+                  <th className="p-3 w-24 text-center font-mono">الكمية</th>
+                  <th className="p-3 w-28 text-left font-mono">سعر الوحدة</th>
+                  <th className="p-3 w-24 text-center font-mono">الخصم</th>
+                  <th className="p-3 w-28 text-left font-mono">صافي السعر</th>
+                  <th className="p-3 w-32 text-left font-mono">الإجمالي</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-4 text-center text-slate-500 font-semibold">
+                      لا توجد بنود مفصلة مسجلة في هذه الفاتورة.
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((item, idx) => {
+                    const qty = Number(item.quantity) || 1;
+                    const price = Number(item.price_before_discount || item.unit_price || item.unit_selling_price || 0);
+                    const disc = Number(item.discount_value || 0);
+                    const netPrice = Number(item.unit_selling_price || (price - disc));
+                    const lineTotal = Number(item.total_price || (qty * netPrice));
+
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="p-3 text-center text-slate-500 font-mono">{idx + 1}</td>
+                        <td className="p-3 font-bold text-slate-900">
+                          {item.product_name || item.name}
+                          {item.variant_label && <span className="text-slate-500 font-normal"> ({item.variant_label})</span>}
+                          {item.product_code && <span className="text-slate-400 font-mono text-[10px] block">{item.product_code}</span>}
+                        </td>
+                        <td className="p-3 text-center font-mono font-bold">{qty}</td>
+                        <td className="p-3 text-left font-mono">{formatCurrency(price)}</td>
+                        <td className="p-3 text-center font-mono text-rose-600">{disc > 0 ? formatCurrency(disc) : '-'}</td>
+                        <td className="p-3 text-left font-mono font-bold text-emerald-800">{formatCurrency(netPrice)}</td>
+                        <td className="p-3 text-left font-mono font-bold text-slate-900">{formatCurrency(lineTotal)}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals Summary */}
+          <div className="flex justify-end pt-4 border-t-2 border-slate-200">
+            <div className="w-80 space-y-2 text-xs">
+              <div className="flex justify-between text-slate-600 font-semibold">
+                <span>إجمالي الفاتورة:</span>
+                <span className="font-mono font-bold">{formatCurrency(subtotal)}</span>
+              </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-rose-700 font-semibold">
+                  <span>إجمالي الخصم الممنوح:</span>
+                  <span className="font-mono font-bold">-{formatCurrency(discount)}</span>
+                </div>
+              )}
+              {taxAmount > 0 && (
+                <div className="flex justify-between text-slate-600 font-semibold">
+                  <span>ضريبة القيمة المضافة:</span>
+                  <span className="font-mono font-bold">+{formatCurrency(taxAmount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-[#1F3A5F] text-base font-bold pt-2 border-t-2 border-slate-300">
+                <span>الصافي المطلوب سداده:</span>
+                <span className="font-mono">{formatCurrency(totalAmount)}</span>
+              </div>
+              {invoice.payment_terms === 'credit' && (
+                <div className="pt-2 border-t border-dashed border-slate-300 space-y-1">
+                  <div className="flex justify-between text-emerald-700">
+                    <span>المدفوع:</span>
+                    <span className="font-mono font-bold">{formatCurrency(paidAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-rose-700 font-bold">
+                    <span>المتبقي:</span>
+                    <span className="font-mono">{formatCurrency(remainingAmount)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Signatures */}
+          <div className="grid grid-cols-4 gap-4 pt-12 text-center text-xs font-bold text-slate-700">
+            <div className="space-y-8">
+              <span>المستلم / العميل</span>
+              <div className="border-b border-slate-400 w-28 mx-auto"></div>
+            </div>
+            <div className="space-y-8">
+              <span>أمين المخزن</span>
+              <div className="border-b border-slate-400 w-28 mx-auto"></div>
+            </div>
+            <div className="space-y-8">
+              <span>المحاسب المسؤول</span>
+              <div className="border-b border-slate-400 w-28 mx-auto"></div>
+            </div>
+            <div className="space-y-8">
+              <span>الاعتماد الإداري</span>
+              <div className="border-b border-slate-400 w-28 mx-auto"></div>
+            </div>
+          </div>
+
+          <div className="text-center text-[10px] text-slate-400 pt-6 border-t border-slate-100">
+            مستند مبيعات رسمي صادر عن نظام code systems ERP • البضاعة المباعة ترد وتستبدل خلال 14 يوماً مع أصل الفاتورة
+          </div>
+        </div>
+      );
+    }
+
+    // 2. Customer Receipt & Supplier Payment
     const isCustomer = docType === 'customer_receipt';
     const isSupplierPay = docType === 'supplier_payment';
     const isReceiptOrPayment = isCustomer || isSupplierPay;
-
-    // Header Logo and Company Info
-    const companyName = settings?.factory_name || 'code systems';
-    const companyLogo = settings?.company_logo; // Data URL or valid path
 
     if (isReceiptOrPayment && documentData) {
       const rec = documentData;
@@ -294,32 +658,99 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       const partyName = isCustomer ? (rec.customer_name || rec.party_name || 'العميل') : (rec.supplier_name || rec.party_name || 'المورد');
       const partyCode = isCustomer ? rec.customer_code : rec.supplier_code;
 
+      // Thermal Receipt for voucher
+      if (isThermal) {
+        return (
+          <div className="p-3 bg-white text-slate-900 font-mono text-xs w-[80mm] max-w-[80mm] mx-auto select-text" dir="rtl">
+            <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-12 w-auto max-w-[110px] object-contain mx-auto mb-1.5"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <h2 className="font-extrabold text-sm text-slate-900">{companyName}</h2>
+              <div className="text-[11px] font-bold text-[#1F3A5F]">{docTitle}</div>
+              <div className="mt-2 text-right pt-2 border-t border-dotted border-slate-300 space-y-0.5 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">رقم السند:</span>
+                  <span className="font-bold text-slate-900">{docNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">التاريخ:</span>
+                  <span>{formatDate(rec.payment_date || rec.created_at)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">طريقة الدفع:</span>
+                  <span>{rec.payment_method || 'نقداً'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">الطرف:</span>
+                  <span className="font-bold">{partyName}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-300 rounded text-center space-y-1 mb-3">
+              <span className="text-[10px] text-slate-500 block">المبلغ:</span>
+              <span className="text-xl font-bold font-mono text-[#1F3A5F] block">{formatCurrency(rec.amount || 0)}</span>
+            </div>
+
+            {rec.notes && (
+              <div className="text-[10px] text-slate-600 border-b border-dashed border-slate-400 pb-2 mb-3">
+                <span className="font-bold">ملاحظات: </span>
+                <span>{rec.notes}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between text-[10px] font-bold pt-4 pb-2 border-b border-dashed border-slate-400">
+              <div className="text-center w-1/2">
+                <span>توقيع المحاسب</span>
+                <div className="border-b border-slate-400 w-16 mx-auto mt-6"></div>
+              </div>
+              <div className="text-center w-1/2">
+                <span>توقيع المستلم</span>
+                <div className="border-b border-slate-400 w-16 mx-auto mt-6"></div>
+              </div>
+            </div>
+
+            <div className="text-center text-[9px] text-slate-400 pt-2">
+              code systems ERP • سند مالي معتمد
+            </div>
+          </div>
+        );
+      }
+
+      // A4 / A5 Voucher Layout
       return (
         <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
           {/* Header */}
           <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
             <div className="flex items-center gap-4">
-              {companyLogo && (
-                <img
-                  src={companyLogo}
-                  alt=""
-                  className="h-16 w-auto max-w-[130px] object-contain rounded"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              )}
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-16 w-auto max-w-[130px] object-contain rounded"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
               <div>
                 <h2 className="text-2xl font-bold text-[#1F3A5F]">{companyName}</h2>
+                <div className="text-xs font-bold text-slate-500">نظام إدارة المؤسسات المتكامل - code systems ERP</div>
                 {settings?.address && <p className="text-xs text-slate-600 mt-1">{settings.address}</p>}
                 {settings?.phone && <p className="text-xs text-slate-600">هاتف: <span className="font-mono">{settings.phone}</span></p>}
               </div>
             </div>
 
-            <div className="text-left">
-              <span className={`inline-block px-3 py-1 text-white font-bold text-sm rounded mb-2 ${isCustomer ? 'bg-emerald-700' : 'bg-blue-800'}`}>
+            <div className="text-left font-mono">
+              <span className={`inline-block px-3.5 py-1.5 text-white font-bold text-sm rounded shadow-xs mb-2 ${isCustomer ? 'bg-emerald-700' : 'bg-blue-800'}`}>
                 {docTitle}
               </span>
               <div className="text-xs text-slate-600 font-bold">
-                رقم السند: <span className="font-mono text-slate-900">{docNumber}</span>
+                رقم السند: <span className="font-mono text-slate-900 text-sm">{docNumber}</span>
               </div>
               <div className="text-xs text-slate-600 font-bold mt-1">
                 التاريخ: <span className="font-mono">{formatDate(rec.payment_date || rec.created_at)}</span>
@@ -336,7 +767,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               <span className="text-slate-500 block mb-1">
                 {isCustomer ? 'استلمنا من السيد / السادة:' : 'صرفنا إلى السيد / السادة:'}
               </span>
-              <span className="text-sm font-bold text-slate-900 block">
+              <span className="text-base font-bold text-slate-900 block">
                 {partyName} {partyCode ? `[${partyCode}]` : ''}
               </span>
             </div>
@@ -352,7 +783,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           </div>
 
           {/* Amount Box */}
-          <div className="p-6 bg-blue-50/50 border border-blue-200 rounded-xl text-center space-y-1">
+          <div className="p-6 bg-blue-50/60 border border-blue-200 rounded-xl text-center space-y-1">
             <span className="text-xs font-bold text-slate-600 block">
               {isCustomer ? 'المبلغ المستلم وقدره:' : 'المبلغ المصروف وقدره:'}
             </span>
@@ -368,7 +799,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             </div>
           )}
 
-          {/* Signatures Matching Specification (Requirement 9) */}
+          {/* Signatures */}
           <div className="grid grid-cols-3 gap-6 pt-12 text-center text-xs font-bold text-slate-700">
             <div className="space-y-8">
               <span className="block">
@@ -389,60 +820,193 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       );
     }
 
-    // 4. Report Document View
-    if (docType === 'report' && documentData) {
-      const repTitle = documentData.reportTitle || 'تقرير النظام';
-      const rows = Array.isArray(documentData.data) ? documentData.data : [];
-      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+    // 3. Production Cutting Order (`cut_order`)
+    if (docType === 'cut_order' && documentData) {
+      const order = documentData;
+      return (
+        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
+          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
+            <div className="flex items-center gap-4">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-16 w-auto max-w-[130px] object-contain rounded"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <div>
+                <h2 className="text-2xl font-bold text-[#1F3A5F]">{companyName}</h2>
+                <div className="text-xs font-bold text-slate-500">قسم الإنتاج والتشغيل - أمر قص رسمي</div>
+              </div>
+            </div>
+            <div className="text-left font-mono">
+              <span className="inline-block px-3.5 py-1.5 bg-[#1F3A5F] text-white font-bold text-sm rounded shadow-xs mb-2">
+                أمر تشغيل وقص ملابس
+              </span>
+              <div className="text-xs text-slate-600 font-bold">
+                رقم الأمر: <span className="font-mono text-slate-900 text-sm">{order.cutting_number || order.order_number || order.id}</span>
+              </div>
+              <div className="text-xs text-slate-600 font-bold mt-1">
+                تاريخ الأمر: <span>{formatDate(order.order_date || order.created_at)}</span>
+              </div>
+              <div className="text-xs text-slate-600 font-bold mt-1">
+                الحالة: <span className="text-blue-700">{order.status || 'قيد التشغيل'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-4 text-xs font-bold">
+            <div>
+              <span className="text-slate-500 block mb-1">اسم الموديل / المنتج:</span>
+              <span className="text-sm font-bold text-slate-900 block">{order.model_name || order.product_name || 'غير محدد'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 block mb-1">كود الخامة / القماش:</span>
+              <span className="text-sm font-mono text-slate-900 block">{order.fabric_code || order.raw_material || 'قماش أساسي'}</span>
+            </div>
+            <div className="text-left">
+              <span className="text-slate-500 block mb-1">جهة التوريد / المورد:</span>
+              <span className="text-sm text-slate-900 block">{order.supplier_name || 'المخزن الرئيسي'}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-3 text-center">
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <span className="text-[11px] font-bold text-slate-600 block">الكمية المخططة</span>
+              <span className="text-lg font-bold font-mono text-blue-800">{formatNumber(order.planned_quantity || order.quantity || 0)}</span>
+            </div>
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <span className="text-[11px] font-bold text-slate-600 block">الكمية المقصوصة</span>
+              <span className="text-lg font-bold font-mono text-emerald-800">{formatNumber(order.cut_quantity || order.actual_quantity || 0)}</span>
+            </div>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <span className="text-[11px] font-bold text-slate-600 block">عدد الطبقات (Layers)</span>
+              <span className="text-lg font-bold font-mono text-amber-800">{formatNumber(order.layers_count || 1)}</span>
+            </div>
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <span className="text-[11px] font-bold text-slate-600 block">نسبة الهالك المقدرة</span>
+              <span className="text-lg font-bold font-mono text-purple-800">{order.waste_percentage || '0%'}</span>
+            </div>
+          </div>
+
+          {order.notes && (
+            <div className="p-3 border border-slate-200 rounded-lg bg-slate-50 text-xs">
+              <span className="font-bold text-slate-500 block mb-0.5">تعليمات القص والملاحظات الفنية:</span>
+              <p className="text-slate-800 font-medium">{order.notes}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-6 pt-12 text-center text-xs font-bold text-slate-700">
+            <div className="space-y-8">
+              <span>مسؤول مقصدار (القص)</span>
+              <div className="border-b border-slate-400 w-32 mx-auto"></div>
+            </div>
+            <div className="space-y-8">
+              <span>مراقب الجودة الفنية</span>
+              <div className="border-b border-slate-400 w-32 mx-auto"></div>
+            </div>
+            <div className="space-y-8">
+              <span>مدير قسم الإنتاج</span>
+              <div className="border-b border-slate-400 w-32 mx-auto"></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 4. Statement of Account (`statement`)
+    if (docType === 'statement' && documentData) {
+      const party = documentData.party || {};
+      const stData = documentData.statementData || {};
+      const transactions = Array.isArray(stData.transactions) ? stData.transactions : [];
 
       return (
         <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
-          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-4">
-            <div className="flex items-center gap-3">
-              {companyLogo && (
-                <img
-                  src={companyLogo}
-                  alt=""
-                  className="h-14 w-auto max-w-[120px] object-contain rounded"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              )}
+          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
+            <div className="flex items-center gap-4">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-16 w-auto max-w-[130px] object-contain rounded"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
               <div>
-                <h2 className="text-xl font-bold text-[#1F3A5F]">{companyName}</h2>
-                <p className="text-xs text-slate-500">{settings?.address || 'جمهورية مصر العربية'}</p>
+                <h2 className="text-2xl font-bold text-[#1F3A5F]">{companyName}</h2>
+                <div className="text-xs font-bold text-slate-500">كشف حساب مالي تفصيلي</div>
               </div>
             </div>
-            <div className="text-left">
-              <span className="px-3 py-1 bg-[#1F3A5F] text-white font-bold text-xs rounded">
-                {repTitle}
+            <div className="text-left font-mono">
+              <span className="inline-block px-3.5 py-1.5 bg-[#1F3A5F] text-white font-bold text-sm rounded mb-2">
+                كشف حساب معتمد
               </span>
-              <div className="text-xs text-slate-500 font-mono mt-1">{formatDate(new Date().toISOString())}</div>
+              <div className="text-xs text-slate-600 font-mono mt-1">تاريخ الكشف: {formatDate(new Date().toISOString())}</div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-4 text-xs font-bold">
+            <div>
+              <span className="text-slate-500 block mb-1">اسم الطرف التجاري:</span>
+              <span className="text-sm font-bold text-slate-900 block">{party.name || 'عميل / مورد'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 block mb-1">كود الحساب:</span>
+              <span className="text-sm font-mono text-slate-900 block">{party.code || '-'}</span>
+            </div>
+            <div className="text-left">
+              <span className="text-slate-500 block mb-1">الرصيد الختامي الحالي:</span>
+              <span className="text-base font-mono font-bold text-blue-800 block">
+                {formatCurrency(party.balance ?? stData.closing_balance ?? 0)}
+              </span>
             </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-100 border-b border-slate-300">
-                  <th className="p-2 border border-slate-200 text-center w-12 font-bold">#</th>
-                  {columns.map((col) => (
-                    <th key={col} className="p-2 border border-slate-200 font-bold">{col}</th>
-                  ))}
+                <tr className="bg-[#1F3A5F] text-white font-bold">
+                  <th className="p-2.5 border border-slate-300">التاريخ</th>
+                  <th className="p-2.5 border border-slate-300">نوع الحركة / المستند</th>
+                  <th className="p-2.5 border border-slate-300">رقم المرجع</th>
+                  <th className="p-2.5 border border-slate-300 text-left font-mono">مدين (+)</th>
+                  <th className="p-2.5 border border-slate-300 text-left font-mono">دائن (-)</th>
+                  <th className="p-2.5 border border-slate-300 text-left font-mono">الرصيد التراكمي</th>
                 </tr>
               </thead>
-              <tbody>
-                {rows.map((row, idx) => (
-                  <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
-                    <td className="p-2 border border-slate-200 text-center font-mono text-slate-500">{idx + 1}</td>
-                    {columns.map((col) => (
-                      <td key={col} className="p-2 border border-slate-200 font-mono">
-                        {String(row[col] ?? '-')}
-                      </td>
-                    ))}
+              <tbody className="divide-y divide-slate-200">
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-4 text-center text-slate-500 font-semibold">
+                      لا توجد حركات مسجلة خلال الفترة المحددة.
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  transactions.map((tr, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="p-2.5 border border-slate-200 font-mono">{formatDate(tr.date)}</td>
+                      <td className="p-2.5 border border-slate-200">{tr.description || tr.type}</td>
+                      <td className="p-2.5 border border-slate-200 font-mono">{tr.reference || '-'}</td>
+                      <td className="p-2.5 border border-slate-200 text-left font-mono text-rose-700">{tr.debit > 0 ? formatCurrency(tr.debit) : '-'}</td>
+                      <td className="p-2.5 border border-slate-200 text-left font-mono text-emerald-700">{tr.credit > 0 ? formatCurrency(tr.credit) : '-'}</td>
+                      <td className="p-2.5 border border-slate-200 text-left font-mono font-bold text-slate-900">{formatCurrency(tr.running_balance)}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6 pt-12 text-center text-xs font-bold text-slate-700">
+            <div className="space-y-8">
+              <span>توقيع المحاسب المالي</span>
+              <div className="border-b border-slate-400 w-36 mx-auto"></div>
+            </div>
+            <div className="space-y-8">
+              <span>توقيع واعتماد الطرف التجاري</span>
+              <div className="border-b border-slate-400 w-36 mx-auto"></div>
+            </div>
           </div>
         </div>
       );
@@ -457,14 +1021,14 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
           <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-4">
             <div className="flex items-center gap-3">
-              {companyLogo && (
-                <img
-                  src={companyLogo}
-                  alt=""
-                  className="h-14 w-auto max-w-[120px] object-contain rounded"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              )}
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-14 w-auto max-w-[120px] object-contain rounded"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
               <div>
                 <h2 className="text-xl font-bold text-[#1F3A5F]">{companyName}</h2>
                 <p className="text-xs text-slate-500">{settings?.address || 'جمهورية مصر العربية'}</p>
@@ -496,7 +1060,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-100 border-b border-slate-300">
+                <tr className="bg-[#1F3A5F] text-white border-b border-slate-300">
                   <th className="p-2 border border-slate-200 font-bold">التاريخ</th>
                   <th className="p-2 border border-slate-200 font-bold">نوع الحركة</th>
                   <th className="p-2 border border-slate-200 font-bold">رقم المستند</th>
@@ -523,19 +1087,19 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       );
     }
 
-    // Default Fallback Document View
+    // 6. Generic Fallback Document View
     return (
       <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
         <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-4">
           <div className="flex items-center gap-3">
-            {companyLogo && (
-              <img
-                src={companyLogo}
-                alt=""
-                className="h-14 w-auto max-w-[120px] object-contain rounded"
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            )}
+            <img
+              src={companyLogo}
+              alt="Logo"
+              className="h-14 w-auto max-w-[120px] object-contain rounded"
+              onError={(e) => {
+                if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+              }}
+            />
             <div>
               <h2 className="text-xl font-bold text-[#1F3A5F]">{companyName}</h2>
               <p className="text-xs text-slate-500">{settings?.address || 'جمهورية مصر العربية'}</p>
@@ -551,7 +1115,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
         <div className="py-6">
           <p className="text-sm font-bold text-slate-800">
-            معاينة المستند جاهزة للطباعة والتصدير.
+            معاينة المستند جاهزة للطباعة والتصدير بدقة عالية.
           </p>
         </div>
 
@@ -574,9 +1138,45 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-800 text-slate-100 flex flex-col select-none" dir="rtl">
+    <div className="min-h-screen bg-slate-800 text-slate-100 flex flex-col select-none print:bg-white print:text-black" dir="rtl">
+      {/* Print-specific style tag for window.print() browser / electron fallback */}
+      <style>{`
+        @media print {
+          header, aside, .no-print {
+            display: none !important;
+          }
+          body, html {
+            background: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          main {
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            display: block !important;
+            overflow: visible !important;
+          }
+          .print-scale-wrapper {
+            transform: none !important;
+          }
+          .printable-sheet {
+            box-shadow: none !important;
+            border: none !important;
+            margin: 0 auto !important;
+            width: ${paperSize === '80mm' ? '80mm !important' : '100% !important'};
+            max-width: ${paperSize === '80mm' ? '80mm !important' : 'none !important'};
+          }
+          @page {
+            size: ${paperSize === '80mm' ? '80mm auto' : `${paperSize} ${orientation}`};
+            margin: ${paperSize === '80mm' ? '0' : margins === 'none' ? '0' : margins === 'minimal' ? '5mm' : '10mm'};
+          }
+        }
+      `}</style>
+
       {/* Top Header Bar */}
-      <header className="h-14 bg-slate-900 border-b border-slate-700 px-4 flex items-center justify-between shrink-0 z-30">
+      <header className="h-14 bg-slate-900 border-b border-slate-700 px-4 flex items-center justify-between shrink-0 z-30 no-print">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -601,7 +1201,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               type="button"
               onClick={() => setZoomLevel(prev => Math.max(50, prev - 10))}
               className="p-1 hover:bg-slate-700 rounded text-slate-300 hover:text-white cursor-pointer"
-              title="تصغير"
+              title="تصغير (-10%)"
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
@@ -610,7 +1210,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               type="button"
               onClick={() => setZoomLevel(prev => Math.min(150, prev + 10))}
               className="p-1 hover:bg-slate-700 rounded text-slate-300 hover:text-white cursor-pointer"
-              title="تكبير"
+              title="تكبير (+10%)"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
@@ -618,7 +1218,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               type="button"
               onClick={() => setZoomLevel(100)}
               className="p-1 hover:bg-slate-700 rounded text-slate-300 hover:text-white cursor-pointer ml-1"
-              title="الحجم الأصلي 100%"
+              title="الحجم الأصلي (100%)"
             >
               <Maximize2 className="w-3.5 h-3.5" />
             </button>
@@ -641,11 +1241,11 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           ) : (
             <div
               style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
-              className="transition-transform duration-150"
+              className="transition-transform duration-150 print-scale-wrapper"
             >
               <div
                 ref={printFrameRef}
-                className={`${frameWidthStyle} min-h-[500px] bg-white shadow-2xl rounded-sm border border-slate-300 overflow-hidden text-slate-900 ${
+                className={`${frameWidthStyle} min-h-[500px] bg-white shadow-2xl rounded-sm border border-slate-300 overflow-hidden text-slate-900 printable-sheet ${
                   colorMode === 'grayscale' ? 'grayscale' : ''
                 }`}
               >
@@ -656,7 +1256,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         </main>
 
         {/* Right Settings Panel (Arabic) */}
-        <aside className="w-80 bg-slate-900 border-r border-slate-700 p-5 flex flex-col justify-between shrink-0 overflow-y-auto">
+        <aside className="w-80 bg-slate-900 border-r border-slate-700 p-5 flex flex-col justify-between shrink-0 overflow-y-auto no-print">
           <div className="space-y-5">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
               <SettingsIcon className="w-4 h-4 text-blue-400" />
@@ -688,7 +1288,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               </label>
               {printers.length === 0 ? (
                 <div className="p-3 bg-slate-800 rounded-lg text-[11px] text-amber-400 font-semibold border border-amber-500/30">
-                  لم يتم اكتشاف طابعات متصلة. يمكنك استخدام «حفظ PDF» لتصدير الملف.
+                  لم يتم اكتشاف طابعة متصلة. يمكنك استخدام «حفظ كملف PDF» لتصدير الملف.
                 </div>
               ) : (
                 <select
@@ -713,11 +1313,11 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               <select
                 value={paperSize}
                 onChange={(e) => setPaperSize(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:border-blue-500"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:border-blue-500 cursor-pointer"
               >
                 <option value="A4">A4 (ورق قياسي كامل 210 × 297 مم)</option>
                 <option value="A5">A5 (نصف صفحة 148 × 210 مم)</option>
-                <option value="80mm">إيصال طباعة حرارية (80 مم)</option>
+                <option value="80mm">إيصال طباعة حرارية (80 مم Thermal)</option>
               </select>
             </div>
 
@@ -732,7 +1332,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                   onClick={() => setOrientation('portrait')}
                   className={`py-2 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
                     orientation === 'portrait'
-                      ? 'bg-blue-600 text-white border-blue-500'
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-xs'
                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                   }`}
                 >
@@ -743,7 +1343,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                   onClick={() => setOrientation('landscape')}
                   className={`py-2 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
                     orientation === 'landscape'
-                      ? 'bg-blue-600 text-white border-blue-500'
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-xs'
                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                   }`}
                 >
@@ -764,7 +1364,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                   max="99"
                   value={copies}
                   onChange={(e) => setCopies(Math.max(1, Number(e.target.value) || 1))}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-mono font-bold text-white text-center"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-mono font-bold text-white text-center focus:outline-hidden focus:border-blue-500"
                 />
               </div>
 
@@ -775,7 +1375,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 <select
                   value={margins}
                   onChange={(e) => setMargins(e.target.value)}
-                  className="w-full px-2 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-white"
+                  className="w-full px-2 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:border-blue-500 cursor-pointer"
                 >
                   <option value="default">عادي</option>
                   <option value="minimal">ضيق</option>
@@ -795,7 +1395,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                   onClick={() => setColorMode('color')}
                   className={`py-2 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
                     colorMode === 'color'
-                      ? 'bg-blue-600 text-white border-blue-500'
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-xs'
                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                   }`}
                 >
@@ -806,7 +1406,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                   onClick={() => setColorMode('grayscale')}
                   className={`py-2 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
                     colorMode === 'grayscale'
-                      ? 'bg-blue-600 text-white border-blue-500'
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-xs'
                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                   }`}
                 >
@@ -825,7 +1425,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Printer className="w-4 h-4" />
-              <span>{isPrinting ? 'جاري إرسال الأمر للطابعة...' : 'طباعة المستند مباشرة'}</span>
+              <span>{isPrinting ? 'جاري إرسال الأمر للطابعة...' : 'طباعة المستند الآن'}</span>
             </button>
 
             <button
@@ -835,7 +1435,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Download className="w-4 h-4 text-emerald-400" />
-              <span>{isSavingPdf ? 'جاري حفظ الملف...' : 'حفظ كملف PDF'}</span>
+              <span>{isSavingPdf ? 'جاري تصدير PDF...' : 'حفظ كملف PDF'}</span>
             </button>
 
             <button

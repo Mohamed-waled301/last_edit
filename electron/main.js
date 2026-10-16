@@ -313,7 +313,7 @@ ipcMain.handle('print:print-html', async (_event, params = {}) => {
     return await new Promise((resolve) => {
       hiddenWin.webContents.print(
         {
-          silent: true,
+          silent: Boolean(deviceName),
           deviceName: deviceName || '',
           pageSize: pageSize === '80mm' ? { width: 80000, height: 297000 } : pageSize,
           landscape: Boolean(landscape),
@@ -673,7 +673,10 @@ app.whenReady().then(async () => {
 
   if (!integrity.ok && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.once('did-finish-load', () => {
-      mainWindow.webContents.send('db:integrity-warning', integrity);
+      const recheck = localDatabaseManager.checkIntegrity();
+      if (!recheck.ok) {
+        mainWindow.webContents.send('db:integrity-warning', recheck);
+      }
     });
   }
 
