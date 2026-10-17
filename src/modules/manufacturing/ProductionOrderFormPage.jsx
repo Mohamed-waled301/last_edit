@@ -1089,6 +1089,21 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
         { label: 'شاشة القص', href: '#/manufacturing' },
         { label: isEdit ? 'تعديل أمر قص' : 'أمر قص جديد' }
       ]}
+      actions={
+        isEdit && orderId ? (
+          <button
+            type="button"
+            onClick={() => {
+              window.location.hash = `#/print-preview?type=cut_order&id=${orderId}&returnUrl=${encodeURIComponent(`#/manufacturing/edit/${orderId}`)}`;
+            }}
+            className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-lg border border-slate-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            title="معاينة وطباعة أمر القص"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-600" />
+            <span>طباعة أمر القص</span>
+          </button>
+        ) : null
+      }
       hasBottomBar={true}
       onSave={handleSubmit}
       onCancel={() => {

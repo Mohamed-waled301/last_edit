@@ -589,7 +589,12 @@ export default function ManufacturingListPage({ onNotify }) {
                               {/* Print Order Action */}
                               <button
                                 type="button"
-                                onClick={() => { window.location.hash = `#/print-preview?type=cut_order&id=${o.id}&returnUrl=${encodeURIComponent('#/manufacturing')}`; }}
+                                onClick={() => {
+                                  try {
+                                    sessionStorage.setItem('print_preview_payload', JSON.stringify({ ...o, type: 'cut_order' }));
+                                  } catch {}
+                                  window.location.hash = `#/print-preview?type=cut_order&id=${o.id}&returnUrl=${encodeURIComponent('#/manufacturing')}`;
+                                }}
                                 className="px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-100 font-bold rounded-md border border-slate-300 transition-colors cursor-pointer flex items-center gap-1"
                                 title="طباعة أمر القص"
                               >

@@ -324,9 +324,11 @@ export default function QuickSupplierModal({
               <input
                 type="text"
                 dir="ltr"
-                value={form.phone}
+                value={form.phone || ''}
                 onChange={(e) => {
-                  const cleaned = sanitizeEgyptianPhoneInput(e.target.value);
+                  let raw = e?.target?.value ?? '';
+                  raw = raw.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+                  const cleaned = raw.replace(/\D/g, '').slice(0, 11);
                   setForm((prev) => ({ ...prev, phone: cleaned }));
                   if (errors.phone) setErrors((prev) => ({ ...prev, phone: null }));
                 }}

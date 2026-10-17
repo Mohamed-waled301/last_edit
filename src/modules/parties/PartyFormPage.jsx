@@ -46,7 +46,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
   const [form, setForm] = useState({
     code: '',
     name: '',
-    phone: DEFAULT_PHONE_VALUE,
+    phone: '',
     address: '',
     tax_number: '',
     supplier_type: '', // required for suppliers
@@ -149,7 +149,7 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
             setForm({
               code: p.code || '',
               name: p.name || '',
-              phone: p.phone || DEFAULT_PHONE_VALUE,
+              phone: p.phone || '',
               address: p.address || '',
               tax_number: p.tax_number || '',
               supplier_type: p.supplier_type === 'goods' ? 'توريد خامات ومستلزمات إنتاج' : (p.supplier_type || ''),
@@ -240,8 +240,12 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
   };
 
   const handlePhoneChange = (e) => {
-    const digits = sanitizeEgyptianPhoneInput(e.target.value);
-    setForm((prev) => ({ ...prev, phone: digits === '' ? DEFAULT_PHONE_VALUE : digits }));
+    let raw = e?.target?.value ?? '';
+    // Convert Arabic-Indic numerals (٠-٩) to Western (0-9)
+    raw = raw.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+    // Keep only numeric digits, capped at 11 digits
+    const digits = raw.replace(/\D/g, '').slice(0, 11);
+    setForm((prev) => ({ ...prev, phone: digits }));
     if (errors.phone) {
       setErrors((prev) => ({ ...prev, phone: null }));
     }
@@ -605,13 +609,12 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
               </div>
               <input
                 id="party-phone-input"
-                type="tel"
+                type="text"
                 inputMode="numeric"
                 dir="ltr"
-                maxLength={11}
-                value={form.phone}
+                value={form.phone || ''}
                 onChange={handlePhoneChange}
-                className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono text-left bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 ${
+                className={`w-full px-3.5 py-2 border rounded-lg text-sm font-mono text-left bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 ${
                   errors.phone ? 'border-rose-500 bg-rose-50/30' : 'border-slate-300'
                 }`}
               />

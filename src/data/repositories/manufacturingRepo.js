@@ -81,7 +81,13 @@ export const manufacturingRepo = {
 
   async getAll() {
     if (!db.production_orders) return [];
-    const orders = await db.production_orders.reverse().sortBy('created_at');
+    let orders = [];
+    try {
+      orders = await db.production_orders.reverse().sortBy('created_at');
+    } catch {
+      orders = await db.production_orders.toArray();
+      orders.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    }
     const products = await db.products.toArray();
     const items = await db.items.toArray();
     const prodMap = new Map([...products.map(p => [p.id, p]), ...items.map(i => [i.id, i])]);
@@ -126,18 +132,36 @@ export const manufacturingRepo = {
   },
 
   async getById(id) {
-    const order = await db.production_orders.get(id);
+    if (!id) return null;
+    let order = null;
+    if (db.production_orders) {
+      order = await db.production_orders.get(id);
+      if (!order && !isNaN(Number(id))) {
+        order = await db.production_orders.get(Number(id));
+      }
+      if (!order) {
+        order = await db.production_orders.where('cutting_number').equals(String(id)).first();
+      }
+      if (!order) {
+        order = await db.production_orders.where('order_number').equals(String(id)).first();
+      }
+      if (!order) {
+        const all = await db.production_orders.toArray().catch(() => []);
+        order = all.find(o => String(o.id) === String(id) || String(o.cutting_number) === String(id) || String(o.order_number) === String(id)) || null;
+      }
+    }
     if (!order) return null;
+    const targetId = order.id;
     const prod = order.product_id ? ((await db.items.get(order.product_id)) || (await db.products.get(order.product_id))) : null;
-    const usages = await db.production_material_usage.where('production_order_id').equals(id).toArray();
+    const usages = await db.production_material_usage.where('production_order_id').equals(targetId).toArray();
     const items = await db.items.toArray();
     const materials = await db.materials.toArray();
     const matMap = new Map([...materials.map(m => [m.id, m]), ...items.map(i => [i.id, i])]);
 
     // Load payments from shared ledger (db.payments)
-    const ledgerPayments = await db.payments.filter(p => p.production_order_id === id).toArray().catch(() => []);
+    const ledgerPayments = await db.payments.filter(p => p.production_order_id === targetId).toArray().catch(() => []);
     // Also include any legacy cutting_printing_payments if not already in payments
-    const legacyPayments = await db.cutting_printing_payments.where('production_order_id').equals(id).toArray().catch(() => []);
+    const legacyPayments = await db.cutting_printing_payments.where('production_order_id').equals(targetId).toArray().catch(() => []);
     
     // Merge payments avoiding duplicates
     const seenIds = new Set(ledgerPayments.map(p => p.id));

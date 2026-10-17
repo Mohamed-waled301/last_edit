@@ -733,3 +733,474 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
     </div>
   `;
 }
+
+/**
+ * 3. Cut Order (أمر تشغيل وقص ملابس) HTML Generator
+ * Matches corporate ERP invoice styling for both A4 and 80mm Thermal
+ */
+export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4') {
+  if (!order) return '';
+  const isThermal = paperSize === '80mm';
+  const companyName = settings?.factory_name || 'code systems';
+  const hasValidLogo = Boolean(settings?.company_logo && typeof settings.company_logo === 'string' && settings.company_logo.trim() !== '');
+  const companyLogo = hasValidLogo ? settings.company_logo : '';
+
+  const cuttingNumber = order.cutting_number || order.order_number || order.id || '';
+  const orderDate = order.start_date || order.order_date || order.created_at || '';
+  const productName = order.cutting_name || order.model_name || order.product_name || (order.product ? order.product.name : '') || 'موديل ملابس جاهزة';
+  const productCode = order.product_code || (order.product ? order.product.code : '') || '';
+  const fabricType = order.fabric_type || order.fabric_code || order.raw_material || 'قماش أساسي';
+  const legacyColor = order.color || '';
+  const supplierName = order.supplier_name || 'مستودع الخامات الرئيسي';
+  const isClosed = order.status === 'completed' || order.status === 'closed';
+  const statusLabel = isClosed ? 'مكتمل ومغلق' : order.status === 'in_progress' ? 'قيد التشغيل' : 'أمر صادر معتمد';
+
+  const batchQty = Number(order.batch_quantity || order.planned_quantity || order.quantity || 0);
+  const totalStagesCost = Number(order.total_stages_cost || order.total_printing_cost || 0);
+  const totalMaterialCost = Number(order.total_material_cost || 0);
+  const totalAdditionalCost = Number(order.total_additional_cost || 0);
+  const totalProductCost = Number(order.total_product_cost || (totalMaterialCost + totalStagesCost + totalAdditionalCost));
+  const unitCostExact = Number(order.unit_cost_exact || (batchQty > 0 ? totalProductCost / batchQty : 0));
+  const unitCost4Decimals = Number(order.unit_cost || unitCostExact);
+
+  const CUT_SIZES = ['M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'];
+
+  // Matrix rows resolution
+  let printMatrix = [];
+  if (Array.isArray(order.matrix) && order.matrix.length > 0) {
+    printMatrix = order.matrix;
+  } else {
+    let legacyMap = {};
+    if (typeof order.size_quantities === 'string') {
+      try { legacyMap = JSON.parse(order.size_quantities); } catch (e) {}
+    } else if (order.size_quantities && typeof order.size_quantities === 'object') {
+      legacyMap = order.size_quantities;
+    }
+    const color = legacyColor || 'افتراضي';
+    const rowQ = {};
+    let hasAny = false;
+    CUT_SIZES.forEach(sz => {
+      const q = Number(legacyMap[sz]) || 0;
+      rowQ[sz] = q;
+      if (q > 0) hasAny = true;
+    });
+    if (hasAny) {
+      printMatrix = [{ color, quantities: rowQ }];
+    }
+  }
+
+  // Calculate matrix totals
+  const colTotals = {};
+  CUT_SIZES.forEach(sz => { colTotals[sz] = 0; });
+  let matrixGrandTotal = 0;
+  printMatrix.forEach(r => {
+    CUT_SIZES.forEach(sz => {
+      const q = Number(r.quantities?.[sz]) || 0;
+      colTotals[sz] += q;
+      matrixGrandTotal += q;
+    });
+  });
+  const effectiveBatchQty = matrixGrandTotal > 0 ? matrixGrandTotal : batchQty;
+
+  // Raw materials used
+  const rawMaterials = Array.isArray(order.materials_lines) && order.materials_lines.length > 0
+    ? order.materials_lines
+    : (Array.isArray(order.materials) && order.materials.length > 0
+        ? order.materials
+        : (Array.isArray(order.materials_used) ? order.materials_used : []));
+
+  // Stages
+  const stages = order.stages || {};
+  const stageConfigs = [
+    { key: 'printing', title: 'مرحلة الطباعة', data: stages.printing },
+    { key: 'embroidery', title: 'مرحلة التطريز', data: stages.embroidery },
+    { key: 'sewing', title: 'مرحلة الحياكة والتجميع', data: stages.sewing }
+  ];
+  const activeStages = stageConfigs.filter(st => Boolean(st.data && (st.data.vendor_name || st.data.total_cost || st.data.fixed_total || st.data.price_per_piece)));
+
+  // --- 3.A) Thermal 80mm Layout for Cut Order ---
+  if (isThermal) {
+    return `
+      <div style="padding: 4px; font-family: 'Cairo', Tahoma, sans-serif; font-size: 11px; color: #000;" dir="rtl">
+        <!-- Thermal Header -->
+        <div style="text-align: center; border-bottom: 1px dashed #64748b; padding-bottom: 8px; margin-bottom: 8px;">
+          ${hasValidLogo ? `<img src="${companyLogo}" alt="Logo" style="height: 40px; max-width: 90px; object-fit: contain; margin: 0 auto 4px;" />` : ''}
+          <div style="font-weight: 800; font-size: 14px;">${escapeHtml(companyName)}</div>
+          <div style="font-size: 11px; font-weight: bold; color: #1e293b;">أمر تشغيل وقص ملابس</div>
+          ${settings?.phone ? `<div style="font-size: 10px; color: #475569;">هاتف: <span class="font-mono">${escapeHtml(settings.phone)}</span></div>` : ''}
+
+          <div style="margin-top: 6px; border-top: 1px dotted #cbd5e1; padding-top: 4px; text-align: right; font-size: 10px; line-height: 1.5;">
+            <div><strong>رقم الأمر:</strong> <span class="font-mono font-bold">${escapeHtml(cuttingNumber)}</span></div>
+            <div><strong>التاريخ:</strong> <span class="font-mono">${formatDate(orderDate)}</span></div>
+            <div><strong>الموديل:</strong> ${escapeHtml(productName)} ${productCode ? `(${escapeHtml(productCode)})` : ''}</div>
+            <div><strong>الخامة:</strong> ${escapeHtml(fabricType)}</div>
+            <div><strong>إجمالي القطع:</strong> <span class="font-mono font-bold">${formatNumber(effectiveBatchQty)} قطعة</span></div>
+            <div><strong>حالة الأمر:</strong> ${escapeHtml(statusLabel)}</div>
+          </div>
+        </div>
+
+        <!-- Matrix Summary Table -->
+        <div style="font-weight: bold; font-size: 10px; margin-bottom: 4px; border-bottom: 1px solid #000; padding-bottom: 2px;">
+          بيان الكميات بالمقاس واللون:
+        </div>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10px;">
+          <thead>
+            <tr style="border-bottom: 1px solid #475569; font-weight: bold;">
+              <th style="text-align: right; padding: 2px;">اللون</th>
+              <th style="text-align: center; padding: 2px;">المقاسات</th>
+              <th style="text-align: left; padding: 2px;">الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${printMatrix.map(r => {
+              const activeSizes = CUT_SIZES.filter(sz => (Number(r.quantities?.[sz]) || 0) > 0)
+                .map(sz => `${sz}:${r.quantities[sz]}`)
+                .join(' | ');
+              const rowTotal = CUT_SIZES.reduce((sum, sz) => sum + (Number(r.quantities?.[sz]) || 0), 0);
+              return `
+                <tr style="border-bottom: 1px dotted #94a3b8;">
+                  <td style="padding: 3px 2px; font-weight: bold;">${escapeHtml(r.color || 'عام')}</td>
+                  <td style="padding: 3px 2px; text-align: center;" class="font-mono">${escapeHtml(activeSizes || '-')}</td>
+                  <td style="padding: 3px 2px; text-align: left; font-weight: bold;" class="font-mono">${rowTotal}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+          <tfoot>
+            <tr style="border-top: 1px solid #000; font-weight: bold;">
+              <td colspan="2" style="padding: 3px 2px;">إجمالي قطع الباتش:</td>
+              <td style="padding: 3px 2px; text-align: left;" class="font-mono">${effectiveBatchQty}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <!-- Stages Summary -->
+        ${activeStages.length > 0 ? `
+          <div style="border-top: 1px dashed #64748b; padding-top: 6px; margin-top: 6px; font-size: 10px;">
+            <div style="font-weight: bold; margin-bottom: 3px;">مراحل التشغيل والورش:</div>
+            ${activeStages.map(st => `
+              <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span>${escapeHtml(st.title)} (${escapeHtml(st.data.vendor_name || 'غير محدد')}):</span>
+                <span class="font-mono font-bold">${formatCurrency(st.data.total_cost || st.data.fixed_total || 0)}</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+
+        <!-- Financial Breakdown -->
+        <div style="border-top: 1px dashed #64748b; padding-top: 6px; margin-top: 6px; font-size: 11px;">
+          ${totalMaterialCost > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+              <span>تكلفة الخامات:</span>
+              <span class="font-mono">${formatCurrency(totalMaterialCost)}</span>
+            </div>
+          ` : ''}
+          ${totalStagesCost > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+              <span>تكلفة المراحل:</span>
+              <span class="font-mono">${formatCurrency(totalStagesCost)}</span>
+            </div>
+          ` : ''}
+          ${totalAdditionalCost > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+              <span>تكاليف إضافية:</span>
+              <span class="font-mono">${formatCurrency(totalAdditionalCost)}</span>
+            </div>
+          ` : ''}
+          <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px;">
+            <span>إجمالي تكلفة القصة:</span>
+            <span class="font-mono">${formatCurrency(totalProductCost)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 10px; color: #334155; margin-top: 2px;">
+            <span>تكلفة القطعة التقديرية:</span>
+            <span class="font-mono font-bold">${unitCostExact.toFixed(2)} ج.م</span>
+          </div>
+        </div>
+
+        ${order.cutting_comment || order.notes ? `
+          <div style="margin-top: 8px; border-top: 1px dotted #94a3b8; padding-top: 4px; font-size: 10px;">
+            <strong>ملاحظات:</strong> ${escapeHtml(order.cutting_comment || order.notes)}
+          </div>
+        ` : ''}
+
+        <!-- Footer Signatures -->
+        <div style="margin-top: 14px; border-top: 1px solid #cbd5e1; padding-top: 8px; display: flex; justify-content: space-between; font-size: 9px; font-weight: bold; text-align: center;">
+          <div style="width: 48%;">
+            <div>مسؤول المقصدار</div>
+            <div style="border-bottom: 1px dotted #94a3b8; height: 18px;"></div>
+          </div>
+          <div style="width: 48%;">
+            <div>مشرف الإنتاج والجودة</div>
+            <div style="border-bottom: 1px dotted #94a3b8; height: 18px;"></div>
+          </div>
+        </div>
+
+        <div style="text-align: center; font-size: 9px; color: #64748b; margin-top: 10px;">
+          code systems ERP • أمر تشغيل وقص ملابس
+        </div>
+      </div>
+    `;
+  }
+
+  // --- 3.B) A4 Official Layout for Cut Order ---
+  return `
+    <div style="padding: 24px 32px; color: #1e293b; background: #ffffff; font-family: 'Cairo', Tahoma, sans-serif;" dir="rtl">
+      <!-- Top Header -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1e3a8a; padding-bottom: 16px; margin-bottom: 18px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          ${hasValidLogo ? `<img src="${companyLogo}" alt="Logo" style="height: 56px; max-width: 120px; object-fit: contain; border-radius: 4px;" />` : ''}
+          <div>
+            <h1 style="font-size: 20px; font-weight: 800; color: #1e3a8a; margin: 0 0 4px 0;">${escapeHtml(companyName)}</h1>
+            <div style="font-size: 11px; font-weight: bold; color: #64748b;">قسم الإنتاج والتشغيل - أمر قص وتشغيل ملابس رسمي</div>
+            ${settings?.address ? `<div style="font-size: 11px; color: #475569; margin-top: 2px;">${escapeHtml(settings.address)}</div>` : ''}
+            ${settings?.phone ? `<div style="font-size: 11px; color: #475569;">هاتف: <span class="font-mono">${escapeHtml(settings.phone)}</span></div>` : ''}
+          </div>
+        </div>
+
+        <div style="text-align: left;">
+          <div style="display: inline-block; background: #1e3a8a; color: #ffffff; font-weight: bold; font-size: 13px; padding: 5px 14px; border-radius: 6px; margin-bottom: 8px;">
+            أمر تشغيل وقص ملابس (Cut Order)
+          </div>
+          <div style="font-size: 11px; color: #334155; font-weight: bold;">
+            رقم أمر القص: <span class="font-mono" style="font-size: 13px; color: #0f172a;">${escapeHtml(cuttingNumber)}</span>
+          </div>
+          <div style="font-size: 11px; color: #334155; margin-top: 3px;">
+            تاريخ التشغيل: <span class="font-mono">${formatDate(orderDate)}</span>
+          </div>
+          <div style="font-size: 11px; color: #334155; margin-top: 3px;">
+            حالة الأمر: <strong style="color: ${isClosed ? '#047857' : '#1e3a8a'};">${escapeHtml(statusLabel)}</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Order Details Card -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 11px;">
+        <div>
+          <span style="color: #64748b; font-weight: bold; display: block; margin-bottom: 3px;">اسم الموديل / المنتج:</span>
+          <div style="font-size: 13px; font-weight: bold; color: #0f172a;">${escapeHtml(productName)}</div>
+          ${productCode ? `<div style="color: #64748b; margin-top: 2px;" class="font-mono">كود الموديل: ${escapeHtml(productCode)}</div>` : ''}
+        </div>
+        <div>
+          <span style="color: #64748b; font-weight: bold; display: block; margin-bottom: 3px;">نوع ولون القماش:</span>
+          <div style="font-size: 13px; font-weight: bold; color: #0f172a;">${escapeHtml(fabricType)}</div>
+          ${legacyColor ? `<div style="color: #64748b; margin-top: 2px;">الألوان: ${escapeHtml(legacyColor)}</div>` : ''}
+        </div>
+        <div style="text-align: left;">
+          <span style="color: #64748b; font-weight: bold; display: block; margin-bottom: 3px;">جهة التوريد / المستودع:</span>
+          <div style="font-size: 13px; font-weight: bold; color: #0f172a;">${escapeHtml(supplierName)}</div>
+          <div style="color: #047857; font-weight: bold; margin-top: 2px;">معتمد ومطابق للمواصفات</div>
+        </div>
+      </div>
+
+      <!-- 4 Quick Stats Badges -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; text-align: center;">
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 8px;">
+          <span style="font-size: 10px; font-weight: bold; color: #1e40af; display: block;">إجمالي قطع الباتش</span>
+          <span style="font-size: 16px; font-weight: bold; color: #1e3a8a;" class="font-mono">${formatNumber(effectiveBatchQty)}</span>
+        </div>
+        <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 8px;">
+          <span style="font-size: 10px; font-weight: bold; color: #065f46; display: block;">تكلفة الخامات المصروفة</span>
+          <span style="font-size: 16px; font-weight: bold; color: #047857;" class="font-mono">${formatCurrency(totalMaterialCost)}</span>
+        </div>
+        <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px;">
+          <span style="font-size: 10px; font-weight: bold; color: #92400e; display: block;">تكلفة مراحل التشغيل</span>
+          <span style="font-size: 16px; font-weight: bold; color: #b45309;" class="font-mono">${formatCurrency(totalStagesCost)}</span>
+        </div>
+        <div style="background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 8px;">
+          <span style="font-size: 10px; font-weight: bold; color: #6b21a8; display: block;">تكلفة القطعة الواحدة</span>
+          <span style="font-size: 16px; font-weight: bold; color: #7e22ce;" class="font-mono">${unitCostExact.toFixed(2)} ج.م</span>
+        </div>
+      </div>
+
+      <!-- Color by Size Matrix Table (Requirement 4.6) -->
+      <div style="margin-bottom: 18px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;" class="break-inside-avoid">
+        <div style="background: #1e3a8a; color: #ffffff; padding: 6px 12px; font-weight: bold; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+          <span>جدول توزيع المقاسات والكميات للقصة (Matrix Breakdown)</span>
+          <span style="font-size: 11px; font-weight: normal;">10 مقاسات قياسية (M إلى 8XL)</span>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+          <thead>
+            <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1; color: #334155; font-weight: bold;">
+              <th style="padding: 7px 10px; text-align: right; width: 140px; border-left: 1px solid #e2e8f0;">اللون</th>
+              ${CUT_SIZES.map(sz => `
+                <th style="padding: 7px 4px; text-align: center; border-left: 1px solid #e2e8f0;" class="font-mono">${sz}</th>
+              `).join('')}
+              <th style="padding: 7px 10px; text-align: center; width: 90px; color: #1e3a8a; font-weight: bold;">الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${printMatrix.length > 0 ? printMatrix.map((r, idx) => {
+              const rowTotal = CUT_SIZES.reduce((sum, sz) => sum + (Number(r.quantities?.[sz]) || 0), 0);
+              return `
+                <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 1 ? '#f8fafc' : '#ffffff'};">
+                  <td style="padding: 7px 10px; font-weight: bold; color: #0f172a; border-left: 1px solid #e2e8f0;">${escapeHtml(r.color || 'افتراضي')}</td>
+                  ${CUT_SIZES.map(sz => {
+                    const q = Number(r.quantities?.[sz]) || 0;
+                    return `
+                      <td style="padding: 7px 4px; text-align: center; border-left: 1px solid #e2e8f0; font-weight: ${q > 0 ? 'bold' : 'normal'}; color: ${q > 0 ? '#0f172a' : '#94a3b8'};" class="font-mono">
+                        ${q > 0 ? q : '-'}
+                      </td>
+                    `;
+                  }).join('')}
+                  <td style="padding: 7px 10px; text-align: center; font-weight: bold; color: #1e3a8a;" class="font-mono">${rowTotal}</td>
+                </tr>
+              `;
+            }).join('') : `
+              <tr>
+                <td colspan="12" style="padding: 12px; text-align: center; color: #94a3b8;">لا توجد تفاصيل مقاسات مسجلة</td>
+              </tr>
+            `}
+          </tbody>
+          <tfoot>
+            <tr style="background: #f1f5f9; border-top: 2px solid #cbd5e1; font-weight: bold; color: #0f172a;">
+              <td style="padding: 8px 10px; border-left: 1px solid #cbd5e1;">الإجمالي لكل مقاس</td>
+              ${CUT_SIZES.map(sz => `
+                <td style="padding: 8px 4px; text-align: center; border-left: 1px solid #cbd5e1; color: #1e3a8a;" class="font-mono">${colTotals[sz]}</td>
+              `).join('')}
+              <td style="padding: 8px 10px; text-align: center; background: #e0e7ff; color: #1e3a8a; font-size: 13px;" class="font-mono">${effectiveBatchQty}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- Raw Materials Issued Table (if any) -->
+      ${rawMaterials.length > 0 ? `
+        <div style="margin-bottom: 18px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;" class="break-inside-avoid">
+          <div style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 6px 12px; font-weight: bold; font-size: 11px; color: #334155;">
+            الخامات ومستلزمات الإنتاج المنصرفة للقصة
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+            <thead>
+              <tr style="background: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: bold;">
+                <th style="padding: 6px 10px; text-align: center; width: 35px;">#</th>
+                <th style="padding: 6px 10px; text-align: right;">اسم الخامة والمواصفات</th>
+                <th style="padding: 6px 10px; text-align: center; width: 85px;">الكمية المنصرفة</th>
+                <th style="padding: 6px 10px; text-align: center; width: 70px;">الوحدة</th>
+                <th style="padding: 6px 10px; text-align: left; width: 95px;">سعر الوحدة</th>
+                <th style="padding: 6px 10px; text-align: left; width: 105px;">إجمالي التكلفة</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rawMaterials.map((m, idx) => {
+                const qty = Number(m.quantity ?? m.actual_quantity ?? m.standard_quantity ?? 0);
+                const price = Number(m.unit_price ?? m.unit_cost ?? 0);
+                const lineTotal = Number(m.line_cost ?? m.total_cost ?? (qty * price));
+                return `
+                  <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 6px 10px; text-align: center;" class="font-mono">${idx + 1}</td>
+                    <td style="padding: 6px 10px; font-weight: bold; color: #0f172a;">${escapeHtml(m.material_name || m.name || m.raw_material_id || '')}</td>
+                    <td style="padding: 6px 10px; text-align: center; font-weight: bold;" class="font-mono">${formatNumber(qty)}</td>
+                    <td style="padding: 6px 10px; text-align: center;">${escapeHtml(m.material_unit || m.unit || 'وحدة')}</td>
+                    <td style="padding: 6px 10px; text-align: left;" class="font-mono">${formatCurrency(price)}</td>
+                    <td style="padding: 6px 10px; text-align: left; font-weight: bold; color: #0f172a;" class="font-mono">${formatCurrency(lineTotal)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+
+      <!-- Production Stages & Services Table (if any) -->
+      ${activeStages.length > 0 ? `
+        <div style="margin-bottom: 18px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;" class="break-inside-avoid">
+          <div style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 6px 12px; font-weight: bold; font-size: 11px; color: #334155;">
+            مراحل التشغيل والخدمات الخارجية (الطباعة والتطريز والحياكة)
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+            <thead>
+              <tr style="background: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: bold;">
+                <th style="padding: 6px 10px; text-align: right; width: 130px;">المرحلة</th>
+                <th style="padding: 6px 10px; text-align: right;">الورشة / مقاول الخدمة</th>
+                <th style="padding: 6px 10px; text-align: center; width: 100px;">طريقة المحاسبة</th>
+                <th style="padding: 6px 10px; text-align: left; width: 95px;">التكلفة الإجمالية</th>
+                <th style="padding: 6px 10px; text-align: left; width: 90px;">المسدد</th>
+                <th style="padding: 6px 10px; text-align: left; width: 90px;">المتبقي</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${activeStages.map(st => {
+                const cost = Number(st.data.total_cost || st.data.fixed_total || 0);
+                const paid = Number(st.data.paid || 0);
+                const rem = Math.max(0, cost - paid);
+                const pricingType = st.data.pricing_type === 'per_piece' ? 'بالقطعة' : 'مبلغ مقطوع';
+                return `
+                  <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 6px 10px; font-weight: bold; color: #1e3a8a;">${escapeHtml(st.title)}</td>
+                    <td style="padding: 6px 10px; font-weight: bold; color: #0f172a;">${escapeHtml(st.data.vendor_name || 'غير محدد')}</td>
+                    <td style="padding: 6px 10px; text-align: center; font-size: 10px;">${escapeHtml(pricingType)}</td>
+                    <td style="padding: 6px 10px; text-align: left; font-weight: bold;" class="font-mono">${formatCurrency(cost)}</td>
+                    <td style="padding: 6px 10px; text-align: left; color: #047857;" class="font-mono">${formatCurrency(paid)}</td>
+                    <td style="padding: 6px 10px; text-align: left; color: ${rem > 0 ? '#b91c1c' : '#475569'};" class="font-mono">${formatCurrency(rem)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+
+      <!-- Financial Totals Box & Notes Section -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 24px;" class="break-inside-avoid">
+        <div style="flex: 1; font-size: 11px;">
+          ${order.cutting_comment || order.notes ? `
+            <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; background: #fafafa;">
+              <strong style="color: #334155;">تعليمات وتوجيهات قسم القص:</strong>
+              <p style="margin: 4px 0 0; color: #475569;">${escapeHtml(order.cutting_comment || order.notes)}</p>
+            </div>
+          ` : ''}
+        </div>
+
+        <div style="width: 300px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; font-size: 11px;">
+          <div style="display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #e2e8f0; color: #475569;">
+            <span>إجمالي تكلفة الخامات:</span>
+            <span class="font-mono font-bold">${formatCurrency(totalMaterialCost)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #e2e8f0; color: #475569;">
+            <span>إجمالي تكاليف المراحل الخارجية:</span>
+            <span class="font-mono font-bold">${formatCurrency(totalStagesCost)}</span>
+          </div>
+          ${totalAdditionalCost > 0 ? `
+            <div style="display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #e2e8f0; color: #475569;">
+              <span>مصاريف إضافية وتشغيلية:</span>
+              <span class="font-mono font-bold">+${formatCurrency(totalAdditionalCost)}</span>
+            </div>
+          ` : ''}
+          <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: #1e3a8a; color: #ffffff; font-weight: bold; font-size: 13px;">
+            <span>التكلفة الإجمالية لأمر القص:</span>
+            <span class="font-mono">${formatCurrency(totalProductCost)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 6px 12px; background: #eff6ff; font-weight: bold; font-size: 11px; color: #1e40af;">
+            <span>تكلفة القطعة الواحدة:</span>
+            <span class="font-mono">${unitCostExact.toFixed(2)} ج.م</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Official Signatures for Cutting Order -->
+      <div style="margin-top: 36px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; text-align: center; font-size: 11px; font-weight: bold; color: #334155;" class="break-inside-avoid">
+        <div>
+          <div>مسؤول مقصدار (القص)</div>
+          <div style="border-bottom: 1px solid #94a3b8; width: 80%; margin: 24px auto 0;"></div>
+        </div>
+        <div>
+          <div>مراقب الجودة الفنية</div>
+          <div style="border-bottom: 1px solid #94a3b8; width: 80%; margin: 24px auto 0;"></div>
+        </div>
+        <div>
+          <div>المحاسب المسؤول</div>
+          <div style="border-bottom: 1px solid #94a3b8; width: 80%; margin: 24px auto 0;"></div>
+        </div>
+        <div>
+          <div>الاعتماد الإداري / إدارة الإنتاج</div>
+          <div style="border-bottom: 1px solid #94a3b8; width: 80%; margin: 24px auto 0;"></div>
+        </div>
+      </div>
+
+      <!-- Bottom System Stamp -->
+      <div style="margin-top: 24px; padding-top: 10px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 10px; color: #94a3b8;" class="break-inside-avoid">
+        أمر تشغيل وقص رسمي صادر عن نظام code systems ERP • تم خصم الخامات وتوزيع التكاليف آلياً لأقرب قرش
+      </div>
+    </div>
+  `;
+}

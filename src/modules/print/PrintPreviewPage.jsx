@@ -22,7 +22,7 @@ import {
 import { api } from '../../services/api';
 import db from '../../data/db';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
-import { generatePurchaseInvoiceHtml, generateSalesInvoiceHtml } from './invoicePrintTemplates';
+import { generatePurchaseInvoiceHtml, generateSalesInvoiceHtml, generateCutOrderHtml } from './invoicePrintTemplates';
 
 export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   const params = useMemo(() => {
@@ -41,6 +41,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   const docId = params.get('id');
   const returnUrl = params.get('returnUrl');
   const paperParam = params.get('paper');
+  const isCutOrder = ['cut_order', 'production_order', 'cutting', 'cutting_order'].includes(docType);
 
   const [settings, setSettings] = useState(null);
   const [documentData, setDocumentData] = useState(null);
@@ -120,11 +121,16 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           if (storedPayload) {
             try {
               const parsed = JSON.parse(storedPayload);
-              if (parsed && (parsed.type === docType || !docId)) {
-                setDocumentData(parsed);
-                if (parsed.paperSize) setPaperSize(parsed.paperSize);
-                setLoading(false);
-                return;
+              if (parsed) {
+                const matchesId = !docId || String(parsed.id) === String(docId) || String(parsed.cutting_number) === String(docId) || String(parsed.order_number) === String(docId) || String(parsed.invoice_number) === String(docId) || String(parsed.po_number) === String(docId);
+                const payloadIsCut = isCutOrder || parsed.type === 'cut_order' || Boolean(parsed.matrix) || Boolean(parsed.cutting_number);
+
+                if (matchesId && (!docType || parsed.type === docType || (isCutOrder && payloadIsCut))) {
+                  setDocumentData(parsed);
+                  if (parsed.paperSize) setPaperSize(parsed.paperSize);
+                  setLoading(false);
+                  return;
+                }
               }
             } catch {}
           }
@@ -178,10 +184,38 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             statementData: res?.data || res || null,
             party: pRes?.data || pRes || null
           });
-        } else if (docType === 'cut_order') {
-          const res = await api.getProductionOrders();
-          const orders = Array.isArray(res.data) ? res.data : (res.production_orders || (Array.isArray(res) ? res : []));
-          const found = orders.find(o => String(o.id) === String(docId) || String(o.cutting_number) === String(docId) || String(o.order_number) === String(docId)) || orders[0];
+        } else if (isCutOrder) {
+          let found = null;
+          if (docId && api.getProductionOrder) {
+            try {
+              const sRes = await api.getProductionOrder(docId);
+              found = sRes?.data || sRes?.order || sRes;
+            } catch {}
+          }
+          if (!found) {
+            const res = await api.getProductionOrders();
+            const orders = Array.isArray(res.data) ? res.data : (res.production_orders || (Array.isArray(res) ? res : []));
+            if (docId) {
+              found = orders.find(o => String(o.id) === String(docId) || String(o.cutting_number) === String(docId) || String(o.order_number) === String(docId));
+            }
+            if (!found && orders.length > 0) {
+              found = orders[0];
+            }
+          }
+          if (!found && docId && db.production_orders) {
+            try {
+              found = await db.production_orders.get(docId);
+              if (!found && !isNaN(Number(docId))) {
+                found = await db.production_orders.get(Number(docId));
+              }
+              if (!found) {
+                found = await db.production_orders.where('cutting_number').equals(String(docId)).first();
+              }
+              if (!found) {
+                found = await db.production_orders.where('order_number').equals(String(docId)).first();
+              }
+            } catch {}
+          }
           setDocumentData(found || null);
         } else if (docType === 'stock_card') {
           const res = await (api.getStockMovements ? api.getStockMovements(docId) : Promise.resolve(null)).catch(() => null);
@@ -568,191 +602,24 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       );
     }
 
-    // 3. Production Cutting Order (`cut_order`)
-    if (docType === 'cut_order' && documentData) {
+    // 3. Production Cutting Order (`cut_order` / `production_order`)
+    if (isCutOrder) {
       const order = documentData;
+      if (!order) {
+        return (
+          <div className="p-8 text-center text-slate-500 font-bold" dir="rtl">
+            لم يتم العثور على أمر القص والتشغيل المطلوب.
+          </div>
+        );
+      }
       return (
-        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
-          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
-            <div className="flex items-center gap-4">
-              <img
-                src={companyLogo}
-                alt="Logo"
-                className="h-16 w-auto max-w-[130px] object-contain rounded"
-                onError={(e) => {
-                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-                }}
-              />
-              <div>
-                <h2 className="text-2xl font-bold text-[#1F3A5F]">{companyName}</h2>
-                <div className="text-xs font-bold text-slate-500">قسم الإنتاج والتشغيل - أمر قص رسمي</div>
-              </div>
-            </div>
-            <div className="text-left font-mono">
-              <span className="inline-block px-3.5 py-1.5 bg-[#1F3A5F] text-white font-bold text-sm rounded shadow-xs mb-2">
-                أمر تشغيل وقص ملابس
-              </span>
-              <div className="text-xs text-slate-600 font-bold">
-                رقم الأمر: <span className="font-mono text-slate-900 text-sm">{order.cutting_number || order.order_number || order.id}</span>
-              </div>
-              <div className="text-xs text-slate-600 font-bold mt-1">
-                تاريخ الأمر: <span>{formatDate(order.order_date || order.created_at)}</span>
-              </div>
-              <div className="text-xs text-slate-600 font-bold mt-1">
-                الحالة: <span className="text-blue-700">{order.status || 'قيد التشغيل'}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-4 text-xs font-bold">
-            <div>
-              <span className="text-slate-500 block mb-1">اسم الموديل / المنتج:</span>
-              <span className="text-sm font-bold text-slate-900 block">{order.model_name || order.product_name || 'غير محدد'}</span>
-            </div>
-            <div>
-              <span className="text-slate-500 block mb-1">كود الخامة / القماش:</span>
-              <span className="text-sm font-mono text-slate-900 block">{order.fabric_code || order.raw_material || 'قماش أساسي'}</span>
-            </div>
-            <div className="text-left">
-              <span className="text-slate-500 block mb-1">جهة التوريد / المورد:</span>
-              <span className="text-sm text-slate-900 block">{order.supplier_name || 'المخزن الرئيسي'}</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-4 gap-3 text-center">
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <span className="text-[11px] font-bold text-slate-600 block">الكمية المخططة</span>
-              <span className="text-lg font-bold font-mono text-blue-800">{formatNumber(order.planned_quantity || order.quantity || 0)}</span>
-            </div>
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-              <span className="text-[11px] font-bold text-slate-600 block">الكمية المقصوصة</span>
-              <span className="text-lg font-bold font-mono text-emerald-800">{formatNumber(order.cut_quantity || order.actual_quantity || 0)}</span>
-            </div>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <span className="text-[11px] font-bold text-slate-600 block">عدد الطبقات (Layers)</span>
-              <span className="text-lg font-bold font-mono text-amber-800">{formatNumber(order.layers_count || 1)}</span>
-            </div>
-            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <span className="text-[11px] font-bold text-slate-600 block">نسبة الهالك المقدرة</span>
-              <span className="text-lg font-bold font-mono text-purple-800">{order.waste_percentage || '0%'}</span>
-            </div>
-          </div>
-
-          {/* Color by Size Quantity Matrix Table (Requirement 4.6) */}
-          {(() => {
-            const CUT_SIZES = ['M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'];
-            const printMatrix = Array.isArray(order.matrix) && order.matrix.length > 0
-              ? order.matrix
-              : (() => {
-                  let legacyMap = {};
-                  if (typeof order.size_quantities === 'string') {
-                    try { legacyMap = JSON.parse(order.size_quantities); } catch (e) {}
-                  } else if (order.size_quantities && typeof order.size_quantities === 'object') {
-                    legacyMap = order.size_quantities;
-                  }
-                  return [{
-                    color: order.color || 'غير محدد',
-                    quantities: legacyMap
-                  }];
-                })();
-
-            let grand = 0;
-            printMatrix.forEach(r => {
-              CUT_SIZES.forEach(sz => {
-                grand += Number(r.quantities?.[sz]) || 0;
-              });
-            });
-
-            return (
-              <div className="border border-slate-300 rounded-lg overflow-hidden">
-                <div className="bg-[#1F3A5F] text-white px-3 py-1.5 font-bold text-xs flex justify-between items-center">
-                  <span>توزيع كميات أمر القص حسب المقاس واللون</span>
-                  <span className="font-mono">إجمالي القطع: {formatNumber(order.batch_quantity || grand)} قطعة</span>
-                </div>
-                <table className="w-full text-right text-xs border-collapse table-fixed">
-                  <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800">
-                    <tr>
-                      <th className="p-2 border-l border-slate-300 w-28 text-right">اللون</th>
-                      {CUT_SIZES.map(sz => (
-                        <th key={sz} className="p-2 border-l border-slate-300 text-center font-mono">{sz}</th>
-                      ))}
-                      <th className="p-2 text-center font-mono w-20">الإجمالي</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {printMatrix.map((r, idx) => {
-                      let rTotal = 0;
-                      CUT_SIZES.forEach(sz => {
-                        const q = Number(r.quantities?.[sz]) || 0;
-                        rTotal += q;
-                      });
-                      return (
-                        <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/60' : 'bg-white'}>
-                          <td className="p-2 font-bold border-l border-slate-200">{r.color || 'غير محدد'}</td>
-                          {CUT_SIZES.map(sz => {
-                            const q = Number(r.quantities?.[sz]) || 0;
-                            return (
-                              <td key={sz} className="p-2 text-center font-mono border-l border-slate-200 tabular-nums">
-                                {q > 0 ? q : '-'}
-                              </td>
-                            );
-                          })}
-                          <td className="p-2 text-center font-mono font-bold text-[#1F3A5F] tabular-nums">
-                            {rTotal}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300">
-                    <tr>
-                      <td className="p-2 border-l border-slate-300 font-bold">الإجمالي لكل مقاس</td>
-                      {CUT_SIZES.map(sz => {
-                        let colSum = 0;
-                        printMatrix.forEach(r => {
-                          colSum += Number(r.quantities?.[sz]) || 0;
-                        });
-                        return (
-                          <td key={sz} className="p-2 text-center font-mono font-bold border-l border-slate-300 tabular-nums">
-                            {colSum}
-                          </td>
-                        );
-                      })}
-                      <td className="p-2 text-center font-mono font-bold text-indigo-700 bg-indigo-50 tabular-nums">
-                        {grand}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            );
-          })()}
-
-          {order.notes && (
-            <div className="p-3 border border-slate-200 rounded-lg bg-slate-50 text-xs">
-              <span className="font-bold text-slate-500 block mb-0.5">تعليمات القص والملاحظات الفنية:</span>
-              <p className="text-slate-800 font-medium">{order.notes}</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-3 gap-6 pt-12 text-center text-xs font-bold text-slate-700">
-            <div className="space-y-8">
-              <span>مسؤول مقصدار (القص)</span>
-              <div className="border-b border-slate-400 w-32 mx-auto"></div>
-            </div>
-            <div className="space-y-8">
-              <span>مراقب الجودة الفنية</span>
-              <div className="border-b border-slate-400 w-32 mx-auto"></div>
-            </div>
-            <div className="space-y-8">
-              <span>مدير قسم الإنتاج</span>
-              <div className="border-b border-slate-400 w-32 mx-auto"></div>
-            </div>
-          </div>
-        </div>
+        <div
+          dangerouslySetInnerHTML={{
+            __html: generateCutOrderHtml(order, settings, paperSize)
+          }}
+        />
       );
     }
-
     // 4. Statement of Account (`statement`)
     if (docType === 'statement' && documentData) {
       const party = documentData.party || {};
@@ -926,6 +793,14 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     }
 
     // 6. Generic Fallback Document View
+    if (!documentData) {
+      return (
+        <div className="p-8 text-center text-slate-500 font-bold" dir="rtl">
+          لم يتم العثور على بيانات المستند المطلوب للطباعة.
+        </div>
+      );
+    }
+
     return (
       <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
         <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-4">
@@ -945,16 +820,21 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           </div>
           <div className="text-left">
             <span className="px-3 py-1 bg-[#1F3A5F] text-white font-bold text-xs rounded">
-              مستند معتمد
+              {documentData.title || 'مستند نظام معتمد'}
             </span>
-            <div className="text-xs text-slate-500 font-mono mt-1">{formatDate(new Date().toISOString())}</div>
+            <div className="text-xs text-slate-500 font-mono mt-1">{formatDate(documentData.date || documentData.created_at || new Date().toISOString())}</div>
           </div>
         </div>
 
-        <div className="py-6">
-          <p className="text-sm font-bold text-slate-800">
-            معاينة المستند جاهزة للطباعة والتصدير بدقة عالية.
-          </p>
+        <div className="py-4">
+          <h3 className="text-base font-bold text-slate-800 mb-2">
+            {documentData.title || documentData.name || 'تفاصيل المستند'}
+          </h3>
+          {documentData.notes && (
+            <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200">
+              {documentData.notes}
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-3 gap-6 pt-12 text-center text-xs font-bold text-slate-600">

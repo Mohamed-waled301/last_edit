@@ -135,17 +135,30 @@ export default function PostIssuePrintDialog({
     if (onPreview) {
       onPreview({ paperSize, documentData, documentType, documentNumber });
     } else {
-      const docTypeParam =
-        documentType === 'sales_invoice'
-          ? paperSize === '80mm'
-            ? 'sales_invoice_thermal'
-            : 'sales_invoice'
-          : paperSize === '80mm'
-          ? 'purchase_invoice_thermal'
-          : 'purchase_invoice';
+      let docTypeParam = 'sales_invoice';
+      if (documentType === 'cut_order' || documentType === 'production_order' || documentType === 'cutting') {
+        docTypeParam = 'cut_order';
+      } else if (documentType === 'sales_invoice') {
+        docTypeParam = paperSize === '80mm' ? 'sales_invoice_thermal' : 'sales_invoice';
+      } else if (documentType === 'purchase_invoice' || documentType === 'purchase_order') {
+        docTypeParam = paperSize === '80mm' ? 'purchase_invoice_thermal' : 'purchase_invoice';
+      } else if (documentType) {
+        docTypeParam = documentType;
+      }
 
-      const docId = documentData?.id || documentData?.po_number || documentData?.invoice_number || documentNumber;
-      window.location.hash = `#/print-preview?type=${docTypeParam}&id=${docId}&paper=${paperSize}`;
+      const docId = documentData?.id || documentData?.cutting_number || documentData?.order_number || documentData?.po_number || documentData?.invoice_number || documentNumber;
+
+      if (documentData && typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem('print_preview_payload', JSON.stringify({
+            ...documentData,
+            type: docTypeParam,
+            paperSize
+          }));
+        } catch {}
+      }
+
+      window.location.hash = `#/print-preview?type=${docTypeParam}&id=${docId || ''}&paper=${paperSize}`;
     }
     handleDismiss();
   };
