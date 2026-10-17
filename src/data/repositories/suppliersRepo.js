@@ -63,7 +63,7 @@ export const suppliersRepo = {
       phone: data.phone || '',
       address: data.address || '',
       tax_number: data.tax_number || '',
-      supplier_type: data.supplier_type || 'goods',
+      supplier_type: data.supplier_type || '',
       supplied_all_items: data.supplied_all_items !== undefined ? Boolean(data.supplied_all_items) : true,
       supplied_group_ids: Array.isArray(data.supplied_group_ids) ? data.supplied_group_ids : [],
       supplied_section_ids: Array.isArray(data.supplied_section_ids) ? data.supplied_section_ids : [],

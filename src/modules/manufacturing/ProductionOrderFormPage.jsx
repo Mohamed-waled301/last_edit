@@ -636,12 +636,17 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
 
     try {
       setInlineVendorState(prev => ({ ...prev, submitting: true, error: '' }));
+      const stageActivityMap = {
+        printing: 'طباعة',
+        embroidery: 'تطريز',
+        sewing: 'حياكة'
+      };
       const newParty = await api.createParty({
         name: inlineVendorState.name.trim(),
         code: inlineVendorState.code.trim() || `WRK-${Date.now().toString().slice(-4)}`,
         phone: inlineVendorState.phone.trim(),
         is_supplier: 1,
-        supplier_type: 'service',
+        supplier_type: stageActivityMap[stageKey] || 'service',
         service_stage: stageKey,
         notes: `ورشة تشغيل مضافة سريعة لمرحلة ${STAGE_KEYS.find(s => s.key === stageKey)?.title || stageKey}`
       });
@@ -1387,11 +1392,26 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 font-bold focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
                       >
                         <option value="">-- اختر الورشة / المطبعة --</option>
-                        {workshopVendors.map((w) => (
-                          <option key={w.id} value={w.id}>
-                            [{w.code || '---'}] {w.name} {w.phone ? `(${w.phone})` : ''}
-                          </option>
-                        ))}
+                        {workshopVendors
+                          .filter((w) => {
+                            if (w.id === st.vendor_id) return true;
+                            if (w.service_stage && w.service_stage === k) return true;
+                            const stageActivities = {
+                              printing: ['طباعة', 'الطباعة', 'printing', 'service_printing'],
+                              embroidery: ['تطريز', 'التطريز', 'embroidery', 'service_embroidery'],
+                              sewing: ['حياكة', 'الحياكة', 'sewing', 'service_sewing']
+                            };
+                            const matchActs = stageActivities[k] || [];
+                            if (matchActs.includes(w.supplier_type)) return true;
+                            if (w.supplier_type === 'service' || w.supplier_type === 'خدمات') return true;
+                            if (!w.supplier_type && !w.service_stage) return true;
+                            return false;
+                          })
+                          .map((w) => (
+                            <option key={w.id} value={w.id}>
+                              [{w.code || '---'}] {w.name} {w.phone ? `(${w.phone})` : ''}
+                            </option>
+                          ))}
                       </select>
 
                       {/* Inline Quick Add Workshop Form (Requirement 4.3: NOT a modal) */}

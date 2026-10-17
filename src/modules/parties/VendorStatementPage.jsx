@@ -203,8 +203,9 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
 
   const getActivityLabel = () => {
     if (!vendor) return 'مورد';
-    if (vendor.supplier_type === 'service') return 'مصنع تشغيل خارجي لدى الغير (ورشة)';
+    if (vendor.supplier_type === 'service') return 'خدمات تشغيل لدى الغير';
     if (vendor.supplier_type === 'goods') return 'توريد خامات ومستلزمات إنتاج';
+    if (vendor.supplier_type) return vendor.supplier_type;
     if (vendor.is_customer && !vendor.is_supplier) return 'عميل توزيع';
     if (vendor.is_supplier && vendor.is_customer) return 'مورد وعميل مشترك';
     return 'مورد';

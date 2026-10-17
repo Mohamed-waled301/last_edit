@@ -23,6 +23,7 @@ export const TABLE_METADATA = {
   parties: { label: 'جهات التعامل الموحدة', group: 'العملاء والموردين' },
   suppliers: { label: 'الموردين', group: 'العملاء والموردين' },
   customers: { label: 'العملاء', group: 'العملاء والموردين' },
+  supplier_activity_types: { label: 'أنشطة الموردين', group: 'العملاء والموردين' },
 
   purchase_orders: { label: 'أوامر الشراء', group: 'المشتريات' },
   purchase_order_items: { label: 'بنود أوامر الشراء', group: 'المشتريات' },
@@ -68,6 +69,7 @@ export const COLUMN_LABELS = {
   created_at: 'تاريخ الإنشاء',
   updated_at: 'تاريخ التعديل',
   is_active: 'مفعل',
+  is_default: 'افتراضي',
   total_amount: 'المبلغ الإجمالي',
   paid_amount: 'المبلغ المدفوع',
   remaining_amount: 'المبلغ المتبقي',

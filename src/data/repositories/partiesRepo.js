@@ -209,7 +209,7 @@ export const partiesRepo = {
       tax_number: data.tax_number || '',
       is_supplier: isSupplier,
       is_customer: isCustomer,
-      supplier_type: data.supplier_type || 'goods', // 'goods' | 'service'
+      supplier_type: data.supplier_type || '',
       credit_limit: creditLimit, // Always stored, blank or 0 means no limit
       // Supplier-Item Linking
       supplied_all_items: data.supplied_all_items !== undefined ? Boolean(data.supplied_all_items) : true,

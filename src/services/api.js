@@ -9,6 +9,7 @@ import {
   usersRepo,
   settingsRepo,
   suppliersRepo,
+  supplierActivityRepo,
   materialsRepo,
   productsRepo,
   manufacturingRepo,
@@ -399,6 +400,17 @@ export const api = {
     const res = await cashRepo.disburseExpense(data, currentUserId);
     if (res.transaction) syncPush('cash_transactions', 'insert', res.transaction);
     return { success: true, data: res, ...res, message: 'تم صرف النقدية وقيد المعاملة بنجاح' };
+  },
+
+  // Supplier Activity Types Master Management
+  getSupplierActivityTypes: async () => {
+    const list = await supplierActivityRepo.getActivityTypes();
+    return { success: true, data: list, types: list };
+  },
+  createSupplierActivityType: async (data) => {
+    const res = await supplierActivityRepo.createActivityType(data, currentUserId);
+    syncPush('supplier_activity_types', 'insert', res);
+    return { success: true, data: res, activityType: res, message: 'تم إضافة نوع نشاط المورد بنجاح' };
   },
 
   // Suppliers & Purchasing

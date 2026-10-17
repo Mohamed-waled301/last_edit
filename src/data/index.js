@@ -8,6 +8,7 @@ export { default as auditRepo } from './repositories/auditRepo';
 export { default as usersRepo } from './repositories/usersRepo';
 export { default as settingsRepo } from './repositories/settingsRepo';
 export { default as suppliersRepo } from './repositories/suppliersRepo';
+export { default as supplierActivityRepo } from './repositories/supplierActivityRepo';
 export { default as materialsRepo } from './repositories/materialsRepo';
 export { default as productsRepo } from './repositories/productsRepo';
 export { default as manufacturingRepo } from './repositories/manufacturingRepo';

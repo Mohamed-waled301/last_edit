@@ -44,20 +44,29 @@ export const manufacturingRepo = {
    */
   async getWorkshopVendors(stageKey = null) {
     const parties = await db.parties.filter(p => p.is_active === 1 && p.is_supplier === 1).toArray();
+    const stageActivityMap = {
+      printing: ['طباعة', 'الطباعة', 'printing', 'service_printing'],
+      embroidery: ['تطريز', 'التطريز', 'embroidery', 'service_embroidery'],
+      sewing: ['حياكة', 'الحياكة', 'sewing', 'service_sewing']
+    };
+    const allWorkshopActivities = ['طباعة', 'الطباعة', 'تطريز', 'التطريز', 'حياكة', 'الحياكة', 'printing', 'embroidery', 'sewing', 'service_printing', 'service_embroidery', 'service_sewing'];
+
     const serviceSuppliers = parties.filter(p => 
       p.supplier_type === 'service' || 
       p.supplier_type === 'خدمات' || 
       p.service_stage || 
-      p.supplier_type === 'service_printing' ||
-      p.supplier_type === 'service_embroidery' ||
-      p.supplier_type === 'service_sewing'
+      allWorkshopActivities.includes(p.supplier_type) ||
+      (p.supplier_type && p.supplier_type !== 'goods' && p.supplier_type !== 'توريد خامات ومستلزمات إنتاج')
     );
 
     if (!stageKey) return serviceSuppliers;
 
+    const validActivities = stageActivityMap[stageKey] || [];
+
     return serviceSuppliers.filter(p => {
       if (p.service_stage && p.service_stage === stageKey) return true;
       if (p.supplier_type === `service_${stageKey}`) return true;
+      if (validActivities.includes(p.supplier_type)) return true;
       // If general service supplier, available for all stages
       return p.supplier_type === 'service' || p.supplier_type === 'خدمات';
     });
@@ -934,7 +943,12 @@ export const manufacturingRepo = {
     
     let vendorId = stage.vendor_id || paymentData.supplier_id || paymentData.vendor_id;
     if (!vendorId) {
-      const existingVendor = await db.parties.filter(p => p.is_supplier === 1 && (p.service_stage === stageKey || p.supplier_type === 'service')).first();
+      const stageActivityDefault = {
+        printing: 'طباعة',
+        embroidery: 'تطريز',
+        sewing: 'حياكة'
+      };
+      const existingVendor = await db.parties.filter(p => p.is_supplier === 1 && (p.service_stage === stageKey || p.supplier_type === 'service' || p.supplier_type === (stageActivityDefault[stageKey] || stageKey))).first();
       if (existingVendor) {
         vendorId = existingVendor.id;
       } else {
@@ -945,7 +959,7 @@ export const manufacturingRepo = {
           name: `ورشة ${STAGE_CONFIGS[stageKey]?.title || stageKey} الافتراضية`,
           is_supplier: 1,
           is_customer: 0,
-          supplier_type: 'service',
+          supplier_type: stageActivityDefault[stageKey] || 'service',
           service_stage: stageKey,
           is_active: 1,
           created_at: new Date().toISOString()

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Truck, Save, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Truck, Save, AlertCircle, Plus } from 'lucide-react';
 import { api } from '../../services/api';
 import { sanitizeEgyptianPhoneInput, validateEgyptianMobile } from '../../utils/phone';
 import { FieldError } from '../../utils/validation';
@@ -24,6 +24,29 @@ export default function QuickSupplierModal({
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState('');
+
+  const [activityTypes, setActivityTypes] = useState([]);
+  const [quickAddActivityOpen, setQuickAddActivityOpen] = useState(false);
+  const [newActivityName, setNewActivityName] = useState('');
+  const [activityError, setActivityError] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    async function loadActivities() {
+      try {
+        const res = await api.getSupplierActivityTypes();
+        const list = Array.isArray(res.data) ? res.data : (Array.isArray(res.types) ? res.types : []);
+        if (isMounted) setActivityTypes(list);
+      } catch (err) {
+        console.warn('Failed to load supplier activity types in modal:', err);
+      }
+    }
+    loadActivities();
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -63,6 +86,37 @@ export default function QuickSupplierModal({
 
     setErrors(errs);
     return Object.keys(errs).length === 0;
+  };
+
+  const handleQuickAddActivity = async () => {
+    const name = newActivityName.trim();
+    if (!name) {
+      setActivityError('اسم نوع النشاط مطلوب');
+      return;
+    }
+
+    const isDuplicate = activityTypes.some(
+      (t) => (t.name || '').trim().toLowerCase() === name.toLowerCase()
+    );
+    if (isDuplicate) {
+      setActivityError('نوع نشاط المورد مسجل مسبقاً');
+      return;
+    }
+
+    try {
+      setActivityError('');
+      const res = await api.createSupplierActivityType({ name });
+      const created = res.data || res.activityType || { id: `sat-${Date.now()}`, name };
+      setActivityTypes((prev) => [...prev, created]);
+      setForm((prev) => ({ ...prev, supplier_type: created.name }));
+      if (errors.supplier_type) {
+        setErrors((prev) => ({ ...prev, supplier_type: null }));
+      }
+      setNewActivityName('');
+      setQuickAddActivityOpen(false);
+    } catch (err) {
+      setActivityError(err.message || 'تعذر إضافة نوع النشاط');
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -141,7 +195,7 @@ export default function QuickSupplierModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -177,21 +231,89 @@ export default function QuickSupplierModal({
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               نوع نشاط المورد *
             </label>
-            <select
-              value={form.supplier_type}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, supplier_type: e.target.value }));
-                if (errors.supplier_type) setErrors((prev) => ({ ...prev, supplier_type: null }));
-              }}
-              className={`w-full px-3.5 py-2 border rounded-lg text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 ${
-                errors.supplier_type ? 'border-rose-500 bg-rose-50/30' : 'border-slate-300'
-              }`}
-            >
-              <option value="">-- اختر نوع نشاط المورد --</option>
-              <option value="goods">توريد خامات ومستلزمات إنتاج</option>
-              <option value="service">مصنع تشغيل خارجي لدى الغير (تطريز / غسيل / حياكة)</option>
-            </select>
+            <div className="flex items-center gap-1.5">
+              <select
+                value={form.supplier_type}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, supplier_type: e.target.value }));
+                  if (errors.supplier_type) setErrors((prev) => ({ ...prev, supplier_type: null }));
+                }}
+                className={`flex-1 px-3.5 py-2 border rounded-lg text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 ${
+                  errors.supplier_type ? 'border-rose-500 bg-rose-50/30' : 'border-slate-300'
+                }`}
+              >
+                <option value="">-- اختر نوع نشاط المورد --</option>
+                {activityTypes.map((act) => (
+                  <option key={act.id || act.name} value={act.name}>
+                    {act.name}
+                  </option>
+                ))}
+                {form.supplier_type && !activityTypes.some((act) => act.name === form.supplier_type) && (
+                  <option value={form.supplier_type}>
+                    {form.supplier_type === 'service'
+                      ? 'خدمات تشغيل لدى الغير (سابق)'
+                      : form.supplier_type === 'goods'
+                        ? 'توريد خامات ومستلزمات إنتاج'
+                        : form.supplier_type}
+                  </option>
+                )}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickAddActivityOpen((prev) => !prev);
+                  setActivityError('');
+                }}
+                className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-300 bg-slate-100 hover:bg-slate-200 text-blue-600 transition-colors shrink-0 cursor-pointer"
+                title="إضافة نوع نشاط جديد"
+                aria-label="إضافة نوع نشاط جديد"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
             <FieldError error={errors.supplier_type} />
+
+            {quickAddActivityOpen && (
+              <div className="mt-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                <label htmlFor="quick-modal-activity-input" className="block text-[11px] font-semibold text-blue-900">
+                  اسم نوع النشاط الجديد *
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    id="quick-modal-activity-input"
+                    type="text"
+                    value={newActivityName}
+                    onChange={(e) => {
+                      setNewActivityName(e.target.value);
+                      if (activityError) setActivityError('');
+                    }}
+                    className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-blue-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-blue-500 text-slate-800"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleQuickAddActivity}
+                    className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold cursor-pointer"
+                  >
+                    حفظ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickAddActivityOpen(false);
+                      setNewActivityName('');
+                      setActivityError('');
+                    }}
+                    className="px-2.5 py-1.5 text-xs bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+                {activityError && (
+                  <div className="text-[11px] text-rose-600 font-semibold">{activityError}</div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

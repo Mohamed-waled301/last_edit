@@ -25,6 +25,7 @@ export const SCHEMA_V1 = {
   suppliers: 'id, name, phone, supplier_type, payment_terms, is_active, created_at',
   customers: 'id, name, phone, customer_type, payment_terms, is_active, created_at',
   party_settlements: 'id, settlement_number, party_id, settlement_date, created_at',
+  supplier_activity_types: 'id, name, code, is_default, is_active, created_at',
 
   // Items & Master Data (Clothing Factory with variants)
   items: 'id, code, name, item_group, item_department, item_type, is_active, created_at',
@@ -93,6 +94,9 @@ export class WorkshopDatabase extends Dexie {
         cutting_printing_payments: 'id, production_order_id, payment_date, created_at',
       });
     }
+    this.version(10).stores({
+      supplier_activity_types: 'id, name, code, is_default, is_active, created_at',
+    });
   }
 }
 
@@ -289,6 +293,17 @@ export async function ensureDatabaseIntegrity() {
         { id: 'u-spool', name: 'بكرة', code: 'بكرة', is_active: 1 },
         { id: 'u-bag', name: 'كيس', code: 'كيس', is_active: 1 },
         { id: 'u-box', name: 'كرتونة', code: 'كرتونة', is_active: 1 }
+      ]);
+    }
+
+    // Ensure baseline supplier activity types
+    const actCount = await db.supplier_activity_types?.count().catch(() => 0);
+    if (actCount === 0 && db.supplier_activity_types) {
+      await db.supplier_activity_types.bulkPut([
+        { id: 'sat-materials', name: 'توريد خامات ومستلزمات إنتاج', code: 'materials', is_default: 1, is_active: 1, created_at: new Date().toISOString() },
+        { id: 'sat-printing', name: 'طباعة', code: 'printing', is_default: 1, is_active: 1, created_at: new Date().toISOString() },
+        { id: 'sat-embroidery', name: 'تطريز', code: 'embroidery', is_default: 1, is_active: 1, created_at: new Date().toISOString() },
+        { id: 'sat-sewing', name: 'حياكة', code: 'sewing', is_default: 1, is_active: 1, created_at: new Date().toISOString() }
       ]);
     }
   } catch (err) {

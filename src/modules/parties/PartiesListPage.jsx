@@ -283,9 +283,13 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
 
                       <td className="p-3 font-bold text-gray-900">
                         <div>{p.name}</div>
-                        {p.supplier_type === 'service' && (
-                          <span className="text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                            مصنع تشغيل خارجي لدى الغير
+                        {p.is_supplier === 1 && p.supplier_type && (
+                          <span className="text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 inline-block mt-0.5">
+                            {p.supplier_type === 'service'
+                              ? 'خدمات تشغيل لدى الغير'
+                              : p.supplier_type === 'goods'
+                                ? 'توريد خامات ومستلزمات إنتاج'
+                                : p.supplier_type}
                           </span>
                         )}
                       </td>

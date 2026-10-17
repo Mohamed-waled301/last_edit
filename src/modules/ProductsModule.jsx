@@ -79,7 +79,7 @@ export default function ProductsModule({ onBack, onNotify }) {
     tax_number: '',
     is_supplier: true,
     is_customer: false,
-    supplier_type: 'goods', // 'goods' | 'service'
+    supplier_type: '',
     payment_terms: 'credit',
     credit_limit: '',
     opening_balance: '0',
@@ -1316,14 +1316,17 @@ export default function ProductsModule({ onBack, onNotify }) {
 
               {partyForm.is_supplier && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">نوع نشاط المورد</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">نوع نشاط المورد *</label>
                   <select
                     value={partyForm.supplier_type}
                     onChange={e => setPartyForm({ ...partyForm, supplier_type: e.target.value })}
                     className="w-full h-10 border border-gray-300 rounded px-3 text-sm bg-white"
                   >
-                    <option value="goods">توريد خامات ومستلزمات (أقمشة / سوست / أزرار)</option>
-                    <option value="service">خدمة تشغيل لدى الغير (تطريز / مغسلة جينز / طباعة)</option>
+                    <option value="">-- اختر نوع نشاط المورد --</option>
+                    <option value="توريد خامات ومستلزمات إنتاج">توريد خامات ومستلزمات إنتاج</option>
+                    <option value="طباعة">طباعة</option>
+                    <option value="تطريز">تطريز</option>
+                    <option value="حياكة">حياكة</option>
                   </select>
                 </div>
               )}
