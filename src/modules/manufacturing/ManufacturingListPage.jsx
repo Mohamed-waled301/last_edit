@@ -455,7 +455,7 @@ export default function ManufacturingListPage({ onNotify }) {
                 <select
                   value={sizeFilter}
                   onChange={(e) => setSizeFilter(e.target.value)}
-                  className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-mono font-medium focus:ring-1 focus:ring-[#1F3A5F]"
+                  className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-medium focus:ring-1 focus:ring-[#1F3A5F]"
                 >
                   <option value="all">جميع المقاسات (الكل)</option>
                   {CUT_ORDER_SIZES.map(sz => (
@@ -661,7 +661,7 @@ export default function ManufacturingListPage({ onNotify }) {
                   value={sizeFilter}
                   onChange={(e) => setSizeFilter(e.target.value)}
                   aria-label="تصفية حسب المقاس"
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-mono font-bold"
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-bold"
                 >
                   <option value="all">جميع المقاسات (الكل)</option>
                   {CUT_ORDER_SIZES.map(sz => (
