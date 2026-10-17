@@ -7,7 +7,8 @@ import {
   computeColumnTotals,
   computeGrandTotal,
   validateAndCleanMatrix,
-  distributeMatrixCostLargestRemainder
+  distributeMatrixCostLargestRemainder,
+  type MatrixRow
 } from '../cutOrderMatrixCalculations';
 import { migrateCutOrdersToMatrix } from '../cutOrderMatrixMigration';
 import db from '../../data/db';
@@ -111,7 +112,7 @@ describe('Cut Order Matrix Overhaul & Size-Color Calculations', () => {
 
   describe('3. Validation & Business Constraints', () => {
     it('blocks duplicate colors with descriptive Arabic error message', () => {
-      const matrix = [
+      const matrix: MatrixRow[] = [
         { id: '1', color: 'أحمر', quantities: { M: 5 } },
         { id: '2', color: 'أحمر', quantities: { L: 10 } }
       ];
@@ -157,7 +158,7 @@ describe('Cut Order Matrix Overhaul & Size-Color Calculations', () => {
 
   describe('4. Cost Distribution to Exact Piaster (Largest Remainder Method)', () => {
     it('distributes cost across cells reconciling to exact piaster without fraction loss', () => {
-      const matrix = [
+      const matrix: MatrixRow[] = [
         { id: '1', color: 'أحمر', quantities: { M: 1, L: 1 } },
         { id: '2', color: 'أخضر', quantities: { XL: 1 } }
       ];
@@ -291,7 +292,7 @@ describe('Cut Order Matrix Overhaul & Size-Color Calculations', () => {
       expect(prodAfter.variants.length).toBe(4);
       expect(prodAfter.current_stock).toBe(30);
 
-      const red7XL = prodAfter.variants.find(v => v.color === 'أحمر' && v.size === '7XL');
+      const red7XL = (prodAfter?.variants || []).find((v: any) => v.color === 'أحمر' && v.size === '7XL');
       expect(red7XL).toBeDefined();
       expect(red7XL.current_stock).toBe(5);
 
