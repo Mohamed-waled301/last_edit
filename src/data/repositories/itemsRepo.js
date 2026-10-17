@@ -696,8 +696,47 @@ export const itemsRepo = {
    * Sizes & Colors Master Management
    */
   async getSizes() {
-    return await db.item_sizes.filter(s => s.is_active === 1).toArray();
+    const STANDARD_SIZES = ['M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'];
+    const existing = await db.item_sizes.filter(s => s.is_active === 1).toArray();
+    const existingCodes = new Set(existing.map(s => String(s.code || s.name || '').trim().toUpperCase()));
+    
+    // Add any missing standard sizes (e.g. 7XL, 8XL) without duplicates
+    const missing = [];
+    STANDARD_SIZES.forEach((szCode, idx) => {
+      if (!existingCodes.has(szCode.toUpperCase())) {
+        missing.push({
+          id: `sz-std-${szCode.toLowerCase()}`,
+          name: szCode,
+          code: szCode,
+          sort_order: idx + 1,
+          is_active: 1
+        });
+      }
+    });
+
+    if (missing.length > 0) {
+      await db.item_sizes.bulkAdd(missing).catch(() => {});
+      const updated = await db.item_sizes.filter(s => s.is_active === 1).toArray();
+      return this._sortSizes(updated);
+    }
+
+    return this._sortSizes(existing);
   },
+
+  _sortSizes(sizesList) {
+    const STANDARD_SIZES = ['M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'];
+    const rankMap = new Map();
+    STANDARD_SIZES.forEach((sz, i) => rankMap.set(sz.toUpperCase(), i));
+    return [...sizesList].sort((a, b) => {
+      const codeA = String(a.code || a.name || '').trim().toUpperCase();
+      const codeB = String(b.code || b.name || '').trim().toUpperCase();
+      const rankA = rankMap.has(codeA) ? rankMap.get(codeA) : 1000;
+      const rankB = rankMap.has(codeB) ? rankMap.get(codeB) : 1000;
+      if (rankA !== rankB) return rankA - rankB;
+      return (a.sort_order || 0) - (b.sort_order || 0);
+    });
+  },
+
   async createSize(data) {
     const id = `sz-${Date.now()}`;
     const size = {
@@ -711,7 +750,22 @@ export const itemsRepo = {
   },
 
   async getColors() {
-    return await db.item_colors.filter(c => c.is_active === 1).toArray();
+    let existing = await db.item_colors.filter(c => c.is_active === 1).toArray();
+    if (existing.length === 0) {
+      const defaultColors = [
+        { id: 'clr-white', name: 'أبيض', hex_code: '#FFFFFF', is_active: 1 },
+        { id: 'clr-black', name: 'أسود', hex_code: '#000000', is_active: 1 },
+        { id: 'clr-navy', name: 'كحلي', hex_code: '#001F3F', is_active: 1 },
+        { id: 'clr-gray', name: 'رمادي', hex_code: '#808080', is_active: 1 },
+        { id: 'clr-red', name: 'أحمر', hex_code: '#DC2626', is_active: 1 },
+        { id: 'clr-blue', name: 'أزرق', hex_code: '#2563EB', is_active: 1 },
+        { id: 'clr-beige', name: 'بيج', hex_code: '#D2B48C', is_active: 1 },
+        { id: 'clr-olive', name: 'زيتي', hex_code: '#556B2F', is_active: 1 },
+      ];
+      await db.item_colors.bulkAdd(defaultColors).catch(() => {});
+      existing = await db.item_colors.filter(c => c.is_active === 1).toArray();
+    }
+    return existing;
   },
   async createColor(data) {
     const id = `clr-${Date.now()}`;

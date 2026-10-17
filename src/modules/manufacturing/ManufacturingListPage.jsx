@@ -23,13 +23,16 @@ import { api } from '../../services/api';
 import { formatCurrency, formatNumber, formatDate } from '../../utils/formatters';
 import { exportToExcel } from '../../utils/exportExcel';
 import { isValidEgyptianMobile } from '../../utils/phone';
+import { CUT_ORDER_SIZES } from '../../logic/cutOrderMatrixCalculations';
 
 export default function ManufacturingListPage({ onNotify }) {
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'stage_reports' | 'workshops'
+  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'matrix_report' | 'stage_reports' | 'workshops'
   const [orders, setOrders] = useState([]);
   const [workshops, setWorkshops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [colorFilter, setColorFilter] = useState('all');
+  const [sizeFilter, setSizeFilter] = useState('all');
   const [stageFilter, setStageFilter] = useState('all'); // 'all' | 'printing' | 'embroidery' | 'sewing'
   const [vendorFilter, setVendorFilter] = useState('all');
 
@@ -128,14 +131,156 @@ export default function ManufacturingListPage({ onNotify }) {
     if (onNotify) onNotify('تم تصدير تقرير مراحل القص إلى إكسيل');
   };
 
-  const filteredOrders = orders.filter(o => 
-    (o.cutting_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (o.cutting_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (o.order_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (o.product_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (o.fabric_type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (o.color || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Extract unique available colors across all cut orders (Requirement 3 & 4)
+  const availableColors = React.useMemo(() => {
+    const set = new Set();
+    orders.forEach(o => {
+      if (Array.isArray(o.matrix)) {
+        o.matrix.forEach(r => {
+          if (r.color && r.color.trim()) set.add(r.color.trim());
+        });
+      }
+      if (o.color && o.color.trim()) set.add(o.color.trim());
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ar'));
+  }, [orders]);
+
+  const filteredOrders = orders.filter(o => {
+    // 1. Search term
+    const term = searchTerm.trim().toLowerCase();
+    if (term) {
+      const matchHeader = 
+        (o.cutting_number || '').toLowerCase().includes(term) ||
+        (o.cutting_name || '').toLowerCase().includes(term) ||
+        (o.order_number || '').toLowerCase().includes(term) ||
+        (o.product_name || '').toLowerCase().includes(term) ||
+        (o.fabric_type || '').toLowerCase().includes(term) ||
+        (o.color || '').toLowerCase().includes(term);
+      const matchMatrix = Array.isArray(o.matrix) && o.matrix.some(r => (r.color || '').toLowerCase().includes(term));
+      if (!matchHeader && !matchMatrix) return false;
+    }
+
+    // 2. Color filter
+    if (colorFilter !== 'all') {
+      const hasColor = 
+        (o.color && o.color.trim() === colorFilter) ||
+        (Array.isArray(o.matrix) && o.matrix.some(r => r.color && r.color.trim() === colorFilter));
+      if (!hasColor) return false;
+    }
+
+    // 3. Size filter
+    if (sizeFilter !== 'all') {
+      let hasSize = false;
+      if (Array.isArray(o.matrix) && o.matrix.length > 0) {
+        hasSize = o.matrix.some(r => (Number(r.quantities?.[sizeFilter]) || 0) > 0);
+      } else if (o.size_breakdown) {
+        hasSize = (Number(o.size_breakdown[sizeFilter]) || 0) > 0;
+      }
+      if (!hasSize) return false;
+    }
+
+    return true;
+  });
+
+  // Flatten matrix rows for "إنتاج القص حسب المقاس واللون" Report (Requirement 4.5)
+  const flattenedMatrixRows = React.useMemo(() => {
+    const rows = [];
+    filteredOrders.forEach(o => {
+      const orderNum = o.cutting_number || o.order_number;
+      const orderName = o.cutting_name || o.product_name;
+      const startDate = o.start_date || (o.created_at ? o.created_at.split('T')[0] : '');
+      const statusLabel = o.status === 'closed' ? 'مقفل' : (o.status === 'issued' ? 'مُصدر' : 'قيد التشغيل');
+
+      if (Array.isArray(o.matrix) && o.matrix.length > 0) {
+        o.matrix.forEach((r, rIdx) => {
+          if (colorFilter !== 'all' && r.color && r.color.trim() !== colorFilter) return;
+          if (sizeFilter !== 'all' && (Number(r.quantities?.[sizeFilter]) || 0) <= 0) return;
+
+          const rowTotal = CUT_ORDER_SIZES.reduce((sum, sz) => sum + (Number(r.quantities?.[sz]) || 0), 0);
+          if (rowTotal > 0 || r.color) {
+            rows.push({
+              key: `${o.id}-${r.id || rIdx}`,
+              orderId: o.id,
+              orderNum,
+              orderName,
+              fabricType: o.fabric_type || '---',
+              color: r.color || 'بدون لون',
+              quantities: r.quantities || {},
+              rowTotal,
+              startDate,
+              statusLabel
+            });
+          }
+        });
+      } else if (o.batch_quantity) {
+        // Legacy fallback
+        if (colorFilter !== 'all' && o.color && o.color.trim() !== colorFilter) return;
+        if (sizeFilter !== 'all' && (Number(o.size_breakdown?.[sizeFilter]) || 0) <= 0) return;
+
+        rows.push({
+          key: `${o.id}-legacy`,
+          orderId: o.id,
+          orderNum,
+          orderName,
+          fabricType: o.fabric_type || '---',
+          color: o.color || 'غير محدد',
+          quantities: o.size_breakdown || {},
+          rowTotal: Number(o.batch_quantity) || 0,
+          startDate,
+          statusLabel
+        });
+      }
+    });
+    return rows;
+  }, [filteredOrders, colorFilter, sizeFilter]);
+
+  // Column totals for matrix report
+  const matrixColTotals = React.useMemo(() => {
+    const totals = {};
+    CUT_ORDER_SIZES.forEach(sz => {
+      totals[sz] = flattenedMatrixRows.reduce((sum, r) => sum + (Number(r.quantities?.[sz]) || 0), 0);
+    });
+    const grandTotal = flattenedMatrixRows.reduce((sum, r) => sum + r.rowTotal, 0);
+    return { totals, grandTotal };
+  }, [flattenedMatrixRows]);
+
+  // Export Matrix Report to Excel (Requirement 4.5)
+  const handleExportMatrixReport = () => {
+    const exportData = flattenedMatrixRows.map(r => {
+      const rowObj = {
+        'رقم القصة': r.orderNum,
+        'اسم القصة': r.orderName,
+        'نوع القماش': r.fabricType,
+        'اللون': r.color,
+      };
+      CUT_ORDER_SIZES.forEach(sz => {
+        rowObj[sz] = Number(r.quantities?.[sz]) || 0;
+      });
+      rowObj['إجمالي القطع'] = r.rowTotal;
+      rowObj['تاريخ البدء'] = formatDate(r.startDate);
+      rowObj['الحالة'] = r.statusLabel;
+      return rowObj;
+    });
+
+    if (exportData.length > 0) {
+      const summaryRow = {
+        'رقم القصة': 'الإجمالي الكلي',
+        'اسم القصة': '',
+        'نوع القماش': '',
+        'اللون': '',
+      };
+      CUT_ORDER_SIZES.forEach(sz => {
+        summaryRow[sz] = matrixColTotals.totals[sz] || 0;
+      });
+      summaryRow['إجمالي القطع'] = matrixColTotals.grandTotal;
+      summaryRow['تاريخ البدء'] = '';
+      summaryRow['الحالة'] = '';
+      exportData.push(summaryRow);
+    }
+
+    exportToExcel(exportData, 'تقرير_إنتاج_القص_حسب_المقاس_واللون');
+    if (onNotify) onNotify('تم تصدير تقرير إنتاج القص حسب المقاس واللون إلى إكسيل');
+  };
 
   // Flatten stage items for Stage Reports Tab (Requirement 4.5)
   const flattenedStageItems = [];
@@ -188,6 +333,15 @@ export default function ManufacturingListPage({ onNotify }) {
               <Download className="w-4 h-4 text-slate-500" />
               <span>تصدير أوامر القص</span>
             </button>
+          ) : activeTab === 'matrix_report' ? (
+            <button
+              type="button"
+              onClick={handleExportMatrixReport}
+              className="px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Download className="w-4 h-4 text-slate-500" />
+              <span>تصدير تقرير المقاس واللون</span>
+            </button>
           ) : activeTab === 'stage_reports' ? (
             <button
               type="button"
@@ -227,6 +381,19 @@ export default function ManufacturingListPage({ onNotify }) {
 
         <button
           type="button"
+          onClick={() => setActiveTab('matrix_report')}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-2 ${
+            activeTab === 'matrix_report'
+              ? 'bg-[#1F3A5F] text-white shadow-xs'
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>إنتاج القص حسب المقاس واللون</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('stage_reports')}
           className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-2 ${
             activeTab === 'stage_reports'
@@ -235,7 +402,7 @@ export default function ManufacturingListPage({ onNotify }) {
           }`}
         >
           <DollarSign className="w-4 h-4" />
-          <span>تقرير إجماليات مراحل القص والورش (المطبعة / التطريز / الحياكة)</span>
+          <span>تقرير إجماليات مراحل القص والورش</span>
         </button>
 
         <button
@@ -255,9 +422,9 @@ export default function ManufacturingListPage({ onNotify }) {
       {/* Tab 1: Cut Orders Table */}
       {activeTab === 'orders' && (
         <div className="space-y-4">
-          {/* Search Bar */}
-          <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-xs">
-            <div className="relative max-w-md">
+          {/* Search & Filter Bar */}
+          <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="relative flex-1 min-w-[220px] max-w-md">
               <Search className="w-4 h-4 text-gray-400 absolute right-3 top-2.5 pointer-events-none" aria-hidden="true" />
               <input
                 type="text"
@@ -266,6 +433,50 @@ export default function ManufacturingListPage({ onNotify }) {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pr-9 pl-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
               />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="font-bold text-slate-700">اللون:</span>
+                <select
+                  value={colorFilter}
+                  onChange={(e) => setColorFilter(e.target.value)}
+                  className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-medium focus:ring-1 focus:ring-[#1F3A5F]"
+                >
+                  <option value="all">جميع الألوان (الكل)</option>
+                  {availableColors.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="font-bold text-slate-700">المقاس:</span>
+                <select
+                  value={sizeFilter}
+                  onChange={(e) => setSizeFilter(e.target.value)}
+                  className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-mono font-medium focus:ring-1 focus:ring-[#1F3A5F]"
+                >
+                  <option value="all">جميع المقاسات (الكل)</option>
+                  {CUT_ORDER_SIZES.map(sz => (
+                    <option key={sz} value={sz}>{sz}</option>
+                  ))}
+                </select>
+              </div>
+
+              {(searchTerm || colorFilter !== 'all' || sizeFilter !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setColorFilter('all');
+                    setSizeFilter('all');
+                  }}
+                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  إعادة ضبط
+                </button>
+              )}
             </div>
           </div>
 
@@ -322,11 +533,21 @@ export default function ManufacturingListPage({ onNotify }) {
                             {o.fabric_type || '---'}
                           </td>
                           <td className="p-3 text-gray-700">
-                            {o.color ? (
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 font-medium">
-                                {o.color}
-                              </span>
-                            ) : '---'}
+                            {(() => {
+                              const colors = Array.isArray(o.matrix) && o.matrix.length > 0
+                                ? [...new Set(o.matrix.map(r => r.color).filter(Boolean))]
+                                : (o.color ? [o.color] : []);
+                              if (colors.length === 0) return '---';
+                              return (
+                                <div className="flex flex-wrap gap-1 max-w-[150px]">
+                                  {colors.map((c, i) => (
+                                    <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[11px] font-medium text-slate-800">
+                                      {c}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="p-3 text-center font-mono font-bold text-gray-900">
                             {formatNumber(o.batch_quantity || 0)} قطعة
@@ -398,6 +619,174 @@ export default function ManufacturingListPage({ onNotify }) {
                     })
                   )}
                 </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Matrix Production by Size & Color Report (Requirement 4.5) */}
+      {activeTab === 'matrix_report' && (
+        <div className="space-y-4">
+          {/* Filters & Summary Bar */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative min-w-[200px]">
+                <Search className="w-4 h-4 text-gray-400 absolute right-3 top-2.5 pointer-events-none" aria-hidden="true" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  aria-label="البحث برقم أو اسم القصة"
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pr-9 pl-3 py-1.5 border border-gray-300 rounded-lg text-xs"
+                />
+              </div>
+
+              <div>
+                <select
+                  value={colorFilter}
+                  onChange={(e) => setColorFilter(e.target.value)}
+                  aria-label="تصفية حسب اللون"
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-bold"
+                >
+                  <option value="all">جميع الألوان (الكل)</option>
+                  {availableColors.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <select
+                  value={sizeFilter}
+                  onChange={(e) => setSizeFilter(e.target.value)}
+                  aria-label="تصفية حسب المقاس"
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-mono font-bold"
+                >
+                  <option value="all">جميع المقاسات (الكل)</option>
+                  {CUT_ORDER_SIZES.map(sz => (
+                    <option key={sz} value={sz}>{sz}</option>
+                  ))}
+                </select>
+              </div>
+
+              {(searchTerm || colorFilter !== 'all' || sizeFilter !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setColorFilter('all');
+                    setSizeFilter('all');
+                  }}
+                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  إعادة ضبط
+                </button>
+              )}
+            </div>
+
+            {/* Matrix Production Summary Badges */}
+            <div className="flex items-center gap-3">
+              <div className="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl text-xs font-mono">
+                <span className="text-blue-700 font-semibold ml-1">عدد السطور:</span>
+                <span className="font-bold text-blue-900 text-sm">{formatNumber(flattenedMatrixRows.length)}</span>
+              </div>
+              <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-mono">
+                <span className="text-emerald-700 font-semibold ml-1">إجمالي القطع المقصوصة:</span>
+                <span className="font-bold text-emerald-900 text-sm">{formatNumber(matrixColTotals.grandTotal)} قطعة</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Matrix Production Table with sticky color column and horizontal scroll */}
+          <div className="bg-white border border-gray-200 rounded-xl shadow-xs overflow-hidden">
+            <div className="overflow-x-auto max-w-full">
+              <table className="w-full text-right border-collapse text-xs whitespace-nowrap">
+                <thead className="bg-[#1F3A5F] text-white font-bold sticky top-0 z-10">
+                  <tr>
+                    <th className="p-3 sticky right-0 bg-[#1F3A5F] z-20 shadow-xs">رقم القصة</th>
+                    <th className="p-3">اسم القصة / الموديل</th>
+                    <th className="p-3">نوع القماش</th>
+                    <th className="p-3 sticky right-[120px] bg-[#1F3A5F] z-20 shadow-xs">اللون</th>
+                    {CUT_ORDER_SIZES.map(sz => (
+                      <th key={sz} className="p-2.5 text-center font-mono w-14">{sz}</th>
+                    ))}
+                    <th className="p-3 text-center font-mono bg-[#162a45]">إجمالي السطر</th>
+                    <th className="p-3">تاريخ البدء</th>
+                    <th className="p-3 text-center">الحالة</th>
+                    <th className="p-3 text-center">إجراء</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {flattenedMatrixRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={6 + CUT_ORDER_SIZES.length} className="p-10 text-center text-gray-400">
+                        لا توجد بيانات قص مطابقة لمحددات البحث
+                      </td>
+                    </tr>
+                  ) : (
+                    flattenedMatrixRows.map((r, idx) => (
+                      <tr key={r.key || idx} className="hover:bg-gray-50 transition-colors">
+                        <td className="p-3 font-mono font-bold text-[#1F3A5F] sticky right-0 bg-white group-hover:bg-gray-50 z-10 shadow-xs">
+                          {r.orderNum}
+                        </td>
+                        <td className="p-3 font-bold text-gray-900">{r.orderName}</td>
+                        <td className="p-3 text-gray-700">{r.fabricType}</td>
+                        <td className="p-3 font-semibold text-slate-800 sticky right-[120px] bg-white group-hover:bg-gray-50 z-10 shadow-xs">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200">
+                            {r.color}
+                          </span>
+                        </td>
+                        {CUT_ORDER_SIZES.map(sz => {
+                          const qty = Number(r.quantities?.[sz]) || 0;
+                          return (
+                            <td key={sz} className={`p-2.5 text-center font-mono ${qty > 0 ? 'font-bold text-slate-900 bg-blue-50/30' : 'text-slate-300'}`}>
+                              {qty > 0 ? formatNumber(qty) : '-'}
+                            </td>
+                          );
+                        })}
+                        <td className="p-3 text-center font-mono font-bold text-blue-900 bg-slate-50">
+                          {formatNumber(r.rowTotal)}
+                        </td>
+                        <td className="p-3 font-mono text-gray-600">{formatDate(r.startDate)}</td>
+                        <td className="p-3 text-center">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
+                            r.statusLabel === 'مقفل' ? 'bg-slate-200 text-slate-800' : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {r.statusLabel}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => { window.location.hash = `#/manufacturing/${r.orderId}/edit`; }}
+                            className="px-2.5 py-1 text-xs text-blue-700 hover:bg-blue-50 font-bold rounded-md border border-blue-200 transition-colors cursor-pointer"
+                          >
+                            عرض
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {flattenedMatrixRows.length > 0 && (
+                  <tfoot className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
+                    <tr>
+                      <td colSpan={4} className="p-3 text-right sticky right-0 bg-slate-100 z-10">
+                        الإجمالي الكلي للقطع المقصوصة:
+                      </td>
+                      {CUT_ORDER_SIZES.map(sz => (
+                        <td key={sz} className="p-2.5 text-center font-mono font-bold text-blue-900">
+                          {formatNumber(matrixColTotals.totals[sz] || 0)}
+                        </td>
+                      ))}
+                      <td className="p-3 text-center font-mono font-bold text-emerald-800 bg-emerald-100/60 text-sm">
+                        {formatNumber(matrixColTotals.grandTotal)}
+                      </td>
+                      <td colSpan={3}></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>

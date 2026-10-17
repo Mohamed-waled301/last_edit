@@ -122,6 +122,10 @@ export const api = {
     const list = await itemsRepo.getSizes();
     return { success: true, data: list, sizes: list };
   },
+  getSizes: async () => {
+    const list = await itemsRepo.getSizes();
+    return { success: true, data: list, sizes: list };
+  },
   createItemSize: async (data) => {
     const res = await itemsRepo.createSize(data);
     syncPush('item_sizes', 'insert', res);
@@ -131,7 +135,16 @@ export const api = {
     const list = await itemsRepo.getColors();
     return { success: true, data: list, colors: list };
   },
+  getColors: async () => {
+    const list = await itemsRepo.getColors();
+    return { success: true, data: list, colors: list };
+  },
   createItemColor: async (data) => {
+    const res = await itemsRepo.createColor(data);
+    syncPush('item_colors', 'insert', res);
+    return { success: true, data: res, color: res, message: 'تم إضافة اللون بنجاح' };
+  },
+  createColor: async (data) => {
     const res = await itemsRepo.createColor(data);
     syncPush('item_colors', 'insert', res);
     return { success: true, data: res, color: res, message: 'تم إضافة اللون بنجاح' };

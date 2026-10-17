@@ -11,6 +11,13 @@ import {
   calculateTotalProductCost,
   calculateUnitCost
 } from '../../logic/productionOrderCalculations';
+import {
+  CUT_ORDER_SIZES,
+  validateAndCleanMatrix,
+  distributeMatrixCostLargestRemainder,
+  computeColumnTotals,
+  computeGrandTotal
+} from '../../logic/cutOrderMatrixCalculations';
 
 export const STAGE_CONFIGS = {
   printing: { key: 'printing', title: 'الطباعة', workshopType: 'print_shop' },
@@ -362,7 +369,22 @@ export const manufacturingRepo = {
     const today = (data.start_date || now.split('T')[0]);
 
     const productId = data.product_id;
-    const batchQty = Math.max(1, Number(data.batch_quantity || data.produced_quantity) || 1);
+    let cleanMatrix = [];
+    let matrixCellCosts = [];
+    let sizeCosts = {};
+    let colorCosts = {};
+    let batchQty = 1;
+
+    if (Array.isArray(data.matrix) && data.matrix.length > 0) {
+      const valResult = validateAndCleanMatrix(data.matrix);
+      if (!valResult.valid) {
+        throw new Error(valResult.error || 'يرجى مراجعة مصفوفة المقاسات والألوان');
+      }
+      cleanMatrix = valResult.cleanRows;
+      batchQty = valResult.grandTotal;
+    } else {
+      batchQty = Math.max(1, Number(data.batch_quantity || data.produced_quantity) || 1);
+    }
 
     const product = (await db.items.get(productId)) || (await db.products.get(productId));
     if (!product) throw new Error('المنتج المطلوب تصنيعه غير موجود في دليل الأصناف');
@@ -421,11 +443,25 @@ export const manufacturingRepo = {
 
     // Total cut cost = fabric and trims + additional costs + all stage costs (Requirement 4.4)
     const totalProductCost = Number((totalMaterialsCost + totalAdditionalCosts + totalStagesCost).toFixed(2));
-    const { unitCostExact, unitCost4Decimals, sizeCosts } = this._computeCostBreakdown(
-      totalProductCost, 
-      batchQty, 
-      data.size_quantities
-    );
+    
+    let unitCostExact, unitCost4Decimals;
+    if (cleanMatrix.length > 0) {
+      const matrixDist = distributeMatrixCostLargestRemainder(totalProductCost, cleanMatrix);
+      unitCostExact = matrixDist.unitCostExact;
+      unitCost4Decimals = matrixDist.unitCost4Decimals;
+      matrixCellCosts = matrixDist.cellCosts;
+      sizeCosts = matrixDist.sizeSummaries;
+      colorCosts = matrixDist.colorSummaries;
+    } else {
+      const breakdown = this._computeCostBreakdown(
+        totalProductCost, 
+        batchQty, 
+        data.size_quantities
+      );
+      unitCostExact = breakdown.unitCostExact;
+      unitCost4Decimals = breakdown.unitCost4Decimals;
+      sizeCosts = breakdown.sizeCosts;
+    }
 
     await db.transaction('rw', [
       db.production_orders,
@@ -477,42 +513,128 @@ export const manufacturingRepo = {
         });
       }
 
-      // 2. Receive finished product into stock (in movement)
-      const finishedItm = await db.items.get(productId);
-      if (finishedItm) {
-        const newProdStock = Number(((Number(finishedItm.current_stock) || 0) + batchQty).toFixed(3));
-        await db.items.update(finishedItm.id, { current_stock: newProdStock });
-      }
-      const finishedProd = await db.products.get(productId);
-      if (finishedProd) {
-        const newProdStock = Number(((Number(finishedProd.current_stock) || 0) + batchQty).toFixed(3));
-        await db.products.update(finishedProd.id, { current_stock: newProdStock });
-      }
+      // 2. Receive finished product into stock
+      const hasVariants = Boolean(product.has_variants || (Array.isArray(product.variants) && product.variants.length > 0));
 
-      await db.stock_movements.add({
-        id: `sm-${Date.now()}-fin-${productId}`,
-        item_id: productId,
-        material_id: productId,
-        location_id: data.location_id || 'loc-main',
-        movement_type: 'production_in',
-        direction: 'in',
-        quantity: batchQty,
-        quantity_change: batchQty,
-        unit_cost: unitCost4Decimals,
-        reference_type: 'PRODUCTION_ORDER',
-        reference_id: id,
-        document_id: id,
-        date: today,
-        movement_date: today,
-        notes: `استلام منتج تام من أمر القص ${cuttingNumber} (${product.name})`,
-        created_by: userId,
-        created_at: now
-      });
+      if (hasVariants && cleanMatrix.length > 0) {
+        // Product has variants ON: receive by size and color
+        const liveItm = (await db.items.get(productId)) || product;
+        const currentVariants = Array.isArray(liveItm.variants) ? [...liveItm.variants] : [];
+        const variantMap = new Map();
+        currentVariants.forEach((v, idx) => {
+          const key = `${v.size}:::${v.color}`;
+          variantMap.set(key, idx);
+        });
+
+        for (const cell of matrixCellCosts) {
+          if (cell.quantity <= 0) continue;
+          const key = `${cell.size}:::${cell.color}`;
+          let varId;
+          if (variantMap.has(key)) {
+            const idx = variantMap.get(key);
+            const v = currentVariants[idx];
+            v.current_stock = Number(((Number(v.current_stock) || 0) + cell.quantity).toFixed(3));
+            varId = v.id;
+          } else {
+            // Auto-create missing size/color variant
+            varId = `var-${liveItm.code || liveItm.id}-${cell.size}-${cell.color}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const newVar = {
+              id: varId,
+              size: cell.size,
+              color: cell.color,
+              sku: `${liveItm.code || 'PRD'}-${cell.size}-${cell.color}`,
+              opening_balance: 0,
+              current_stock: cell.quantity
+            };
+            currentVariants.push(newVar);
+            variantMap.set(key, currentVariants.length - 1);
+          }
+
+          await db.stock_movements.add({
+            id: `sm-${Date.now()}-fin-${productId}-${cell.size}-${cell.color}-${Math.floor(Math.random() * 1000)}`,
+            item_id: productId,
+            material_id: productId,
+            variant_id: varId,
+            location_id: data.location_id || 'loc-main',
+            movement_type: 'production_in',
+            direction: 'in',
+            quantity: cell.quantity,
+            quantity_change: cell.quantity,
+            unit_cost: cell.unit_cost,
+            reference_type: 'PRODUCTION_ORDER',
+            reference_id: id,
+            document_id: id,
+            date: today,
+            movement_date: today,
+            notes: `استلام منتج تام [${cell.size} / ${cell.color}] من أمر القص ${cuttingNumber} (${product.name})`,
+            created_by: userId,
+            created_at: now
+          });
+        }
+
+        const newTotalStock = currentVariants.reduce((sum, v) => sum + (Number(v.current_stock) || 0), 0);
+        await db.items.update(productId, { variants: currentVariants, current_stock: newTotalStock, has_variants: 1 });
+        const liveProd = await db.products.get(productId);
+        if (liveProd) {
+          await db.products.update(productId, { variants: currentVariants, current_stock: newTotalStock, has_variants: 1 });
+        }
+      } else {
+        // Product has variants OFF: receive grand total into single product stock
+        const finishedItm = await db.items.get(productId);
+        if (finishedItm) {
+          const newProdStock = Number(((Number(finishedItm.current_stock) || 0) + batchQty).toFixed(3));
+          await db.items.update(finishedItm.id, { current_stock: newProdStock });
+        }
+        const finishedProd = await db.products.get(productId);
+        if (finishedProd) {
+          const newProdStock = Number(((Number(finishedProd.current_stock) || 0) + batchQty).toFixed(3));
+          await db.products.update(finishedProd.id, { current_stock: newProdStock });
+        }
+
+        await db.stock_movements.add({
+          id: `sm-${Date.now()}-fin-${productId}`,
+          item_id: productId,
+          material_id: productId,
+          variant_id: null,
+          location_id: data.location_id || 'loc-main',
+          movement_type: 'production_in',
+          direction: 'in',
+          quantity: batchQty,
+          quantity_change: batchQty,
+          unit_cost: unitCost4Decimals,
+          reference_type: 'PRODUCTION_ORDER',
+          reference_id: id,
+          document_id: id,
+          date: today,
+          movement_date: today,
+          notes: `استلام منتج تام من أمر القص ${cuttingNumber} (${product.name})`,
+          created_by: userId,
+          created_at: now
+        });
+      }
 
       const cuttingName = data.cutting_name || product.name || '';
-      const sizeQuantities = typeof data.size_quantities === 'object'
-        ? JSON.stringify(data.size_quantities)
-        : (data.size_quantities || '{}');
+      const legacyColor = cleanMatrix.length > 0
+        ? cleanMatrix.map(r => r.color).join(' / ')
+        : (data.color || '');
+
+      let legacySizesMap = {};
+      if (cleanMatrix.length > 0) {
+        legacySizesMap = computeColumnTotals(cleanMatrix);
+      } else {
+        const rawSizes = data.size_quantities !== undefined ? data.size_quantities : (data.quantity_per_size !== undefined ? data.quantity_per_size : data.size_breakdown);
+        if (typeof rawSizes === 'string') {
+          try {
+            legacySizesMap = JSON.parse(rawSizes);
+          } catch (e) {
+            legacySizesMap = {};
+          }
+        } else if (typeof rawSizes === 'object' && rawSizes !== null) {
+          legacySizesMap = rawSizes;
+        }
+      }
+
+      const sizeQuantities = JSON.stringify(legacySizesMap);
 
       // 3. Save cutting order record (Status: issued)
       const order = {
@@ -521,13 +643,16 @@ export const manufacturingRepo = {
         cutting_number: cuttingNumber,
         cutting_name: cuttingName,
         fabric_type: data.fabric_type || '',
-        color: data.color || '',
+        color: legacyColor,
         cutouts_1: data.cutouts_1 || '',
         cutouts_2: data.cutouts_2 || '',
         sizes: data.sizes || '',
-        quantity_per_size: data.quantity_per_size || sizeQuantities,
+        quantity_per_size: sizeQuantities,
         size_quantities: sizeQuantities,
+        matrix: cleanMatrix,
+        matrix_cell_costs: matrixCellCosts,
         size_costs: sizeCosts,
+        color_costs: colorCosts,
         cutting_comment: data.cutting_comment || '',
         stages,
         total_stages_cost: totalStagesCost,
@@ -625,7 +750,22 @@ export const manufacturingRepo = {
     const now = new Date().toISOString();
     const today = (data.start_date || existing.start_date || now.split('T')[0]);
     const productId = data.product_id || existing.product_id;
-    const newBatchQty = Math.max(1, Number(data.batch_quantity !== undefined ? data.batch_quantity : existing.batch_quantity) || 1);
+    let cleanMatrix = null;
+    let matrixCellCosts = [];
+    let sizeCosts = existing.size_costs || {};
+    let colorCosts = existing.color_costs || {};
+    let newBatchQty = Number(existing.batch_quantity) || 1;
+
+    if (Array.isArray(data.matrix)) {
+      const valResult = validateAndCleanMatrix(data.matrix);
+      if (!valResult.valid) {
+        throw new Error(valResult.error || 'يرجى مراجعة مصفوفة المقاسات والألوان');
+      }
+      cleanMatrix = valResult.cleanRows;
+      newBatchQty = valResult.grandTotal;
+    } else if (data.batch_quantity !== undefined) {
+      newBatchQty = Math.max(1, Number(data.batch_quantity) || 1);
+    }
     const oldBatchQty = Math.max(1, Number(existing.batch_quantity) || 1);
 
     const product = (await db.items.get(productId)) || (await db.products.get(productId));
@@ -691,11 +831,27 @@ export const manufacturingRepo = {
     });
 
     const totalProductCost = Number((totalMaterialsCost + totalAdditionalCosts + totalStagesCost).toFixed(2));
-    const { unitCostExact, unitCost4Decimals, sizeCosts } = this._computeCostBreakdown(
-      totalProductCost,
-      newBatchQty,
-      data.size_quantities !== undefined ? data.size_quantities : existing.size_quantities
-    );
+    
+    let unitCostExact, unitCost4Decimals;
+    if (cleanMatrix) {
+      const matrixDist = distributeMatrixCostLargestRemainder(totalProductCost, cleanMatrix);
+      unitCostExact = matrixDist.unitCostExact;
+      unitCost4Decimals = matrixDist.unitCost4Decimals;
+      matrixCellCosts = matrixDist.cellCosts;
+      sizeCosts = matrixDist.sizeSummaries;
+      colorCosts = matrixDist.colorSummaries;
+    } else {
+      const breakdown = this._computeCostBreakdown(
+        totalProductCost,
+        newBatchQty,
+        data.size_quantities !== undefined ? data.size_quantities : existing.size_quantities
+      );
+      unitCostExact = breakdown.unitCostExact;
+      unitCost4Decimals = breakdown.unitCost4Decimals;
+      sizeCosts = breakdown.sizeCosts;
+    }
+
+    const finalMatrix = cleanMatrix || existing.matrix;
 
     // Apply stock differences ONLY
     await db.transaction('rw', [
@@ -798,46 +954,165 @@ export const manufacturingRepo = {
       }
 
       // 2. Finished product delta movement
-      const diffBatchQty = newBatchQty - oldBatchQty;
-      if (diffBatchQty !== 0) {
-        const finishedItm = await db.items.get(productId);
-        if (finishedItm) {
-          const newProdStock = Number(((Number(finishedItm.current_stock) || 0) + diffBatchQty).toFixed(3));
-          await db.items.update(finishedItm.id, { current_stock: newProdStock });
-        }
-        const finishedProd = await db.products.get(productId);
-        if (finishedProd) {
-          const newProdStock = Number(((Number(finishedProd.current_stock) || 0) + diffBatchQty).toFixed(3));
-          await db.products.update(finishedProd.id, { current_stock: newProdStock });
+      const hasVariants = Boolean(product.has_variants || (Array.isArray(product.variants) && product.variants.length > 0));
+
+      if (hasVariants && cleanMatrix) {
+        const liveItm = (await db.items.get(productId)) || product;
+        const currentVariants = Array.isArray(liveItm.variants) ? [...liveItm.variants] : [];
+        const variantMap = new Map();
+        currentVariants.forEach((v, idx) => {
+          const key = `${v.size}:::${v.color}`;
+          variantMap.set(key, idx);
+        });
+
+        // Compute old quantities per cell
+        const oldMatrix = Array.isArray(existing.matrix) ? existing.matrix : [];
+        const oldCellMap = new Map();
+        for (const row of oldMatrix) {
+          const clr = (row.color || '').trim();
+          for (const sz of CUT_ORDER_SIZES) {
+            const q = Math.floor(Number(row.quantities?.[sz]) || 0);
+            if (q > 0) {
+              oldCellMap.set(`${sz}:::${clr}`, q);
+            }
+          }
         }
 
-        await db.stock_movements.add({
-          id: `sm-fin-adj-${Date.now()}-${productId}`,
-          item_id: productId,
-          material_id: productId,
-          location_id: data.location_id || 'loc-main',
-          movement_type: diffBatchQty > 0 ? 'production_in' : 'production_out',
-          direction: diffBatchQty > 0 ? 'in' : 'out',
-          quantity: Math.abs(diffBatchQty),
-          quantity_change: diffBatchQty,
-          unit_cost: unitCost4Decimals,
-          reference_type: 'PRODUCTION_ORDER',
-          reference_id: id,
-          document_id: id,
-          date: today,
-          movement_date: today,
-          notes: diffBatchQty > 0
-            ? `استلام منتج تام إضافي لتعديل أمر القص ${newCuttingNumber}`
-            : `تخفيض كمية استلام منتج تام لتعديل أمر القص ${newCuttingNumber}`,
-          created_by: userId,
-          created_at: now
-        });
+        // Compute new quantities per cell
+        const newCellMap = new Map();
+        for (const row of cleanMatrix) {
+          const clr = (row.color || '').trim();
+          for (const sz of CUT_ORDER_SIZES) {
+            const q = Math.floor(Number(row.quantities?.[sz]) || 0);
+            if (q > 0) {
+              newCellMap.set(`${sz}:::${clr}`, q);
+            }
+          }
+        }
+
+        const allKeys = new Set([...oldCellMap.keys(), ...newCellMap.keys()]);
+        for (const key of allKeys) {
+          const [sz, clr] = key.split(':::');
+          const oldQ = oldCellMap.get(key) || 0;
+          const newQ = newCellMap.get(key) || 0;
+          const diff = newQ - oldQ;
+          if (diff === 0) continue;
+
+          let vIdx = variantMap.get(key);
+          let varId;
+          let currentVarStock = 0;
+          if (vIdx !== undefined) {
+            varId = currentVariants[vIdx].id;
+            currentVarStock = Number(currentVariants[vIdx].current_stock) || 0;
+          }
+
+          // Requirement 4.5: Block matrix change if stock would become negative
+          if (diff < 0 && (currentVarStock + diff < 0)) {
+            throw new Error(`لا يمكن تخفيض كمية المقاس (${sz}) واللون (${clr}) بمقدار (${Math.abs(diff)}) قطعة، لأن الرصيد المتوفر بالمخزن حالياً هو (${currentVarStock}) قطعة فقط (تم بيع أو صرف قطع منها).`);
+          }
+
+          if (vIdx === undefined) {
+            varId = `var-${liveItm.code || liveItm.id}-${sz}-${clr}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const newVar = {
+              id: varId,
+              size: sz,
+              color: clr,
+              sku: `${liveItm.code || 'PRD'}-${sz}-${clr}`,
+              opening_balance: 0,
+              current_stock: Math.max(0, diff)
+            };
+            currentVariants.push(newVar);
+            variantMap.set(key, currentVariants.length - 1);
+          } else {
+            currentVariants[vIdx].current_stock = Number((currentVarStock + diff).toFixed(3));
+          }
+
+          await db.stock_movements.add({
+            id: `sm-fin-adj-${Date.now()}-${productId}-${sz}-${clr}-${Math.floor(Math.random() * 1000)}`,
+            item_id: productId,
+            material_id: productId,
+            variant_id: varId,
+            location_id: data.location_id || 'loc-main',
+            movement_type: diff > 0 ? 'production_in' : 'production_out',
+            direction: diff > 0 ? 'in' : 'out',
+            quantity: Math.abs(diff),
+            quantity_change: diff,
+            unit_cost: unitCost4Decimals,
+            reference_type: 'PRODUCTION_ORDER',
+            reference_id: id,
+            document_id: id,
+            date: today,
+            movement_date: today,
+            notes: diff > 0
+              ? `استلام منتج تام إضافي [${sz} / ${clr}] لتعديل أمر القص ${newCuttingNumber}`
+              : `تخفيض كمية استلام منتج تام [${sz} / ${clr}] لتعديل أمر القص ${newCuttingNumber}`,
+            created_by: userId,
+            created_at: now
+          });
+        }
+
+        const newTotalStock = currentVariants.reduce((sum, v) => sum + (Number(v.current_stock) || 0), 0);
+        await db.items.update(productId, { variants: currentVariants, current_stock: newTotalStock });
+        const liveProd = await db.products.get(productId);
+        if (liveProd) {
+          await db.products.update(productId, { variants: currentVariants, current_stock: newTotalStock });
+        }
+      } else {
+        // Product has variants OFF: simple batch quantity delta
+        const diffBatchQty = newBatchQty - oldBatchQty;
+        if (diffBatchQty !== 0) {
+          const finishedItm = await db.items.get(productId);
+          const curBal = Number(finishedItm?.current_stock) || 0;
+          if (diffBatchQty < 0 && curBal + diffBatchQty < 0) {
+            throw new Error(`لا يمكن تخفيض كمية أمر القص بمقدار (${Math.abs(diffBatchQty)}) قطعة لأن الرصيد المتوفر بالمخزن (${curBal}) غير كافٍ.`);
+          }
+          if (finishedItm) {
+            const newProdStock = Number((curBal + diffBatchQty).toFixed(3));
+            await db.items.update(finishedItm.id, { current_stock: newProdStock });
+          }
+          const finishedProd = await db.products.get(productId);
+          if (finishedProd) {
+            const newProdStock = Number(((Number(finishedProd.current_stock) || 0) + diffBatchQty).toFixed(3));
+            await db.products.update(finishedProd.id, { current_stock: newProdStock });
+          }
+
+          await db.stock_movements.add({
+            id: `sm-fin-adj-${Date.now()}-${productId}`,
+            item_id: productId,
+            material_id: productId,
+            variant_id: null,
+            location_id: data.location_id || 'loc-main',
+            movement_type: diffBatchQty > 0 ? 'production_in' : 'production_out',
+            direction: diffBatchQty > 0 ? 'in' : 'out',
+            quantity: Math.abs(diffBatchQty),
+            quantity_change: diffBatchQty,
+            unit_cost: unitCost4Decimals,
+            reference_type: 'PRODUCTION_ORDER',
+            reference_id: id,
+            document_id: id,
+            date: today,
+            movement_date: today,
+            notes: diffBatchQty > 0
+              ? `استلام منتج تام إضافي لتعديل أمر القص ${newCuttingNumber}`
+              : `تخفيض كمية استلام منتج تام لتعديل أمر القص ${newCuttingNumber}`,
+            created_by: userId,
+            created_at: now
+          });
+        }
       }
 
       // 3. Update Order Record
-      const sizeQuantities = data.size_quantities !== undefined
-        ? (typeof data.size_quantities === 'object' ? JSON.stringify(data.size_quantities) : data.size_quantities)
-        : existing.size_quantities;
+      const legacyColor = finalMatrix && finalMatrix.length > 0
+        ? finalMatrix.map(r => r.color).join(' / ')
+        : (data.color !== undefined ? data.color : existing.color);
+
+      const legacySizesMap = finalMatrix && finalMatrix.length > 0
+        ? computeColumnTotals(finalMatrix)
+        : (data.size_quantities !== undefined 
+            ? (typeof data.size_quantities === 'object' ? data.size_quantities : JSON.parse(data.size_quantities || '{}'))
+            : (typeof existing.size_quantities === 'object' ? existing.size_quantities : JSON.parse(existing.size_quantities || '{}')));
+
+      const sizeQuantities = JSON.stringify(legacySizesMap);
 
       const updatedRecord = {
         ...existing,
@@ -845,13 +1120,16 @@ export const manufacturingRepo = {
         order_number: newCuttingNumber,
         cutting_name: data.cutting_name !== undefined ? data.cutting_name : existing.cutting_name,
         fabric_type: data.fabric_type !== undefined ? data.fabric_type : existing.fabric_type,
-        color: data.color !== undefined ? data.color : existing.color,
+        color: legacyColor,
         cutouts_1: data.cutouts_1 !== undefined ? data.cutouts_1 : existing.cutouts_1,
         cutouts_2: data.cutouts_2 !== undefined ? data.cutouts_2 : existing.cutouts_2,
         sizes: data.sizes !== undefined ? data.sizes : existing.sizes,
-        quantity_per_size: data.quantity_per_size !== undefined ? data.quantity_per_size : (existing.quantity_per_size || sizeQuantities),
+        quantity_per_size: sizeQuantities,
         size_quantities: sizeQuantities,
+        matrix: finalMatrix,
+        matrix_cell_costs: matrixCellCosts.length > 0 ? matrixCellCosts : (existing.matrix_cell_costs || []),
         size_costs: sizeCosts,
+        color_costs: colorCosts,
         cutting_comment: data.cutting_comment !== undefined ? data.cutting_comment : existing.cutting_comment,
         stages,
         total_stages_cost: totalStagesCost,

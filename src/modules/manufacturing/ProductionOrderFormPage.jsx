@@ -38,8 +38,15 @@ import {
   calculateTotalProductCost,
   calculateUnitCost
 } from '../../logic/productionOrderCalculations';
-
-const ALL_SIZES = ['M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
+import {
+  CUT_ORDER_SIZES,
+  createBlankMatrixRow,
+  computeRowTotal,
+  computeColumnTotals,
+  computeGrandTotal,
+  validateAndCleanMatrix,
+  distributeMatrixCostLargestRemainder
+} from '../../logic/cutOrderMatrixCalculations';
 
 const STAGE_KEYS = [
   { key: 'printing', title: 'الطباعة', icon: Printer, color: 'blue' },
@@ -191,6 +198,7 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
   const isSavedRef = useRef(false);
 
   // Core cutting order form state (Requirement 4.1: cutting_number manual, no auto-serial)
+  // Single color field removed as per Requirement 1
   const [form, setForm] = useState({
     cutting_number: '',
     cutting_name: '',
@@ -198,17 +206,18 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
     batch_quantity: '1',
     start_date: today,
     fabric_type: '',
-    color: '',
     cutouts_1: '',
     cutouts_2: '',
     cutting_comment: '',
     notes: ''
   });
 
-  // Size distribution (Requirement 4.4)
-  const [sizeQuantities, setSizeQuantities] = useState({
-    M: '', L: '', XL: '', '2XL': '', '3XL': '', '4XL': '', '5XL': '', '6XL': ''
-  });
+  // Pieces per size per color Matrix (Requirement 3)
+  const [matrix, setMatrix] = useState([createBlankMatrixRow()]);
+  const [availableColors, setAvailableColors] = useState([]);
+  const [inlineColorRow, setInlineColorRow] = useState(null);
+  const [inlineColorName, setInlineColorName] = useState('');
+  const [colorDuplicateError, setColorDuplicateError] = useState(null);
 
   // Three Stages: printing, embroidery, sewing (Requirement 4.3)
   const [stages, setStages] = useState({
@@ -303,29 +312,31 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
       if (form.product_id) return true;
       if (form.cutting_name.trim()) return true;
       if (form.fabric_type.trim()) return true;
-      if (Object.values(sizeQuantities).some((v) => v !== '')) return true;
+      if (computeGrandTotal(matrix) > 0) return true;
       if (Object.values(stages).some((s) => Number(s.total_cost) > 0 || s.vendor_id)) return true;
       return false;
     });
     return unregister;
-  }, [form, sizeQuantities, stages]);
+  }, [form, matrix, stages]);
 
-  // Load items, products, vendors, treasuries, and existing cut order
+  // Load items, products, vendors, treasuries, colors, and existing cut order
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
-        const [itemsRes, prodsRes, vendorsRes, accsRes] = await Promise.all([
+        const [itemsRes, prodsRes, vendorsRes, accsRes, colorsRes] = await Promise.all([
           api.getItems(),
           api.getProducts(),
           api.getWorkshopVendors ? api.getWorkshopVendors() : api.getParties(),
-          api.getAccounts()
+          api.getAccounts(),
+          api.getItemColors ? api.getItemColors() : api.getColors()
         ]);
 
         const itemsList = Array.isArray(itemsRes.data) ? itemsRes.data : [];
         const prodsList = Array.isArray(prodsRes.data) ? prodsRes.data : [];
         const vList = Array.isArray(vendorsRes.data) ? vendorsRes.data : (Array.isArray(vendorsRes.vendors) ? vendorsRes.vendors : []);
         const aList = Array.isArray(accsRes.data) ? accsRes.data : (Array.isArray(accsRes) ? accsRes : []);
+        const clrsList = Array.isArray(colorsRes.data) ? colorsRes.data : (Array.isArray(colorsRes.colors) ? colorsRes.colors : []);
 
         const raw = itemsList.filter(
           (i) => i.item_type === 'raw_material' || i.item_type === 'مادة خام'
@@ -339,6 +350,7 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
         setProducts(allProds);
         setWorkshopVendors(vList);
         setTreasuryAccounts(aList);
+        setAvailableColors(clrsList);
 
         if (aList.length > 0) {
           const mainAcc = aList.find(a => a.is_main) || aList[0];
@@ -360,7 +372,6 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
               batch_quantity: String(o.batch_quantity || 1),
               start_date: o.start_date || today,
               fabric_type: o.fabric_type || '',
-              color: o.color || '',
               cutouts_1: o.cutouts_1 || '',
               cutouts_2: o.cutouts_2 || '',
               cutting_comment: o.cutting_comment || '',
@@ -370,11 +381,23 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
             const p = allProds.find((prod) => String(prod.id) === String(o.product_id));
             if (p) setSelectedProduct(p);
 
-            if (o.size_quantities_parsed && typeof o.size_quantities_parsed === 'object') {
-              setSizeQuantities((prev) => ({
-                ...prev,
-                ...o.size_quantities_parsed
-              }));
+            // Populate matrix
+            if (Array.isArray(o.matrix) && o.matrix.length > 0) {
+              setMatrix(o.matrix);
+            } else {
+              let legacyMap = {};
+              if (o.size_quantities_parsed && typeof o.size_quantities_parsed === 'object') {
+                legacyMap = o.size_quantities_parsed;
+              } else if (o.size_quantities) {
+                try { legacyMap = JSON.parse(o.size_quantities); } catch (e) {}
+              }
+              const row = createBlankMatrixRow(o.color || 'غير محدد');
+              for (const sz of CUT_ORDER_SIZES) {
+                if (legacyMap[sz] !== undefined) {
+                  row.quantities[sz] = String(legacyMap[sz]);
+                }
+              }
+              setMatrix([row]);
             }
 
             // Populate stages
@@ -469,22 +492,75 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
     }));
   };
 
-  // Size quantity change
-  const handleSizeQuantityChange = (size, value) => {
-    const clean = String(value || '').replace(/[^0-9]/g, '');
-    const updated = { ...sizeQuantities, [size]: clean };
-    setSizeQuantities(updated);
+  // Matrix operations
+  const handleAddMatrixRow = () => {
+    setMatrix((prev) => [...prev, createBlankMatrixRow()]);
+    setColorDuplicateError(null);
+  };
 
-    const total = Object.values(updated).reduce((acc, curr) => {
-      const num = parseInt(curr, 10);
-      return !isNaN(num) && num > 0 ? acc + num : acc;
-    }, 0);
+  const handleRemoveMatrixRow = (rowIndex) => {
+    setMatrix((prev) => {
+      const next = prev.filter((_, idx) => idx !== rowIndex);
+      return next.length > 0 ? next : [createBlankMatrixRow()];
+    });
+    setColorDuplicateError(null);
+  };
 
-    if (total > 0) {
-      setForm((prev) => ({ ...prev, batch_quantity: String(total) }));
-      if (errors.batch_quantity) {
-        setErrors((prev) => ({ ...prev, batch_quantity: null }));
-      }
+  const handleMatrixCellChange = (rowIndex, size, value) => {
+    const clean = String(value ?? '').replace(/[^0-9]/g, '');
+    setMatrix((prev) => {
+      const next = [...prev];
+      next[rowIndex] = {
+        ...next[rowIndex],
+        quantities: {
+          ...next[rowIndex].quantities,
+          [size]: clean
+        }
+      };
+      return next;
+    });
+    if (errors.batch_quantity || errors.matrix) {
+      setErrors((prev) => ({ ...prev, batch_quantity: null, matrix: null }));
+    }
+  };
+
+  const handleMatrixColorChange = (rowIndex, colorName) => {
+    const trimmed = (colorName || '').trim();
+    const isDup = matrix.some((r, idx) => idx !== rowIndex && (r.color || '').trim() === trimmed && trimmed !== '');
+    if (isDup) {
+      setColorDuplicateError({ rowIndex, message: 'هذا اللون مضاف بالفعل' });
+      return;
+    }
+    setColorDuplicateError(null);
+    setMatrix((prev) => {
+      const next = [...prev];
+      next[rowIndex] = {
+        ...next[rowIndex],
+        color: trimmed
+      };
+      return next;
+    });
+  };
+
+  const handleSaveInlineColor = async (rowIndex) => {
+    const name = inlineColorName.trim();
+    if (!name) {
+      setInlineColorRow(null);
+      return;
+    }
+    try {
+      const res = await api.createItemColor({ name });
+      const newClr = res.color || res.data || res;
+      setAvailableColors((prev) => {
+        if (prev.some((c) => c.name === name)) return prev;
+        return [...prev, newClr];
+      });
+      handleMatrixColorChange(rowIndex, name);
+    } catch (e) {
+      handleMatrixColorChange(rowIndex, name);
+    } finally {
+      setInlineColorRow(null);
+      setInlineColorName('');
     }
   };
 
@@ -682,7 +758,9 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
   };
 
   // Calculations
-  const batchQty = Math.max(1, Number(form.batch_quantity) || 1);
+  const grandTotal = useMemo(() => computeGrandTotal(matrix), [matrix]);
+  const matrixColTotals = useMemo(() => computeColumnTotals(matrix), [matrix]);
+  const batchQty = Math.max(1, grandTotal || Number(form.batch_quantity) || 1);
 
   // Compute total cost per stage
   const computedStages = {};
@@ -736,26 +814,29 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
   const totalAdditionalCosts = calculateTotalAdditionalCosts(additionalCosts);
   const totalProductCost = Number((totalMaterialsCost + totalAdditionalCosts + totalStagesCost).toFixed(2));
 
+
   // Unit Cost at high precision (up to 4 decimals, Requirement 4.4)
   const unitCostExact = totalProductCost / batchQty;
   const unitCost4Decimals = Number(unitCostExact.toFixed(4));
 
-  // Largest Remainder Method for Size Cost Breakdown (Requirement 4.4)
-  const sizeWeights = {};
-  for (const [s, q] of Object.entries(sizeQuantities)) {
-    const num = parseInt(q, 10);
-    if (!isNaN(num) && num > 0) sizeWeights[s] = num;
-  }
-  const distributedSizePiasters = distributeCostLargestRemainder(toPiasters(totalProductCost), sizeWeights);
-  const sizeCostBreakdown = Object.entries(distributedSizePiasters).map(([s, pVal]) => ({
-    size: s,
-    quantity: sizeWeights[s],
-    total_cost: fromPiasters(pVal),
-    unit_cost: Number((fromPiasters(pVal) / sizeWeights[s]).toFixed(4))
-  }));
+  // Largest Remainder Method for Matrix Cost Breakdown (Requirement 4.3 & 4.4)
+  const matrixCostDistribution = useMemo(() => {
+    return distributeMatrixCostLargestRemainder(totalProductCost, matrix);
+  }, [totalProductCost, matrix]);
+
+  const sizeCostBreakdown = useMemo(() => {
+    return Object.entries(matrixCostDistribution.sizeSummaries).map(([s, sData]) => ({
+      size: s,
+      quantity: sData.quantity,
+      total_cost: sData.total_cost,
+      unit_cost: sData.quantity > 0 ? Number((sData.total_cost / sData.quantity).toFixed(4)) : 0
+    }));
+  }, [matrixCostDistribution]);
 
   // Reconciled check sum of sizes
-  const sizeCostsSumEGP = sizeCostBreakdown.reduce((sum, item) => sum + item.total_cost, 0);
+  const sizeCostsSumEGP = useMemo(() => {
+    return Number(sizeCostBreakdown.reduce((sum, item) => sum + item.total_cost, 0).toFixed(2));
+  }, [sizeCostBreakdown]);
 
   // Stage Payment Recording (Requirement 4.3)
   const handleAddStagePayment = async (e) => {
@@ -834,8 +915,12 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
     if (!form.cutting_number.trim()) errs.cutting_number = 'رقم القصة مطلوب ويجب إدخاله يدوياً';
     if (!form.product_id) errs.product_id = 'يرجى اختيار المنتج التام أو اسم القصة';
     
-    const qtyErr = Validators.positiveNumber(form.batch_quantity, 'إجمالي عدد القطع');
-    if (qtyErr) errs.batch_quantity = qtyErr;
+    // Matrix validation (Requirement 3.5)
+    const matrixVal = validateAndCleanMatrix(matrix);
+    if (!matrixVal.valid) {
+      errs.matrix = matrixVal.error;
+      errs.batch_quantity = matrixVal.error;
+    }
 
     if (isOrderClosed && !editReason.trim()) {
       errs.edit_reason = 'أمر القص مقفل، يرجى كتابة سبب التعديل للمتابعة';
@@ -879,6 +964,12 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
     if (e) e.preventDefault();
     if (!validate()) {
       if (errors.stock) alert(errors.stock);
+      return;
+    }
+
+    const matrixVal = validateAndCleanMatrix(matrix);
+    if (!matrixVal.valid) {
+      alert(matrixVal.error);
       return;
     }
 
@@ -930,13 +1021,12 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
         order_number: form.cutting_number.trim(),
         cutting_name: form.cutting_name.trim() || selectedProduct?.name || '',
         product_id: form.product_id,
-        batch_quantity: batchQty,
+        batch_quantity: matrixVal.grandTotal,
         start_date: form.start_date,
         fabric_type: form.fabric_type.trim(),
-        color: form.color.trim(),
         cutouts_1: form.cutouts_1.trim(),
         cutouts_2: form.cutouts_2.trim(),
-        size_quantities: sizeQuantities,
+        matrix: matrixVal.cleanRows,
         cutting_comment: form.cutting_comment.trim(),
         notes: form.notes.trim(),
         stages: payloadStages,
@@ -1132,8 +1222,8 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
                 <FieldError error={errors.product_id} />
               </div>
 
-              {/* Fabric Type, Color, Date */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Fabric Type, Date (Single color removed as per Requirement 1) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     نوع القماش
@@ -1143,19 +1233,6 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
                     value={form.fabric_type}
                     onChange={(e) => setForm((prev) => ({ ...prev, fabric_type: e.target.value }))}
                     aria-label="نوع القماش"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    اللون
-                  </label>
-                  <input
-                    type="text"
-                    value={form.color}
-                    onChange={(e) => setForm((prev) => ({ ...prev, color: e.target.value }))}
-                    aria-label="اللون"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
                   />
                 </div>
@@ -1249,47 +1326,235 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
           </div>
         </div>
 
-        {/* Section 2: Size and Quantity Distribution (Requirement 4.4) */}
+        {/* Section 2: Pieces per Size per Color Matrix (Requirement 3 & 4) */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Layers className="w-5 h-5 text-indigo-600" />
-                توزيع المقاسات والكميات (M إلى 6XL) وتوزيع التكلفة
+                توزيع المقاسات والألوان (M إلى 8XL)
               </h2>
               <span className="text-xs text-slate-500 font-semibold">
-                حدد عدد القطع لكل مقاس؛ يتم احتساب إجمالي القطع وتوزيع التكلفة لأقرب قرش بطريقة أكبر البواقي.
+                حدد عدد القطع لكل لون ومقاس في المصفوفة أدناه؛ يتم احتساب إجماليات الصفوف والأعمدة وتوزيع التكلفة لحظياً.
               </span>
             </div>
 
-            <div className="bg-indigo-50 border border-indigo-200 px-4 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-indigo-900">
-              <span>إجمالي قطع القصة:</span>
-              <span className="text-sm font-mono text-indigo-700 font-bold">{batchQty} قطعة</span>
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-50 border border-indigo-200 px-4 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-indigo-900">
+                <span>إجمالي قطع القصة:</span>
+                <span className="text-sm font-mono text-indigo-700 font-bold">{formatNumber(grandTotal)} قطعة</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddMatrixRow}
+                className="px-3 py-1.5 bg-[#1F3A5F] hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>إضافة لون +</span>
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-            {ALL_SIZES.map((size) => (
-              <div
-                key={size}
-                className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:border-indigo-300 transition-all text-center space-y-1.5"
-              >
-                <div className="inline-block px-2 py-0.5 rounded-md bg-[#1F3A5F] text-white font-mono font-bold text-xs">
-                  {size}
+          {/* Product Variants Notice (Requirement 4.1) */}
+          {selectedProduct && (
+            <div>
+              {selectedProduct.has_variants ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    المتغيرات مفعلة لهذا المنتج التام: سيتم استلام كميات أمر القص بالمخزن مفصلة بدقة حسب كل مقاس ولون، وتوليد أي مقاسات أو ألوان جديدة تلقائياً.
+                  </span>
                 </div>
-                <div>
-                  <NumberInput
-                    value={sizeQuantities[size] || ''}
-                    onChange={(val) => handleSizeQuantityChange(size, val)}
-                    aria-label={`كمية المقاس ${size}`}
-                    className="w-full text-center px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 bg-white"
-                  />
-                  <span className="block text-[10px] text-slate-400 mt-0.5">قطع</span>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    تنبيه: هذا المنتج التام غير مفعل به المتغيرات (المقاسات والألوان)، لذلك سيتم استلام إجمالي كمية القصة ({formatNumber(grandTotal)} قطعة) في رصيد المنتج الموحد، ويتم الاحتفاظ بتفاصيل الألوان والمقاسات داخل أمر القص.
+                  </span>
                 </div>
-              </div>
-            ))}
+              )}
+            </div>
+          )}
+
+          {/* Responsive Matrix Container (Requirement 3.4) */}
+          <div className="w-full border border-slate-200 rounded-xl bg-white shadow-xs overflow-hidden">
+            <div className="overflow-x-auto max-w-full">
+              <table className="w-full min-w-[950px] border-collapse text-xs text-right table-fixed">
+                <thead className="bg-[#1F3A5F] text-white font-bold sticky top-0 z-10">
+                  <tr>
+                    <th className="p-2.5 w-[220px] text-right sticky right-0 z-20 bg-[#1F3A5F] shadow-xs">
+                      اللون
+                    </th>
+                    {CUT_ORDER_SIZES.map((size) => (
+                      <th key={size} className="p-2.5 w-[65px] text-center font-mono text-xs border-r border-slate-700">
+                        {size}
+                      </th>
+                    ))}
+                    <th className="p-2.5 w-[90px] text-center font-mono sticky left-[50px] z-20 bg-[#1F3A5F] border-r border-slate-700 shadow-xs">
+                      إجمالي اللون
+                    </th>
+                    <th className="p-2.5 w-[50px] text-center sticky left-0 z-20 bg-[#1F3A5F] shadow-xs">
+                      حذف
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {matrix.map((row, rIdx) => {
+                    const rowTotal = computeRowTotal(row);
+                    const isInline = inlineColorRow === rIdx;
+                    const hasDupError = colorDuplicateError?.rowIndex === rIdx;
+
+                    return (
+                      <tr key={row.id || rIdx} className="hover:bg-slate-50/70 transition-colors">
+                        {/* Color Column (Sticky Right in RTL) */}
+                        <td className="p-2 sticky right-0 z-10 bg-white border-l border-slate-200 shadow-2xs">
+                          {isInline ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                autoFocus
+                                value={inlineColorName}
+                                onChange={(e) => setInlineColorName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveInlineColor(rIdx);
+                                  } else if (e.key === 'Escape') {
+                                    setInlineColorRow(null);
+                                  }
+                                }}
+                                aria-label="اسم اللون الجديد"
+                                className="w-full px-2 py-1 border border-indigo-400 rounded-md text-xs font-bold text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveInlineColor(rIdx)}
+                                className="px-2 py-1 bg-indigo-600 text-white rounded-md text-xs font-bold hover:bg-indigo-700 cursor-pointer"
+                              >
+                                حفظ
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setInlineColorRow(null); setInlineColorName(''); }}
+                                className="px-2 py-1 bg-slate-200 text-slate-700 rounded-md text-xs hover:bg-slate-300 cursor-pointer"
+                              >
+                                إلغاء
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={row.color || ''}
+                                  onChange={(e) => handleMatrixColorChange(rIdx, e.target.value)}
+                                  aria-label={`اختيار لون الصف ${rIdx + 1}`}
+                                  className={`w-full px-2 py-1.5 border rounded-lg text-xs font-bold bg-white text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 ${
+                                    hasDupError ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-300'
+                                  }`}
+                                >
+                                  <option value="">-- اختر اللون --</option>
+                                  {availableColors.map((c) => (
+                                    <option key={c.id || c.name} value={c.name}>
+                                      {c.name}
+                                    </option>
+                                  ))}
+                                  {row.color && !availableColors.some(c => c.name === row.color) && (
+                                    <option value={row.color}>{row.color}</option>
+                                  )}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => { setInlineColorRow(rIdx); setInlineColorName(''); }}
+                                  title="إضافة لون جديد سريعاً"
+                                  aria-label="إضافة لون جديد سريعاً"
+                                  className="p-1.5 rounded-lg border border-slate-300 bg-slate-100 hover:bg-indigo-50 hover:border-indigo-400 hover:text-indigo-600 text-slate-600 transition-colors cursor-pointer shrink-0"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              {hasDupError && (
+                                <span className="block text-[11px] font-bold text-red-600">
+                                  {colorDuplicateError.message}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 10 Size Quantity Inputs */}
+                        {CUT_ORDER_SIZES.map((size, sIdx) => (
+                          <td key={size} className="p-1.5 text-center border-r border-slate-100">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={row.quantities?.[size] ?? ''}
+                              onChange={(e) => handleMatrixCellChange(rIdx, size, e.target.value)}
+                              onFocus={(e) => e.target.select()}
+                              onWheel={(e) => e.target.blur()}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const nextCell = document.querySelector(`input[data-matrix-cell="${rIdx}-${sIdx + 1}"]`) ||
+                                                   document.querySelector(`input[data-matrix-cell="${rIdx + 1}-0"]`);
+                                  if (nextCell) nextCell.focus();
+                                }
+                              }}
+                              data-matrix-cell={`${rIdx}-${sIdx}`}
+                              aria-label={`كمية المقاس ${size} للون ${row.color || 'غير محدد'}`}
+                              className="w-full text-center py-1.5 px-1 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 bg-white tabular-nums hover:border-indigo-300 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                          </td>
+                        ))}
+
+                        {/* Row Total (Sticky Left in RTL) */}
+                        <td className="p-2 text-center font-mono font-bold text-xs text-indigo-900 bg-slate-50 sticky left-[50px] z-10 border-r border-slate-200 shadow-2xs tabular-nums">
+                          {formatNumber(rowTotal)}
+                        </td>
+
+                        {/* Delete Row Button */}
+                        <td className="p-1.5 text-center bg-slate-50 sticky left-0 z-10 border-r border-slate-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMatrixRow(rIdx)}
+                            disabled={matrix.length <= 1}
+                            title="حذف هذا الصف"
+                            aria-label={`حذف صف اللون ${row.color || rIdx + 1}`}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                              matrix.length <= 1
+                                ? 'opacity-30 cursor-not-allowed text-slate-400'
+                                : 'text-rose-600 hover:bg-rose-50 hover:text-rose-700'
+                            }`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+
+                {/* Matrix Footer Totals Row */}
+                <tfoot className="bg-slate-100 border-t-2 border-slate-300 font-bold text-xs text-slate-900">
+                  <tr>
+                    <td className="p-2.5 text-right sticky right-0 z-20 bg-slate-100 border-l border-slate-300 shadow-2xs font-bold text-slate-800">
+                      الإجمالي لكل مقاس:
+                    </td>
+                    {CUT_ORDER_SIZES.map((size) => (
+                      <td key={size} className="p-2 text-center font-mono font-bold text-slate-900 border-r border-slate-200 tabular-nums">
+                        {formatNumber(matrixColTotals[size] || 0)}
+                      </td>
+                    ))}
+                    <td className="p-2 text-center font-mono font-extrabold text-sm text-indigo-700 bg-indigo-50 sticky left-[50px] z-20 border-r border-indigo-200 shadow-2xs tabular-nums">
+                      {formatNumber(grandTotal)}
+                    </td>
+                    <td className="p-2 bg-slate-100 sticky left-0 z-20 shadow-2xs"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
-          <FieldError error={errors.batch_quantity} />
+          <FieldError error={errors.batch_quantity || errors.matrix} />
 
           {/* Size Cost Reconciliation Card (Largest Remainder Breakdown) */}
           {sizeCostBreakdown.length > 0 && (

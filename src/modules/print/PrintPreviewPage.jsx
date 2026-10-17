@@ -638,6 +638,96 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             </div>
           </div>
 
+          {/* Color by Size Quantity Matrix Table (Requirement 4.6) */}
+          {(() => {
+            const CUT_SIZES = ['M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'];
+            const printMatrix = Array.isArray(order.matrix) && order.matrix.length > 0
+              ? order.matrix
+              : (() => {
+                  let legacyMap = {};
+                  if (typeof order.size_quantities === 'string') {
+                    try { legacyMap = JSON.parse(order.size_quantities); } catch (e) {}
+                  } else if (order.size_quantities && typeof order.size_quantities === 'object') {
+                    legacyMap = order.size_quantities;
+                  }
+                  return [{
+                    color: order.color || 'غير محدد',
+                    quantities: legacyMap
+                  }];
+                })();
+
+            let grand = 0;
+            printMatrix.forEach(r => {
+              CUT_SIZES.forEach(sz => {
+                grand += Number(r.quantities?.[sz]) || 0;
+              });
+            });
+
+            return (
+              <div className="border border-slate-300 rounded-lg overflow-hidden">
+                <div className="bg-[#1F3A5F] text-white px-3 py-1.5 font-bold text-xs flex justify-between items-center">
+                  <span>توزيع كميات أمر القص حسب المقاس واللون</span>
+                  <span className="font-mono">إجمالي القطع: {formatNumber(order.batch_quantity || grand)} قطعة</span>
+                </div>
+                <table className="w-full text-right text-xs border-collapse table-fixed">
+                  <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800">
+                    <tr>
+                      <th className="p-2 border-l border-slate-300 w-28 text-right">اللون</th>
+                      {CUT_SIZES.map(sz => (
+                        <th key={sz} className="p-2 border-l border-slate-300 text-center font-mono">{sz}</th>
+                      ))}
+                      <th className="p-2 text-center font-mono w-20">الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {printMatrix.map((r, idx) => {
+                      let rTotal = 0;
+                      CUT_SIZES.forEach(sz => {
+                        const q = Number(r.quantities?.[sz]) || 0;
+                        rTotal += q;
+                      });
+                      return (
+                        <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/60' : 'bg-white'}>
+                          <td className="p-2 font-bold border-l border-slate-200">{r.color || 'غير محدد'}</td>
+                          {CUT_SIZES.map(sz => {
+                            const q = Number(r.quantities?.[sz]) || 0;
+                            return (
+                              <td key={sz} className="p-2 text-center font-mono border-l border-slate-200 tabular-nums">
+                                {q > 0 ? q : '-'}
+                              </td>
+                            );
+                          })}
+                          <td className="p-2 text-center font-mono font-bold text-[#1F3A5F] tabular-nums">
+                            {rTotal}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300">
+                    <tr>
+                      <td className="p-2 border-l border-slate-300 font-bold">الإجمالي لكل مقاس</td>
+                      {CUT_SIZES.map(sz => {
+                        let colSum = 0;
+                        printMatrix.forEach(r => {
+                          colSum += Number(r.quantities?.[sz]) || 0;
+                        });
+                        return (
+                          <td key={sz} className="p-2 text-center font-mono font-bold border-l border-slate-300 tabular-nums">
+                            {colSum}
+                          </td>
+                        );
+                      })}
+                      <td className="p-2 text-center font-mono font-bold text-indigo-700 bg-indigo-50 tabular-nums">
+                        {grand}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            );
+          })()}
+
           {order.notes && (
             <div className="p-3 border border-slate-200 rounded-lg bg-slate-50 text-xs">
               <span className="font-bold text-slate-500 block mb-0.5">تعليمات القص والملاحظات الفنية:</span>

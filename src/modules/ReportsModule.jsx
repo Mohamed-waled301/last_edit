@@ -204,6 +204,13 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
           desc: 'إجماليات التكلفة، المسدد، والمتبقي لكل ورشة ولكل أمر قص مع التصدير لإكسيل',
           icon: Scissors,
           color: 'indigo'
+        },
+        {
+          key: 'cut-production-by-size-color',
+          title: 'إنتاج القص حسب المقاس واللون',
+          desc: 'حصر كميات قطع القص مصنفة بالألوان والمقاسات (M إلى 8XL) لكل أمر قص مع الإجماليات والتصدير لإكسيل',
+          icon: Scissors,
+          color: 'emerald'
         }
       ]
     }] : []),
@@ -427,6 +434,50 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
                   paid: stData.paid || 0,
                   remaining: stData.remaining || 0,
                   date: o.start_date || o.created_at?.split('T')[0]
+                });
+              }
+            }
+            setReportData(rows);
+            break;
+          }
+          case 'cut-production-by-size-color': {
+            const res = await api.getProductionOrders();
+            const list = res.data || res.production_orders || [];
+            const rows = [];
+            const SIZES = ['M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'];
+            for (const o of list) {
+              const matrix = Array.isArray(o.matrix) ? o.matrix : [];
+              if (matrix.length > 0) {
+                for (const mRow of matrix) {
+                  const qtyObj = mRow.quantities || {};
+                  const rowTot = SIZES.reduce((s, sz) => s + (Number(qtyObj[sz]) || 0), 0);
+                  if (rowTot > 0 || mRow.color) {
+                    rows.push({
+                      id: `${o.id}-${mRow.color}-${rows.length}`,
+                      order_id: o.id,
+                      cutting_number: o.cutting_number || o.order_number,
+                      cutting_name: o.cutting_name || o.product_name,
+                      fabric_type: o.fabric_type || '---',
+                      color: mRow.color || 'بدون لون',
+                      ...SIZES.reduce((acc, sz) => ({ ...acc, [sz]: Number(qtyObj[sz]) || 0 }), {}),
+                      row_total: rowTot,
+                      date: o.start_date || o.created_at?.split('T')[0],
+                      status: o.status === 'closed' ? 'مقفل' : 'مُصدر'
+                    });
+                  }
+                }
+              } else if (o.batch_quantity) {
+                rows.push({
+                  id: `${o.id}-legacy`,
+                  order_id: o.id,
+                  cutting_number: o.cutting_number || o.order_number,
+                  cutting_name: o.cutting_name || o.product_name,
+                  fabric_type: o.fabric_type || '---',
+                  color: o.color || 'غير محدد',
+                  ...SIZES.reduce((acc, sz) => ({ ...acc, [sz]: Number(o.size_breakdown?.[sz]) || 0 }), {}),
+                  row_total: Number(o.batch_quantity) || 0,
+                  date: o.start_date || o.created_at?.split('T')[0],
+                  status: o.status === 'closed' ? 'مقفل' : 'مُصدر'
                 });
               }
             }
@@ -1105,6 +1156,20 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
           <th className="p-3 text-left font-mono">المتبقي</th>
         </tr>
       );
+    case 'cut-production-by-size-color':
+      return (
+        <tr>
+          <th className="p-3">رقم القصة</th>
+          <th className="p-3">اسم القصة / الموديل</th>
+          <th className="p-3">اللون</th>
+          {['M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'].map(sz => (
+            <th key={sz} className="p-2 text-center font-mono">{sz}</th>
+          ))}
+          <th className="p-3 text-center font-mono">الإجمالي</th>
+          <th className="p-3">التاريخ</th>
+          <th className="p-3 text-center">الحالة</th>
+        </tr>
+      );
     case 'disbursements-by-expense':
       return (
         <tr>
@@ -1342,6 +1407,34 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
           <td className="p-3 text-left font-mono font-bold text-slate-900">{formatCurrency(row.total_cost)}</td>
           <td className="p-3 text-left font-mono font-bold text-emerald-700">{formatCurrency(row.paid)}</td>
           <td className="p-3 text-left font-mono font-bold text-amber-700">{formatCurrency(row.remaining)}</td>
+        </tr>
+      );
+    case 'cut-production-by-size-color':
+      return (
+        <tr key={row.id || idx} className="hover:bg-slate-50">
+          <td className="p-3 font-mono font-bold text-[#1F3A5F]">{row.cutting_number}</td>
+          <td className="p-3 font-bold text-slate-800">{row.cutting_name}</td>
+          <td className="p-3">
+            <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 font-semibold text-slate-800">
+              {row.color}
+            </span>
+          </td>
+          {['M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'].map(sz => (
+            <td key={sz} className="p-2 text-center font-mono font-medium text-slate-700">
+              {row[sz] > 0 ? formatNumber(row[sz]) : '-'}
+            </td>
+          ))}
+          <td className="p-3 text-center font-mono font-bold text-blue-800">
+            {formatNumber(row.row_total)}
+          </td>
+          <td className="p-3 font-mono text-slate-600">{formatDate(row.date)}</td>
+          <td className="p-3 text-center">
+            <span className={`inline-block px-2 py-0.5 rounded-full font-bold text-[10px] ${
+              row.status === 'مقفل' ? 'bg-slate-200 text-slate-800' : 'bg-emerald-100 text-emerald-800'
+            }`}>
+              {row.status}
+            </span>
+          </td>
         </tr>
       );
     case 'disbursements-by-expense':
