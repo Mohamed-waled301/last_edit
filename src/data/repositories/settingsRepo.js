@@ -11,7 +11,7 @@ export const settingsRepo = {
         phone: '',
         address: '',
         company_logo: '',
-        default_credit_days: 30,
+        default_credit_days: 0,
         vat_enabled: 0,
         vat_rate_percent: 14.0,
         currency_symbol: 'ج.م',

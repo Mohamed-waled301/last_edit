@@ -642,8 +642,10 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
           ${customerPhone ? `<div style="color: #64748b; margin-top: 2px;">هاتف: <span class="font-mono">${escapeHtml(customerPhone)}</span></div>` : ''}
         </div>
         <div style="text-align: left;">
-          <span style="color: #64748b; font-weight: bold; display: block; margin-bottom: 3px;">الفرع / المنفذ:</span>
-          <div style="font-size: 13px; font-weight: bold; color: #0f172a;">${escapeHtml(invoice.outlet_name || 'الفرع الرئيسي')}</div>
+          ${(invoice.outlet_name && invoice.outlet_name !== 'بدون منفذ' && invoice.outlet_id) ? `
+            <span style="color: #64748b; font-weight: bold; display: block; margin-bottom: 3px;">الفرع / المنفذ:</span>
+            <div style="font-size: 13px; font-weight: bold; color: #0f172a;">${escapeHtml(invoice.outlet_name)}</div>
+          ` : ''}
           ${isCredit && balanceAfter !== null ? `
             <div style="color: #1e3a8a; font-weight: bold; margin-top: 4px; font-size: 12px;">
               رصيد العميل بعد الفاتورة: <span class="font-mono">${formatCurrency(balanceAfter)}</span>

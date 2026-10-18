@@ -26,7 +26,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
     phone: '',
     address: '',
     company_logo: '',
-    default_credit_days: 30,
+    default_credit_days: 0,
     vat_enabled: false,
     vat_rate_percent: 14.00,
     currency_symbol: 'ج.م',
@@ -300,18 +300,18 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
               />
             </div>
 
-            {/* Default Credit Days for Sales Invoices (Requirement 3) */}
+            {/* Default Credit Days for Sales Invoices */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">
-                فترة الائتمان الافتراضية للفواتير الآجلة (بالأيام)
+                مدة الائتمان الافتراضية (بالأيام)
               </label>
               <NumberInput
-                value={settings.default_credit_days !== undefined ? settings.default_credit_days : 30}
+                value={settings.default_credit_days !== undefined ? settings.default_credit_days : 0}
                 onChange={e => setSettings({ ...settings, default_credit_days: Math.max(0, parseInt(e.target.value) || 0) })}
                 className="w-full h-12 rounded-md border border-gray-300 px-3 text-sm font-medium focus:border-[#1F3A5F] focus:outline-none"
               />
               <span className="text-[11px] text-gray-500 mt-1 block">
-                تضاف هذه الأيام تلقائياً إلى تاريخ فاتورة المبيعات الآجلة لتحديد تاريخ الاستحقاق.
+                القيمة 0 تعني عدم تحديد تاريخ استحقاق تلقائي وترك الحقل فارغاً. إذا كانت أكبر من صفر تضاف تلقائياً لتاريخ فاتورة المبيعات الآجلة.
               </span>
             </div>
 

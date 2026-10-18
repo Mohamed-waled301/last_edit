@@ -135,17 +135,18 @@ export const reportsRepo = {
     for (const inv of custInvoices) {
       if (inv.status !== 'paid' && inv.status !== 'cancelled') {
         const remaining = Math.max(0, (Number(inv.total_invoice_amount) || 0) - (Number(inv.paid_amount) || 0));
-        const days = calculateDays(inv.due_date || inv.invoice_date);
+        const hasDueDate = Boolean(inv.due_date);
+        const days = hasDueDate ? calculateDays(inv.due_date) : 0;
 
         customerAging.push({
           type: 'customer',
           entity_name: custMap.get(inv.customer_id) || inv.customer_id,
           reference: inv.invoice_number,
           date: inv.invoice_date,
-          due_date: inv.due_date,
+          due_date: hasDueDate ? inv.due_date : null,
           remaining_amount: remaining,
-          days_overdue: days,
-          bucket: days <= 30 ? '0-30 يوم' : days <= 60 ? '31-60 يوم' : days <= 90 ? '61-90 يوم' : '+90 يوم',
+          days_overdue: hasDueDate ? days : 0,
+          bucket: hasDueDate ? (days <= 30 ? '0-30 يوم' : days <= 60 ? '31-60 يوم' : days <= 90 ? '61-90 يوم' : '+90 يوم') : 'بدون تاريخ استحقاق',
         });
       }
     }

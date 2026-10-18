@@ -149,8 +149,12 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
               <div className="text-sm font-bold text-gray-900">{invoice.customer_name || 'عميل نقدي'}</div>
             </div>
             <div className="text-left">
-              <span className="font-bold text-gray-500 block mb-1">فرع البيع / المعرض:</span>
-              <div className="text-sm font-bold text-gray-900">{invoice.outlet_name || 'الفرع الرئيسي'}</div>
+              {invoice.outlet_name && invoice.outlet_name !== 'بدون منفذ' && invoice.outlet_id && (
+                <>
+                  <span className="font-bold text-gray-500 block mb-1">فرع البيع / المعرض:</span>
+                  <div className="text-sm font-bold text-gray-900">{invoice.outlet_name}</div>
+                </>
+              )}
             </div>
           </div>
 

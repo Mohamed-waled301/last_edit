@@ -63,10 +63,10 @@ export default function SalesInvoicesListPage({ onNotify }) {
     const exportData = filtered.map(i => ({
       'رقم الفاتورة': i.invoice_number,
       'اسم العميل': i.customer_name,
-      'المنفذ / المعرض': i.outlet_name,
+      'المنفذ / المعرض': i.outlet_name || 'بدون منفذ',
       'تاريخ الفاتورة': i.invoice_date,
       'طريقة الدفع': i.payment_terms === 'credit' ? 'آجل' : 'نقدي',
-      'تاريخ الاستحقاق': i.due_date || '-',
+      'تاريخ الاستحقاق': i.due_date || (i.payment_terms === 'credit' ? 'بدون تاريخ استحقاق' : '-'),
       'إجمالي الفاتورة': i.total_amount ?? i.subtotal ?? 0,
       'الحالة': i.status === 'cancelled' ? 'ملغاة' : i.status === 'paid' ? 'مدفوعة بالكامل' : i.status === 'partially_paid' ? 'مدفوعة جزئياً' : 'غير مدفوعة'
     }));
@@ -164,7 +164,7 @@ export default function SalesInvoicesListPage({ onNotify }) {
                     <tr key={inv.id || idx} className="hover:bg-gray-50">
                       <td className="p-3 font-mono font-bold text-[#1F3A5F]">{inv.invoice_number}</td>
                       <td className="p-3 font-bold text-gray-900">{inv.customer_name || 'عميل نقدي'}</td>
-                      <td className="p-3 text-gray-600">{inv.outlet_name || 'الفرع الرئيسي'}</td>
+                      <td className="p-3 text-gray-600">{inv.outlet_name || 'بدون منفذ'}</td>
                       <td className="p-3 text-gray-600 font-mono">{formatDate(inv.invoice_date)}</td>
                       <td className="p-3 text-center">
                         <span className={`inline-block px-2 py-0.5 rounded-full font-bold text-[11px] ${
@@ -176,6 +176,8 @@ export default function SalesInvoicesListPage({ onNotify }) {
                       <td className="p-3 text-center font-mono">
                         {isCredit && inv.due_date ? (
                           <span className="font-bold text-rose-700">{formatDate(inv.due_date)}</span>
+                        ) : isCredit ? (
+                          <span className="text-gray-500 font-sans text-xs">بدون تاريخ استحقاق</span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}

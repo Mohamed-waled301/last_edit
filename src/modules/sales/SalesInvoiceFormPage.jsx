@@ -95,7 +95,7 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
         const outs = Array.isArray(outRes.data) ? outRes.data : [];
 
         const settings = setRes?.settings || setRes?.data || {};
-        const creditDays = Number(settings.default_credit_days) || 30;
+        const creditDays = Number(settings.default_credit_days) || 0;
         setDefaultCreditDays(creditDays);
 
         setCustomers(filteredCusts);
@@ -106,7 +106,7 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
         setForm(prev => ({
           ...prev,
           invoice_number: invNum,
-          outlet_id: activeUser.outlet_id || (outs.length > 0 ? outs[0].id : '')
+          outlet_id: outs.length > 0 ? (activeUser.outlet_id || outs[0].id) : ''
         }));
       } catch (err) {
         console.error(err);
@@ -144,21 +144,21 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
     }
   };
 
-  // Payment terms change with automatic due date calculation (Requirement 3)
+  // Payment terms change with automatic due date calculation if defaultCreditDays > 0
   const handlePaymentTermsChange = (terms) => {
     setForm(prev => ({
       ...prev,
       payment_terms: terms,
-      due_date: terms === 'credit' ? addDaysToDateString(prev.invoice_date, defaultCreditDays) : ''
+      due_date: (terms === 'credit' && defaultCreditDays > 0) ? addDaysToDateString(prev.invoice_date, defaultCreditDays) : ''
     }));
   };
 
-  // Invoice date change with automatic due date update for credit invoices (Requirement 3)
+  // Invoice date change with automatic due date update for credit invoices if defaultCreditDays > 0
   const handleInvoiceDateChange = (newDate) => {
     setForm(prev => ({
       ...prev,
       invoice_date: newDate,
-      due_date: prev.payment_terms === 'credit' ? addDaysToDateString(newDate, defaultCreditDays) : ''
+      due_date: (prev.payment_terms === 'credit' && defaultCreditDays > 0) ? addDaysToDateString(newDate, defaultCreditDays) : prev.due_date
     }));
   };
 
@@ -451,12 +451,8 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
   const validate = () => {
     const errs = {};
     if (!form.customer_id) errs.customer_id = 'يرجى تحديد العميل';
-    if (!form.outlet_id) errs.outlet_id = 'يرجى تحديد الفرع أو المعرض';
+    if (outlets.length > 0 && !form.outlet_id) errs.outlet_id = 'يرجى تحديد الفرع أو المعرض';
     if (!form.invoice_date) errs.invoice_date = 'تاريخ الفاتورة مطلوب';
-
-    if (form.payment_terms === 'credit' && !form.due_date) {
-      errs.due_date = 'تاريخ الاستحقاق إلزامي للفواتير الآجلة';
-    }
 
     if (creditLimitExceeded) {
       errs.credit_limit = creditLimitExceeded.message;
@@ -535,10 +531,10 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
       const payload = {
         invoice_number: form.invoice_number,
         customer_id: form.customer_id,
-        outlet_id: form.outlet_id,
+        outlet_id: form.outlet_id || null,
         invoice_date: form.invoice_date,
         payment_terms: form.payment_terms,
-        due_date: form.payment_terms === 'credit' ? form.due_date : null,
+        due_date: form.payment_terms === 'credit' ? (form.due_date || null) : null,
         notes: form.notes,
         items: form.items.map(it => ({
           product_id: it.product_id,
@@ -599,8 +595,7 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
 
   const isFormValid = Boolean(
     form.customer_id &&
-    form.outlet_id &&
-    (form.payment_terms === 'cash' || form.due_date) &&
+    (outlets.length === 0 || form.outlet_id) &&
     !creditLimitExceeded &&
     form.items.length > 0 &&
     isLastLineComplete
@@ -726,49 +721,51 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
               <FieldError error={errors.customer_id} />
             </div>
 
-            {/* Outlet Selector + Quick Add & Management */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="sales-invoice-outlet-select" className="block text-xs font-bold text-gray-700">
-                  الفرع / المعرض <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickOutletModal(true)}
-                    className="text-[11px] font-bold text-[#1F3A5F] hover:underline inline-flex items-center gap-0.5 cursor-pointer"
-                    title="إضافة فرع أو معرض جديد سريعاً"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>+ فرع جديد</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { window.location.hash = '#/outlets'; }}
-                    className="text-[11px] text-gray-500 hover:text-[#1F3A5F] inline-flex items-center gap-0.5 cursor-pointer"
-                    title="إدارة وتعديل وحذف كافة الفروع"
-                  >
-                    <Store className="w-3 h-3" />
-                    <span>إدارة</span>
-                  </button>
+            {/* Outlet Selector + Quick Add & Management (Shown ONLY when outlets exist) */}
+            {outlets.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="sales-invoice-outlet-select" className="block text-xs font-bold text-gray-700">
+                    الفرع / المعرض <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickOutletModal(true)}
+                      className="text-[11px] font-bold text-[#1F3A5F] hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+                      title="إضافة فرع أو معرض جديد سريعاً"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>+ فرع جديد</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { window.location.hash = '#/outlets'; }}
+                      className="text-[11px] text-gray-500 hover:text-[#1F3A5F] inline-flex items-center gap-0.5 cursor-pointer"
+                      title="إدارة وتعديل وحذف كافة الفروع"
+                    >
+                      <Store className="w-3 h-3" />
+                      <span>إدارة</span>
+                    </button>
+                  </div>
                 </div>
+                <select
+                  id="sales-invoice-outlet-select"
+                  aria-required="true"
+                  aria-invalid={Boolean(errors.outlet_id)}
+                  value={form.outlet_id}
+                  onChange={(e) => setForm(prev => ({ ...prev, outlet_id: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                  required
+                >
+                  <option value="">-- اختر المنفذ --</option>
+                  {outlets.map(o => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
+                  ))}
+                </select>
+                <FieldError error={errors.outlet_id} />
               </div>
-              <select
-                id="sales-invoice-outlet-select"
-                aria-required="true"
-                aria-invalid={Boolean(errors.outlet_id)}
-                value={form.outlet_id}
-                onChange={(e) => setForm(prev => ({ ...prev, outlet_id: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
-                required
-              >
-                <option value="">-- اختر المنفذ --</option>
-                {outlets.map(o => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
-                ))}
-              </select>
-              <FieldError error={errors.outlet_id} />
-            </div>
+            )}
 
             {/* Invoice Date */}
             <div>
@@ -784,7 +781,7 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
               />
             </div>
 
-            {/* Payment Terms (Requirement F1) */}
+            {/* Payment Terms */}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 طريقة الدفع <span className="text-red-500">*</span>
@@ -794,30 +791,30 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
                 onChange={(e) => handlePaymentTermsChange(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-bold bg-white text-[#1F3A5F] focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
               >
-                <option value="cash">نقدي - لا يشترط تاريخ استحقاق</option>
-                <option value="credit">آجل - يتطلب تاريخ استحقاق إلزامي</option>
+                <option value="cash">نقدي فوري</option>
+                <option value="credit">آجل</option>
               </select>
             </div>
 
-            {/* Due Date (Credit Only - Requirement F1 & 3) */}
+            {/* Due Date (Credit Only) */}
             {form.payment_terms === 'credit' ? (
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-rose-800">
-                    تاريخ الاستحقاق (إلزامي للآجل) <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-gray-700">
+                    تاريخ الاستحقاق (اختياري)
                   </label>
-                  <span className="text-[11px] text-gray-500 font-mono">
-                    (افتراضي: +{defaultCreditDays} يوم)
-                  </span>
+                  {defaultCreditDays > 0 && (
+                    <span className="text-[11px] text-gray-500 font-mono">
+                      (افتراضي: +{defaultCreditDays} يوم)
+                    </span>
+                  )}
                 </div>
                 <input
                   type="date"
                   value={form.due_date}
                   onChange={(e) => setForm(prev => ({ ...prev, due_date: e.target.value }))}
-                  className="w-full px-3 py-2 border border-rose-300 rounded-md text-sm font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-rose-500"
-                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 />
-                <FieldError error={errors.due_date} />
               </div>
             ) : (
               <div>

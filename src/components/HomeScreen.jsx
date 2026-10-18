@@ -120,13 +120,13 @@ export default function HomeScreen({ onNavigate, userRole }) {
       key: 'due_date',
       header: 'تاريخ الاستحقاق',
       align: 'center',
-      render: (val, row) => (
+      render: (val) => (
         <span
           className="font-mono tabular-nums text-xs font-semibold text-gray-700"
           style={{ direction: 'ltr', unicodeBidi: 'isolate' }}
-          title={formatDate(val || row.invoice_date)}
+          title={val ? formatDate(val) : 'بدون تاريخ استحقاق'}
         >
-          {formatDate(val || row.invoice_date)}
+          {val ? formatDate(val) : 'بدون تاريخ استحقاق'}
         </span>
       ),
     },
@@ -152,6 +152,9 @@ export default function HomeScreen({ onNavigate, userRole }) {
       header: 'الحالة',
       align: 'center',
       render: (val, row) => {
+        if (!row.due_date) {
+          return <span className="erp-badge-gray text-xs">بدون تاريخ استحقاق</span>;
+        }
         if (row.is_overdue) {
           return <span className="erp-badge-red text-xs">متأخرة</span>;
         }
