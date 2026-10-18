@@ -130,7 +130,7 @@ export const salesRepo = {
 
     transactions.sort((a, b) => new Date(a.raw_date).getTime() - new Date(b.raw_date).getTime());
 
-    let runningBalance = opening;
+    let runningBalance = 0;
     const ledger = transactions.map(tx => {
       runningBalance = runningBalance + tx.debit - tx.credit;
       return {
@@ -139,11 +139,21 @@ export const salesRepo = {
       };
     });
 
-    const bal = BalanceCalculator.calculateCustomerBalance(invoices, returns, opening);
+    const activeInvoices = invoices.filter(i => i.status !== 'cancelled');
+    const activeReturns = returns.filter(r => r.status !== 'cancelled');
+    const activePayments = payments.filter(p => p.status !== 'cancelled');
+    const unlinkedCustPaid = activePayments
+      .filter(p => !p.invoice_id)
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    const bal = BalanceCalculator.calculateCustomerBalance(activeInvoices, activeReturns, opening, unlinkedCustPaid);
 
     return {
       customer: { ...customer, opening_balance: opening, opening_balance_type: openingType, ...bal },
       statement: ledger,
+      movements: ledger,
+      opening_balance: opening,
+      opening_balance_type: openingType,
       invoices,
       payments,
       summary: {

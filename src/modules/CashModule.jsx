@@ -318,14 +318,14 @@ export default function CashModule({ onBack, onNotify }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {transactions.filter(t => t.tx_type === 'outflow').length === 0 ? (
+                  {transactions.filter(t => (t.category === 'operating_expense' || t.reference_type === 'EXPENSE_DISBURSEMENT') && t.category !== 'supplier_payment' && t.reference_type !== 'SUPPLIER_PAYMENT').length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-gray-500 font-medium">
-                        لا توجد سندات صرف مسجلة حتى الآن.
+                        لا توجد سندات صرف مصروفات مسجلة حتى الآن.
                       </td>
                     </tr>
                   ) : (
-                    transactions.filter(t => t.tx_type === 'outflow').map(t => (
+                    transactions.filter(t => (t.category === 'operating_expense' || t.reference_type === 'EXPENSE_DISBURSEMENT') && t.category !== 'supplier_payment' && t.reference_type !== 'SUPPLIER_PAYMENT').map(t => (
                       <tr key={t.id} className="hover:bg-red-50/20 transition-colors">
                         <td className="py-3 px-4 font-mono font-bold text-gray-900">{t.tx_number || `TX-${t.id}`}</td>
                         <td className="py-3 px-4 text-xs text-gray-600">{formatDate(t.created_at || t.tx_date)}</td>

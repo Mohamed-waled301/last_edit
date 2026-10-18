@@ -21,11 +21,25 @@ export function formatNumber(num, decimals = 2) {
 export function formatDate(dateStr) {
   if (!dateStr) return '-';
   try {
-    const d = new Date(dateStr);
+    const raw = String(dateStr).trim();
+    if (!raw) return '-';
+    // If already in DD/MM/YYYY
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+
+    const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (isoMatch) {
+      const year = isoMatch[1];
+      const month = isoMatch[2].padStart(2, '0');
+      const day = isoMatch[3].padStart(2, '0');
+      return `${day}/${month}/${year}`;
+    }
+
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return raw;
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return `${day}/${month}/${year}`;
   } catch {
     return dateStr;
   }

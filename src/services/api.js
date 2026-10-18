@@ -954,6 +954,12 @@ export const api = {
     const logs = await dataManagementRepo.getAuditLogs(filters);
     return { success: true, data: logs, audit_logs: logs };
   },
+  auditAccountingAnomalies: async () => {
+    return await dataManagementRepo.auditAccountingAnomalies();
+  },
+  repairAccountingAnomalies: async (selectedIds = []) => {
+    return await dataManagementRepo.repairAccountingAnomalies(selectedIds, currentUserId);
+  },
 
   // Real-Time Hostinger Database Sync
   syncPush,

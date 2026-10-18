@@ -26,9 +26,17 @@ export default function DisbursementsListPage({ onNotify }) {
       ]);
 
       const txList = Array.isArray(txRes.data) ? txRes.data : (Array.isArray(txRes.transactions) ? txRes.transactions : []);
-      // Filter operating expenses / outflows
-      const outflows = txList.filter(t => t.tx_type === 'outflow' || t.category === 'operating_expense' || t.reference_type === 'EXPENSE_DISBURSEMENT');
-      setExpenseTxs(outflows.length > 0 ? outflows : txList);
+      // Filter real operating expenses ONLY (أذون صرف المصروفات التشغيلية الحقيقية فقط)
+      const realExpenses = txList.filter(t => 
+        (t.category === 'operating_expense' || t.reference_type === 'EXPENSE_DISBURSEMENT') &&
+        t.category !== 'supplier_payment' &&
+        t.reference_type !== 'SUPPLIER_PAYMENT' &&
+        t.category !== 'customer_payment' &&
+        t.reference_type !== 'CUSTOMER_RECEIPT' &&
+        t.category !== 'purchase_orders' &&
+        t.category !== 'sales_invoices'
+      );
+      setExpenseTxs(realExpenses);
 
       const sPays = Array.isArray(supPayRes.data) ? supPayRes.data : (supPayRes.payments || []);
       setSupplierPayments(sPays);

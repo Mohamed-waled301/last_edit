@@ -90,6 +90,8 @@ function withComputedBalances(party, bal) {
       : resolveOpeningType(party, 'customer')),
     supplier_balance: finalSup, // له
     customer_balance: finalCust, // عليه
+    balance_due: party.is_supplier && !party.is_customer ? finalSup : finalCust,
+    current_balance: party.is_supplier && !party.is_customer ? finalSup : (party.is_customer && !party.is_supplier ? finalCust : finalNet),
     net_balance: finalNet, // الصافي = عليه - له
     max_offset_amount: finalMaxOffset,
     available_credit: availCredit.availableEGP,

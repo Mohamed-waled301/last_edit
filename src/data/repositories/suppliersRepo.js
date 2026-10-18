@@ -179,7 +179,17 @@ export const suppliersRepo = {
 
     transactions.sort((a, b) => new Date(a.raw_date).getTime() - new Date(b.raw_date).getTime());
 
-    let runningBalance = opening;
+    const activeInvoices = invoices.filter(i => i.status !== 'cancelled');
+    const activePayments = payments.filter(p => p.status !== 'cancelled');
+    const activeReturns = returns.filter(r => r.status !== 'cancelled');
+
+    const totalPurchases = activeInvoices.reduce((s, i) => s + (Number(i.total_amount) || 0), 0);
+    const totalPaid = activePayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const totalReturns = activeReturns.reduce((s, r) => s + (Number(r.total_amount) || 0), 0);
+    const initialBal = openingType === 'debit' ? -opening : opening;
+    const finalBalance = Number((initialBal + totalPurchases - totalPaid - totalReturns).toFixed(2));
+
+    let runningBalance = 0;
     const ledger = transactions.map(tx => {
       runningBalance = runningBalance + tx.credit - tx.debit;
       return {
@@ -191,18 +201,23 @@ export const suppliersRepo = {
     return {
       supplier,
       statement: ledger,
+      movements: ledger,
+      opening_balance: opening,
+      opening_balance_type: openingType,
       invoices,
       payments,
       summary: {
         opening_balance: opening,
         opening_balance_type: openingType,
-        total_purchases: supplier.total_purchases ?? supplier.total_invoiced ?? 0,
-        total_paid: supplier.total_paid ?? 0,
-        remaining_balance: supplier.outstanding_balance ?? supplier.balance_due ?? 0,
+        total_purchases: totalPurchases,
+        total_paid: totalPaid,
+        total_returns: totalReturns,
+        remaining_balance: Math.max(0, finalBalance),
+        balance_due: Math.max(0, finalBalance),
       },
-      total_invoiced: supplier.total_invoiced,
-      total_paid: supplier.total_paid,
-      balance_due: supplier.balance_due,
+      total_invoiced: totalPurchases,
+      total_paid: totalPaid,
+      balance_due: Math.max(0, finalBalance),
     };
   },
 
