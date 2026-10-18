@@ -1,7 +1,7 @@
 {
   "name": "code-systems",
   "private": true,
-  "version": "1.0.8",
+  "version": "1.0.9",
   "type": "module",
   "description": "code systems - نظام تخطيط موارد المؤسسات المتكامل",
   "author": "code systems",
@@ -65,6 +65,7 @@
     "appId": "com.apexapparelerp.app",
     "productName": "code systems",
     "copyright": "Copyright © 2026 code systems",
+    "compression": "normal",
     "npmRebuild": false,
     "directories": {
       "output": "release"

@@ -51,6 +51,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Cache Electron binaries and builder tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-cache-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-cache-
+
       - name: Run automated test suite
         run: npm test
 

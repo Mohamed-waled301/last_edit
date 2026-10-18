@@ -1,9 +1,6 @@
 name: Build Windows Application (Both Editions)
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 jobs:
