@@ -122,7 +122,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             try {
               const parsed = JSON.parse(storedPayload);
               if (parsed) {
-                const matchesId = !docId || String(parsed.id) === String(docId) || String(parsed.cutting_number) === String(docId) || String(parsed.order_number) === String(docId) || String(parsed.invoice_number) === String(docId) || String(parsed.po_number) === String(docId);
+                const matchesId = !docId || String(parsed.id) === String(docId) || String(parsed.item?.id) === String(docId) || String(parsed.cutting_number) === String(docId) || String(parsed.order_number) === String(docId) || String(parsed.invoice_number) === String(docId) || String(parsed.po_number) === String(docId);
                 const payloadIsCut = isCutOrder || parsed.type === 'cut_order' || Boolean(parsed.matrix) || Boolean(parsed.cutting_number);
 
                 if (matchesId && (!docType || parsed.type === docType || (isCutOrder && payloadIsCut))) {
@@ -218,8 +218,43 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           }
           setDocumentData(found || null);
         } else if (docType === 'stock_card') {
-          const res = await (api.getStockMovements ? api.getStockMovements(docId) : Promise.resolve(null)).catch(() => null);
-          setDocumentData(res?.data || res || null);
+          if (docId) {
+            try {
+              const cardRes = await (api.getItemStockCard ? api.getItemStockCard(docId) : Promise.resolve(null)).catch(() => null);
+              const cardData = cardRes?.data || cardRes;
+              let itm = null;
+              if (db.items) itm = await db.items.get(docId).catch(() => null);
+              if (!itm && db.materials) itm = await db.materials.get(docId).catch(() => null);
+              if (!itm && db.products) itm = await db.products.get(docId).catch(() => null);
+              if (!itm) itm = cardData?.item;
+
+              if (cardData || itm) {
+                const rawEntries = cardData?.entries || cardData?.movements || [];
+                const formattedMovements = rawEntries.map((entry) => ({
+                  date: entry.date,
+                  movement_type_ar: entry.movement_type_ar || entry.movement_type,
+                  type: entry.movement_type,
+                  document_number: entry.document_id || entry.reference_id || entry.document_number || '-',
+                  quantity_in: entry.direction === 'in' ? entry.quantity : (entry.quantity_in || entry.in_qty || 0),
+                  quantity_out: entry.direction === 'out' ? entry.quantity : (entry.quantity_out || entry.out_qty || 0),
+                  running_balance: entry.running_balance,
+                  notes: entry.notes || '-'
+                }));
+                setDocumentData({
+                  type: 'stock_card',
+                  id: docId,
+                  item: itm || { id: docId, name: 'الصنف', code: '', unit: 'قطعة' },
+                  movements: formattedMovements,
+                  currentStock: cardData?.closing_balance ?? cardData?.current_balance ?? itm?.actual_balance ?? 0,
+                  totalIn: cardData?.total_in ?? 0,
+                  totalOut: cardData?.total_out ?? 0,
+                  openingBalance: cardData?.opening_balance ?? 0
+                });
+              }
+            } catch (scErr) {
+              console.error('Failed to load stock card for print preview:', scErr);
+            }
+          }
         }
       } catch (err) {
         console.error('Failed to load document for print preview:', err);
@@ -775,16 +810,24 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 </tr>
               </thead>
               <tbody>
-                {movements.map((m, idx) => (
-                  <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
-                    <td className="p-2 border border-slate-200 font-mono">{formatDate(m.date)}</td>
-                    <td className="p-2 border border-slate-200">{m.movement_type_ar || m.type}</td>
-                    <td className="p-2 border border-slate-200 font-mono">{m.document_number || '-'}</td>
-                    <td className="p-2 border border-slate-200 text-center font-mono text-emerald-700">{m.quantity_in > 0 ? formatNumber(m.quantity_in) : '-'}</td>
-                    <td className="p-2 border border-slate-200 text-center font-mono text-rose-700">{m.quantity_out > 0 ? formatNumber(m.quantity_out) : '-'}</td>
-                    <td className="p-2 border border-slate-200 text-center font-mono font-bold text-slate-900">{formatNumber(m.running_balance)}</td>
+                {movements.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-6 text-center text-slate-500 font-semibold">
+                      لا توجد حركات مخزنية مسجلة لهذا الصنف خلال الفترة المحددة.
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  movements.map((m, idx) => (
+                    <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
+                      <td className="p-2 border border-slate-200 font-mono">{formatDate(m.date)}</td>
+                      <td className="p-2 border border-slate-200">{m.movement_type_ar || m.type}</td>
+                      <td className="p-2 border border-slate-200 font-mono">{m.document_number || '-'}</td>
+                      <td className="p-2 border border-slate-200 text-center font-mono text-emerald-700">{m.quantity_in > 0 ? formatNumber(m.quantity_in) : '-'}</td>
+                      <td className="p-2 border border-slate-200 text-center font-mono text-rose-700">{m.quantity_out > 0 ? formatNumber(m.quantity_out) : '-'}</td>
+                      <td className="p-2 border border-slate-200 text-center font-mono font-bold text-slate-900">{formatNumber(m.running_balance)}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
