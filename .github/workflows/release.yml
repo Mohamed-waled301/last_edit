@@ -49,7 +49,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci || npm install
 
       - name: Cache Electron binaries and builder tools
         uses: actions/cache@v4
