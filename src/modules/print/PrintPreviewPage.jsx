@@ -24,6 +24,7 @@ import db from '../../data/db';
 import { salesRepo, suppliersRepo, partiesRepo, manufacturingRepo, itemsRepo, reportsRepo } from '../../data';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
 import { generatePurchaseInvoiceHtml, generateSalesInvoiceHtml, generateCutOrderHtml } from './invoicePrintTemplates';
+import { calculateStatementSummaryCards } from '../../logic/statementSummaryCards';
 
 export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   const params = useMemo(() => {
@@ -874,16 +875,18 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         };
       });
 
+      const printSummaryCards = calculateStatementSummaryCards({
+        party,
+        openingBalance: stData.summary?.opening_balance ?? party.opening_balance ?? 0,
+        openingType: stData.summary?.opening_balance_type ?? party.opening_balance_type,
+        filteredRows: transactions,
+        allMovements: transactions,
+        txTypeFilter: 'all'
+      });
+
       const finalClosingBalance = stData.balance_due ??
         stData.remaining_balance ??
-        stData.summary?.remaining_balance ??
-        stData.summary?.balance_due ??
-        party.customer_balance ??
-        party.supplier_balance ??
-        party.balance_due ??
-        party.current_balance ??
-        party.balance ??
-        (transactions.length > 0 ? transactions[transactions.length - 1].running_balance : 0);
+        printSummaryCards.finalBalance;
 
       // 4.A) Thermal 80mm Layout for Account Statement
       if (isThermal) {
@@ -979,7 +982,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             </div>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-4 text-xs font-bold">
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap justify-between items-center gap-4 text-xs font-bold">
             <div>
               <span className="text-slate-500 block mb-1">اسم الطرف التجاري:</span>
               <span className="text-sm font-bold text-slate-900 block">{party.name || 'عميل / مورد'}</span>
@@ -988,10 +991,53 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               <span className="text-slate-500 block mb-1">كود الحساب:</span>
               <span className="text-sm font-mono text-slate-900 block">{party.code || '-'}</span>
             </div>
-            <div className="text-left">
-              <span className="text-slate-500 block mb-1">الرصيد الختامي الحالي:</span>
-              <span className="text-base font-mono font-bold text-blue-800 block">
-                {formatCurrency(finalClosingBalance)}
+            <div>
+              <span className="text-slate-500 block mb-1">طبيعة الحساب:</span>
+              <span className="text-sm font-bold text-slate-800 block">
+                {party.is_customer && !party.is_supplier ? 'عميل توزيع' : 'مورد / ورشة تشغيل'}
+              </span>
+            </div>
+          </div>
+
+          {/* 4 Summary Cards */}
+          <div className="grid grid-cols-4 gap-3 text-right">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+              <span className="text-[10px] font-bold text-slate-500 block mb-0.5">رصيد أول المدة</span>
+              <span className="text-sm font-bold font-mono text-slate-900 block">
+                {formatCurrency(printSummaryCards.openingBalance)}
+              </span>
+              <span className="text-[9px] text-slate-500 block mt-0.5 font-semibold">
+                {printSummaryCards.openingNatureText}
+              </span>
+            </div>
+
+            <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg">
+              <span className="text-[10px] font-bold text-blue-700 block mb-0.5">إجمالي الفواتير والتوريدات</span>
+              <span className="text-sm font-bold font-mono text-blue-900 block">
+                {formatCurrency(printSummaryCards.periodInvoices)}
+              </span>
+              <span className="text-[9px] text-blue-600 block mt-0.5 font-semibold">
+                الفواتير وتكلفة المراحل للفترة
+              </span>
+            </div>
+
+            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg">
+              <span className="text-[10px] font-bold text-emerald-700 block mb-0.5">إجمالي المسدد</span>
+              <span className="text-sm font-bold font-mono text-emerald-900 block">
+                {formatCurrency(printSummaryCards.periodPaid)}
+              </span>
+              <span className="text-[9px] text-emerald-600 block mt-0.5 font-semibold">
+                سندات الصرف والدفعات المعتمدة
+              </span>
+            </div>
+
+            <div className="p-3 bg-slate-900 text-white rounded-lg">
+              <span className="text-[10px] font-bold text-slate-300 block mb-0.5">الرصيد المتبقي الحالي</span>
+              <span className={`text-base font-bold font-mono block ${printSummaryCards.valueClass}`}>
+                {formatCurrency(printSummaryCards.finalBalance)}
+              </span>
+              <span className={`text-[9px] block mt-0.5 font-semibold ${printSummaryCards.subtitleClass}`}>
+                {printSummaryCards.subtitle}
               </span>
             </div>
           </div>

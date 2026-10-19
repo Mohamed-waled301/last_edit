@@ -20,6 +20,10 @@ import { api } from '../../services/api';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
 import { exportToExcel } from '../../utils/exportExcel';
 import { isValidPhoneForWhatsApp, openWhatsAppChat } from '../../utils/phone';
+import {
+  calculateStatementSummaryCards,
+  computeMovementsWithRunningBalance
+} from '../../logic/statementSummaryCards';
 
 export default function VendorStatementPage({ vendorId = null, onBack, onNotify }) {
   const [vendor, setVendor] = useState(null);
@@ -198,35 +202,16 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
     loadStatement();
   }, [vendorId]);
 
-  // Compute filtered movements with exact running balance
+  // Compute movements with exact cumulative running balance
   const computedMovements = useMemo(() => {
     const isCust = Boolean(vendor?.is_customer && !vendor?.is_supplier);
-    // For customers: debit is positive (+) owing us. Credit is negative (-).
-    // For suppliers: credit is positive (+) owing them. Debit is negative (-).
-    let running = isCust
-      ? (summary.opening_type === 'credit' ? -summary.opening_balance : summary.opening_balance)
-      : (summary.opening_type === 'debit' ? -summary.opening_balance : summary.opening_balance);
+    const openBal = Math.abs(Number(summary.opening_balance) || 0);
+    const resolvedType = summary.opening_type || (isCust ? 'debit' : 'credit');
+    const signedOpening = isCust
+      ? (resolvedType === 'credit' ? -openBal : openBal)
+      : (resolvedType === 'debit' ? -openBal : openBal);
 
-    let totDebit = 0;
-    let totCredit = 0;
-
-    const listWithBal = rawMovements.map((m) => {
-      // Debit increases balance; Credit decreases balance
-      running = running + m.debit - m.credit;
-      totDebit += m.debit;
-      totCredit += m.credit;
-      return {
-        ...m,
-        running_balance: running
-      };
-    });
-
-    return {
-      items: listWithBal,
-      total_debit: totDebit,
-      total_credit: totCredit,
-      closing_balance: running
-    };
+    return computeMovementsWithRunningBalance(rawMovements, signedOpening);
   }, [rawMovements, summary.opening_balance, summary.opening_type, vendor]);
 
   // Helper to parse dd/mm/yyyy or yyyy-mm-dd to comparable YYYY-MM-DD
@@ -241,7 +226,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
     return clean;
   };
 
-  // Filtered rows by user criteria (without corrupting actual running balances)
+  // Filtered rows by user criteria (preserving authentic running balances)
   const filteredRows = useMemo(() => {
     if (txTypeFilter === 'opening') return [];
     const startIso = parseToIso(startDate);
@@ -267,15 +252,28 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
     });
   }, [computedMovements, startDate, endDate, searchDoc, txTypeFilter, stageFilter]);
 
+  // Calculate the 4 summary cards dynamically based on active filters and party nature
+  const cardSummary = useMemo(() => {
+    return calculateStatementSummaryCards({
+      party: vendor,
+      openingBalance: summary.opening_balance,
+      openingType: summary.opening_type,
+      filteredRows,
+      allMovements: computedMovements.items,
+      txTypeFilter
+    });
+  }, [vendor, summary.opening_balance, summary.opening_type, filteredRows, computedMovements.items, txTypeFilter]);
+
   const handleExportExcel = () => {
     if (!vendor) return;
+    const isCust = Boolean(vendor?.is_customer && !vendor?.is_supplier);
     const exportData = filteredRows.map((r, idx) => ({
       'م': idx + 1,
       'التاريخ': formatDate(r.date),
       'رقم المستند / أمر القص': r.doc_number,
       'المرحلة': r.stage,
       'البيان': r.description,
-      'المستحق (له)': r.debit,
+      [isCust ? 'المستحق (عليه)' : 'المستحق (له)']: r.debit,
       'المسدد (منه)': r.credit,
       'الرصيد التراكمي': r.running_balance
     }));
@@ -290,14 +288,17 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
         id: vendorId,
         party: vendor,
         statementData: {
-          statement: movements,
-          movements,
-          balance_due: finalBalance,
-          remaining_balance: finalBalance,
+          statement: filteredRows,
+          movements: filteredRows,
+          transactions: filteredRows,
+          balance_due: cardSummary.finalBalance,
+          remaining_balance: cardSummary.finalBalance,
           summary: {
-            opening_balance: openingBalance,
-            opening_balance_type: openingType,
-            balance_due: finalBalance
+            opening_balance: cardSummary.openingBalance,
+            opening_balance_type: cardSummary.openingNature,
+            period_invoices: cardSummary.periodInvoices,
+            period_paid: cardSummary.periodPaid,
+            balance_due: cardSummary.finalBalance
           }
         }
       }));
@@ -417,7 +418,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                   {isValidPhoneForWhatsApp(vendor.phone) && (
                     <button
                       type="button"
-                      onClick={() => openWhatsAppChat(vendor.phone, `السلام عليكم ورحمة الله، مرفق كشف حسابكم طرفنا برصيد: ${formatCurrency(computedMovements.closing_balance)}.`)}
+                      onClick={() => openWhatsAppChat(vendor.phone, `السلام عليكم ورحمة الله، مرفق كشف حسابكم طرفنا برصيد: ${formatCurrency(cardSummary.finalBalance)}.`)}
                       className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 cursor-pointer"
                       title="مراسلة عبر واتساب"
                     >
@@ -429,45 +430,45 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
             </div>
           </div>
 
-          {/* Metric Cards */}
+          {/* Metric Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
+            {/* Card #1: Opening Balance */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
               <span className="text-xs font-bold text-slate-500 block mb-1">رصيد أول المدة</span>
               <span className="text-lg font-bold font-mono text-slate-800 block">
-                {formatCurrency(summary.opening_balance)}
+                {formatCurrency(cardSummary.openingBalance)}
               </span>
               <span className="text-[11px] text-slate-500 font-semibold block mt-1">
-                الطبيعة: {vendor?.is_customer && !vendor?.is_supplier
-                  ? (summary.opening_type === 'debit' ? 'مدين (مستحق عليه)' : 'دائن (رصيد دائن)')
-                  : (summary.opening_type === 'credit' ? 'دائن (مستحق له)' : 'مدين (دفعة مقدمة)')}
+                الطبيعة: {cardSummary.openingNatureText}
               </span>
             </div>
 
+            {/* Card #2: Period Invoices & Services */}
             <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-4">
-              <span className="text-xs font-bold text-blue-700 block mb-1">إجمالي المستحق / التكلفة</span>
+              <span className="text-xs font-bold text-blue-700 block mb-1">إجمالي الفواتير والتوريدات</span>
               <span className="text-lg font-bold font-mono text-blue-900 block">
-                {formatCurrency(computedMovements.total_debit)}
+                {formatCurrency(cardSummary.periodInvoices)}
               </span>
-              <span className="text-[11px] text-blue-600 block mt-1">إجمالي التوريدات ومراحل الشغل</span>
+              <span className="text-[11px] text-blue-600 block mt-1">الفواتير وتكلفة المراحل للفترة</span>
             </div>
 
+            {/* Card #3: Total Paid / Settled */}
             <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-4">
               <span className="text-xs font-bold text-emerald-700 block mb-1">إجمالي المسدد</span>
               <span className="text-lg font-bold font-mono text-emerald-900 block">
-                {formatCurrency(computedMovements.total_credit)}
+                {formatCurrency(cardSummary.periodPaid)}
               </span>
               <span className="text-[11px] text-emerald-600 block mt-1">سندات الصرف والدفعات المعتمدة</span>
             </div>
 
+            {/* Card #4: Final Remaining Cumulative Balance */}
             <div className="bg-slate-900 text-white rounded-xl p-4">
               <span className="text-xs font-bold text-slate-300 block mb-1">الرصيد المتبقي الحالي</span>
-              <span className="text-xl font-bold font-mono text-emerald-400 block">
-                {formatCurrency(computedMovements.closing_balance)}
+              <span className={`text-xl font-bold font-mono block ${cardSummary.valueClass}`}>
+                {formatCurrency(cardSummary.finalBalance)}
               </span>
-              <span className="text-[11px] text-slate-400 block mt-1">
-                {vendor?.is_customer && !vendor?.is_supplier
-                  ? (computedMovements.closing_balance > 0 ? 'مستحق على العميل (لنا)' : computedMovements.closing_balance < 0 ? 'رصيد دائن للعميل' : 'حساب مسوى بالكامل')
-                  : (computedMovements.closing_balance > 0 ? 'مستحق للجهة (له)' : computedMovements.closing_balance < 0 ? 'مستحق على الجهة (لنا)' : 'حساب مسوى بالكامل')}
+              <span className={`text-[11px] block mt-1 font-medium ${cardSummary.subtitleClass}`}>
+                {cardSummary.subtitle}
               </span>
             </div>
           </div>
@@ -582,11 +583,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                     <td className="p-3 font-mono text-slate-400">---</td>
                     <td className="p-3 text-slate-500">افتتاحي</td>
                     <td className="p-3">
-                      رصيد افتتاحي مسجل بدفتر الأستاذ (
-                      {vendor?.is_customer && !vendor?.is_supplier
-                        ? (summary.opening_type === 'debit' ? 'مدين - مستحق عليه' : 'دائن - رصيد دائن')
-                        : (summary.opening_type === 'credit' ? 'دائن - مستحق له' : 'مدين - دفعة مقدمة')}
-                      )
+                      رصيد افتتاحي مسجل بدفتر الأستاذ ({cardSummary.openingNatureText})
                     </td>
                     <td className="p-3 text-left font-mono">
                       {vendor?.is_customer && !vendor?.is_supplier
@@ -599,11 +596,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                         : (summary.opening_type === 'debit' ? formatCurrency(summary.opening_balance) : '-')}
                     </td>
                     <td className="p-3 text-left font-mono text-[#1F3A5F]">
-                      {formatCurrency(
-                        vendor?.is_customer && !vendor?.is_supplier
-                          ? (summary.opening_type === 'credit' ? -summary.opening_balance : summary.opening_balance)
-                          : (summary.opening_type === 'debit' ? -summary.opening_balance : summary.opening_balance)
-                      )}
+                      {formatCurrency(cardSummary.signedOpening)}
                     </td>
                   </tr>
                 )}
