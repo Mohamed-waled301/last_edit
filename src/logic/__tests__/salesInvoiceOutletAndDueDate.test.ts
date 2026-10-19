@@ -5,6 +5,7 @@ import { salesRepo } from '../../data/repositories/salesRepo';
 import { reportsRepo } from '../../data/repositories/reportsRepo';
 import { settingsRepo } from '../../data/repositories/settingsRepo';
 import { generateSalesInvoiceHtml } from '../../modules/print/invoicePrintTemplates';
+import { getTodayDateString, addDaysToDateString } from '../../utils/formatters';
 
 describe('Part 1: Sales Invoice Outlet and Due Date Rules', () => {
   beforeEach(async () => {
@@ -41,7 +42,7 @@ describe('Part 1: Sales Invoice Outlet and Due Date Rules', () => {
     const invoice = await salesRepo.createSalesInvoice({
       customer_id: customer.id,
       outlet_id: null,
-      invoice_date: '2026-10-18',
+      invoice_date: getTodayDateString(),
       payment_terms: 'credit',
       due_date: null,
       items: [
@@ -83,12 +84,14 @@ describe('Part 1: Sales Invoice Outlet and Due Date Rules', () => {
     await db.items.add(item);
     await db.products.add({ ...item, current_finished_stock: 20 });
 
+    const todayStr = getTodayDateString();
+    const futureDue = addDaysToDateString(todayStr, 30);
     const invoice = await salesRepo.createSalesInvoice({
       customer_id: customer.id,
       outlet_id: null,
-      invoice_date: '2026-10-18',
+      invoice_date: todayStr,
       payment_terms: 'credit',
-      due_date: '2026-11-18',
+      due_date: futureDue,
       items: [
         {
           product_id: item.id,
@@ -100,7 +103,7 @@ describe('Part 1: Sales Invoice Outlet and Due Date Rules', () => {
 
     expect(invoice).toBeDefined();
     expect(invoice.payment_terms).toBe('credit');
-    expect(invoice.due_date).toBe('2026-11-18');
+    expect(invoice.due_date).toBe(futureDue);
   });
 
   it('3. Posts cash sales with no outlet directly to the main treasury', async () => {
@@ -133,7 +136,7 @@ describe('Part 1: Sales Invoice Outlet and Due Date Rules', () => {
     const invoice = await salesRepo.createSalesInvoice({
       customer_id: customer.id,
       outlet_id: null,
-      invoice_date: '2026-10-18',
+      invoice_date: getTodayDateString(),
       payment_terms: 'cash',
       items: [
         {

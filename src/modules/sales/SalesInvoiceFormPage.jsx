@@ -18,7 +18,8 @@ import DocumentConfirmModal from '../../components/DocumentConfirmModal';
 import PostIssuePrintDialog from '../../components/PostIssuePrintDialog';
 import MoneyInput, { NumberInput } from '../../components/MoneyInput';
 import { api, getActiveUser } from '../../services/api';
-import { formatCurrency, getTodayDateString, addDaysToDateString } from '../../utils/formatters';
+import { formatCurrency, getTodayDateString } from '../../utils/formatters';
+import { toPiasters, fromPiasters } from '../../utils/money';
 import { Validators, FieldError } from '../../utils/validation';
 import { handleFormKeyDown } from '../../utils/formNavigation';
 import { navigationGuard } from '../../utils/navigationGuard';
@@ -51,7 +52,7 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
     outlet_id: activeUser.outlet_id || '',
     invoice_date: getTodayDateString(),
     payment_terms: 'cash', // 'cash' | 'credit'
-    due_date: '',
+    due_date: null,
     notes: '',
     items: [
       {
@@ -144,21 +145,20 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
     }
   };
 
-  // Payment terms change with automatic due date calculation if defaultCreditDays > 0
+  // Payment terms change (Requirement: no due date required or auto-generated for sales invoices)
   const handlePaymentTermsChange = (terms) => {
     setForm(prev => ({
       ...prev,
       payment_terms: terms,
-      due_date: (terms === 'credit' && defaultCreditDays > 0) ? addDaysToDateString(prev.invoice_date, defaultCreditDays) : ''
+      due_date: null
     }));
   };
 
-  // Invoice date change with automatic due date update for credit invoices if defaultCreditDays > 0
+  // Invoice date change
   const handleInvoiceDateChange = (newDate) => {
     setForm(prev => ({
       ...prev,
-      invoice_date: newDate,
-      due_date: (prev.payment_terms === 'credit' && defaultCreditDays > 0) ? addDaysToDateString(newDate, defaultCreditDays) : prev.due_date
+      invoice_date: newDate
     }));
   };
 
@@ -422,6 +422,13 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
     return sum + (q * p);
   }, 0);
 
+  // Authoritative Customer Account Summary Calculations (Integer Piasters)
+  const actualPaidAmount = form.payment_terms === 'cash' ? invoiceTotal : 0;
+  const customerPreviousBalance = customerBalance || 0;
+  const resultingCustomerBalance = fromPiasters(
+    toPiasters(customerPreviousBalance) + toPiasters(invoiceTotal) - toPiasters(actualPaidAmount)
+  );
+
   // Credit Limit Check (Requirement F3 & Customer Deal Type Rule)
   useEffect(() => {
     const isCustomerCredit = selectedCustomer && (
@@ -625,30 +632,57 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
     >
       <form onSubmit={(e) => e.preventDefault()} onKeyDown={handleFormKeyDown} className="space-y-6">
         {/* Customer Balance & Credit Limit Badge Banner (Requirement F3) */}
+        {/* Customer Account Summary Card (4 Metrics: Before, Invoice Total, Actual Paid, After) */}
         {selectedCustomer && (
-          <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-50 text-[#1F3A5F] flex items-center justify-center font-bold">
-                <User className="w-5 h-5" />
+          <div className="bg-white border-2 border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-50 text-[#1F3A5F] flex items-center justify-center font-bold">
+                  <User className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500 font-semibold block">بيانات العميل المحدد</span>
+                  <span className="font-bold text-gray-900 text-sm">{selectedCustomer.name}</span>
+                  {selectedCustomer.phone && (
+                    <span className="text-xs text-gray-500 font-mono block">هاتف: {selectedCustomer.phone}</span>
+                  )}
+                </div>
               </div>
-              <div>
-                <span className="text-xs text-gray-500 font-semibold block">بيانات العميل المحدد</span>
-                <span className="font-bold text-gray-900 text-sm">{selectedCustomer.name}</span>
+
+              <div className="flex items-center gap-6">
+                <div>
+                  <span className="text-xs text-gray-500 block">الحد الائتماني:</span>
+                  <span className="font-mono text-sm font-bold text-emerald-700">
+                    {selectedCustomer.credit_limit > 0 ? formatCurrency(selectedCustomer.credit_limit) : 'غير مقيد'}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-6">
-              <div>
-                <span className="text-xs text-gray-500 block">المديونية الحالية (عليه):</span>
-                <span className={`font-mono text-sm font-bold ${customerBalance > 0 ? 'text-rose-600' : 'text-gray-700'}`}>
-                  {formatCurrency(customerBalance)}
+            {/* 4 Read-Only Authoritative Balance Metrics */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                <span className="text-[11px] text-slate-500 block mb-0.5">رصيد العميل قبل الفاتورة</span>
+                <span className="font-mono text-sm font-bold text-slate-800">
+                  {formatCurrency(customerPreviousBalance)}
                 </span>
               </div>
-
-              <div>
-                <span className="text-xs text-gray-500 block">الحد الائتماني:</span>
-                <span className="font-mono text-sm font-bold text-emerald-700">
-                  {selectedCustomer.credit_limit > 0 ? formatCurrency(selectedCustomer.credit_limit) : 'غير مقيد'}
+              <div className="bg-blue-50/60 p-2.5 rounded-lg border border-blue-200">
+                <span className="text-[11px] text-blue-700 block mb-0.5">إجمالي الفاتورة</span>
+                <span className="font-mono text-sm font-bold text-blue-900">
+                  {formatCurrency(invoiceTotal)}
+                </span>
+              </div>
+              <div className="bg-emerald-50/60 p-2.5 rounded-lg border border-emerald-200">
+                <span className="text-[11px] text-emerald-700 block mb-0.5">المدفوع فعليًا</span>
+                <span className="font-mono text-sm font-bold text-emerald-800">
+                  {formatCurrency(actualPaidAmount)}
+                </span>
+              </div>
+              <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-300">
+                <span className="text-[11px] text-amber-800 block mb-0.5">الرصيد بعد الفاتورة</span>
+                <span className="font-mono text-sm font-bold text-amber-900">
+                  {formatCurrency(resultingCustomerBalance)}
                 </span>
               </div>
             </div>
@@ -796,39 +830,8 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
               </select>
             </div>
 
-            {/* Due Date (Credit Only) */}
-            {form.payment_terms === 'credit' ? (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-gray-700">
-                    تاريخ الاستحقاق (اختياري)
-                  </label>
-                  {defaultCreditDays > 0 && (
-                    <span className="text-[11px] text-gray-500 font-mono">
-                      (افتراضي: +{defaultCreditDays} يوم)
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="date"
-                  value={form.due_date}
-                  onChange={(e) => setForm(prev => ({ ...prev, due_date: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
-                />
-              </div>
-            ) : (
-              <div>
-                <label className="block text-xs font-bold text-gray-400 mb-1">
-                  تاريخ الاستحقاق
-                </label>
-                <div className="px-3 py-2 border border-dashed border-gray-200 bg-gray-50 rounded-md text-xs text-gray-400">
-                  غير مطلوب (تحصيل نقدي فوري)
-                </div>
-              </div>
-            )}
-
             {/* Notes */}
-            <div className="md:col-span-2">
+            <div className="md:col-span-4">
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 ملاحظات الفاتورة
               </label>

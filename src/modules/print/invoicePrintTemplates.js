@@ -101,8 +101,9 @@ export function wrapDocumentHtml({ title, content, paperSize = 'a4', orientation
 /**
  * 1. Purchase Invoice HTML Generator
  */
-export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4') {
+export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4', options = false) {
   if (!po) return '';
+  const showAccountBalance = typeof options === 'boolean' ? options : Boolean(options?.showAccountBalance);
   const isThermal = paperSize === '80mm';
   const companyName = settings?.factory_name || 'code systems';
   const hasValidLogo = Boolean(settings?.company_logo && typeof settings.company_logo === 'string' && settings.company_logo.trim() !== '');
@@ -124,6 +125,13 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4')
   const discount = Number(po.discount_value ?? 0);
   const additionalExpenses = Number(po.additional_expenses ?? 0);
   const totalAmount = Number(po.total_amount ?? po.grand_total ?? (subtotal - discount + additionalExpenses));
+
+  // Authoritative Supplier Account Balances for Optional Printing
+  const supPrevBalance = Number(po.supplier_previous_balance ?? po.previous_balance ?? po.supplier?.current_balance ?? 0);
+  const supActualPaid = Number(po.actual_paid_amount ?? po.paid_amount ?? (isCredit ? 0 : totalAmount));
+  const supResultingBalance = fromPiasters(
+    toPiasters(supPrevBalance) + toPiasters(totalAmount) - toPiasters(supActualPaid)
+  );
 
   // --- 1.A) Thermal 80mm Layout for Purchase Invoice ---
   if (isThermal) {
@@ -208,6 +216,24 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4')
             <span class="font-mono">${formatCurrency(totalAmount)}</span>
           </div>
         </div>
+
+        ${showAccountBalance ? `
+          <div style="margin-top: 6px; border-top: 1px dashed #64748b; padding-top: 4px; font-size: 10px;">
+            <div style="font-weight: bold; color: #1e3a8a; margin-bottom: 3px;">حساب المورد (الأرصدة):</div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>رصيد المورد قبل:</span>
+              <span class="font-mono">${formatCurrency(supPrevBalance)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>المدفوع فعليًا:</span>
+              <span class="font-mono">${formatCurrency(supActualPaid)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: bold; color: #1e3a8a;">
+              <span>الرصيد بعد الفاتورة:</span>
+              <span class="font-mono">${formatCurrency(supResultingBalance)}</span>
+            </div>
+          </div>
+        ` : ''}
 
         ${installmentsHtml}
 
@@ -382,6 +408,32 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4')
         </div>
       </div>
 
+      ${showAccountBalance ? `
+        <div style="margin-top: 16px; border: 1px solid #93c5fd; background: #eff6ff; border-radius: 8px; padding: 10px 14px; font-size: 11px;" class="break-inside-avoid">
+          <div style="font-weight: bold; color: #1e3a8a; margin-bottom: 6px; border-bottom: 1px solid #bfdbfe; padding-bottom: 4px;">
+            ملخص حساب المورد (الأرصدة المالية):
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+            <div>
+              <span style="color: #64748b; display: block; font-size: 10px;">رصيد المورد قبل الفاتورة:</span>
+              <span class="font-mono" style="font-weight: bold; color: #1e293b;">${formatCurrency(supPrevBalance)}</span>
+            </div>
+            <div>
+              <span style="color: #64748b; display: block; font-size: 10px;">إجمالي الفاتورة:</span>
+              <span class="font-mono" style="font-weight: bold; color: #1e3a8a;">${formatCurrency(totalAmount)}</span>
+            </div>
+            <div>
+              <span style="color: #64748b; display: block; font-size: 10px;">المدفوع فعليًا:</span>
+              <span class="font-mono" style="font-weight: bold; color: #047857;">${formatCurrency(supActualPaid)}</span>
+            </div>
+            <div>
+              <span style="color: #64748b; display: block; font-size: 10px;">الرصيد بعد الفاتورة:</span>
+              <span class="font-mono" style="font-weight: bold; color: #b91c1c;">${formatCurrency(supResultingBalance)}</span>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
       <!-- Installments Table (Credit) -->
       ${installmentsTableA4}
 
@@ -416,8 +468,9 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4')
 /**
  * 2. Sales Invoice HTML Generator
  */
-export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4', customerBalanceAfter = null) {
+export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4', customerBalanceAfter = null, options = false) {
   if (!invoice) return '';
+  const showAccountBalance = typeof options === 'boolean' ? options : Boolean(options?.showAccountBalance);
   const isThermal = paperSize === '80mm';
   const companyName = settings?.factory_name || 'code systems';
   const hasValidLogo = Boolean(settings?.company_logo && typeof settings.company_logo === 'string' && settings.company_logo.trim() !== '');
@@ -430,7 +483,6 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
   const customerPhone = invoice.customer_phone || invoice.customer?.phone || '';
   const isCredit = invoice.payment_terms === 'credit';
   const paymentTerms = isCredit ? 'آجل' : 'نقدي فوري';
-  const dueDate = invoice.due_date || '';
 
   const items = Array.isArray(invoice.items) ? invoice.items : [];
 
@@ -438,7 +490,7 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
   const totalAmount = Number(invoice.total_amount ?? invoice.total_invoice_amount ?? invoice.subtotal ?? 0);
   const subtotal = Number(invoice.subtotal ?? totalAmount);
   const discount = Number(invoice.discount_value ?? invoice.discount ?? 0);
-  const paidAmount = Number(invoice.paid_amount ?? (isCredit ? 0 : totalAmount));
+  const paidAmount = Number(invoice.actual_paid_amount ?? invoice.paid_amount ?? (isCredit ? 0 : totalAmount));
   const remainingAmount = Number(invoice.remaining_amount ?? (totalAmount - paidAmount));
 
   // Determine customer balance after invoice
@@ -452,6 +504,12 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
       balanceAfter = null;
     }
   }
+
+  // Authoritative Customer Account Balances for Optional Printing
+  const custPrevBalance = Number(invoice.customer_previous_balance ?? invoice.previous_balance ?? invoice.customer?.current_balance ?? 0);
+  const custResultingBalance = balanceAfter !== null ? balanceAfter : fromPiasters(
+    toPiasters(custPrevBalance) + toPiasters(totalAmount) - toPiasters(paidAmount)
+  );
 
   // --- 2.A) Thermal 80mm Layout for Sales Invoice ---
   if (isThermal) {
@@ -490,7 +548,6 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
             <div><strong>التاريخ:</strong> <span class="font-mono">${formatDate(invoiceDate)}</span></div>
             <div><strong>العميل:</strong> ${escapeHtml(customerName)}</div>
             <div><strong>طريقة السداد:</strong> ${escapeHtml(paymentTerms)}</div>
-            ${isCredit && dueDate ? `<div><strong>تاريخ الاستحقاق:</strong> <span class="font-mono">${formatDate(dueDate)}</span></div>` : ''}
           </div>
         </div>
 
@@ -534,10 +591,21 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
               <span>المتبقي الآجل:</span>
               <span class="font-mono font-bold">${formatCurrency(remainingAmount)}</span>
             </div>
-            ${balanceAfter !== null ? `
-              <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; color: #1e3a8a; border-top: 1px dotted #cbd5e1; padding-top: 3px; margin-top: 3px;">
-                <span>رصيد العميل بعد الفاتورة:</span>
-                <span class="font-mono">${formatCurrency(balanceAfter)}</span>
+            ${showAccountBalance ? `
+              <div style="margin-top: 6px; border-top: 1px dashed #64748b; padding-top: 4px; font-size: 10px;">
+                <div style="font-weight: bold; color: #1e3a8a; margin-bottom: 3px;">حساب العميل (الأرصدة):</div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>رصيد العميل قبل:</span>
+                  <span class="font-mono">${formatCurrency(custPrevBalance)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>المدفوع فعليًا:</span>
+                  <span class="font-mono">${formatCurrency(paidAmount)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-weight: bold; color: #1e3a8a;">
+                  <span>رصيد العميل بعد الفاتورة:</span>
+                  <span class="font-mono">${formatCurrency(custResultingBalance)}</span>
+                </div>
               </div>
             ` : ''}
           ` : ''}
@@ -625,11 +693,6 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
           <div style="font-size: 11px; color: #334155; margin-top: 3px;">
             طريقة السداد: <strong style="color: ${isCredit ? '#b91c1c' : '#047857'};">${escapeHtml(paymentTerms)}</strong>
           </div>
-          ${isCredit && dueDate ? `
-            <div style="font-size: 11px; color: #b91c1c; margin-top: 3px; font-weight: bold;">
-              تاريخ الاستحقاق: <span class="font-mono">${formatDate(dueDate)}</span>
-            </div>
-          ` : ''}
         </div>
       </div>
 
@@ -645,11 +708,6 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
           ${(invoice.outlet_name && invoice.outlet_name !== 'بدون منفذ' && invoice.outlet_id) ? `
             <span style="color: #64748b; font-weight: bold; display: block; margin-bottom: 3px;">الفرع / المنفذ:</span>
             <div style="font-size: 13px; font-weight: bold; color: #0f172a;">${escapeHtml(invoice.outlet_name)}</div>
-          ` : ''}
-          ${isCredit && balanceAfter !== null ? `
-            <div style="color: #1e3a8a; font-weight: bold; margin-top: 4px; font-size: 12px;">
-              رصيد العميل بعد الفاتورة: <span class="font-mono">${formatCurrency(balanceAfter)}</span>
-            </div>
           ` : ''}
         </div>
       </div>
@@ -711,6 +769,32 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
           ` : ''}
         </div>
       </div>
+
+      ${showAccountBalance ? `
+        <div style="margin-top: 16px; border: 1px solid #93c5fd; background: #eff6ff; border-radius: 8px; padding: 10px 14px; font-size: 11px;" class="break-inside-avoid">
+          <div style="font-weight: bold; color: #1e3a8a; margin-bottom: 6px; border-bottom: 1px solid #bfdbfe; padding-bottom: 4px;">
+            ملخص حساب العميل (الأرصدة المالية):
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+            <div>
+              <span style="color: #64748b; display: block; font-size: 10px;">رصيد العميل قبل الفاتورة:</span>
+              <span class="font-mono" style="font-weight: bold; color: #1e293b;">${formatCurrency(custPrevBalance)}</span>
+            </div>
+            <div>
+              <span style="color: #64748b; display: block; font-size: 10px;">إجمالي الفاتورة:</span>
+              <span class="font-mono" style="font-weight: bold; color: #1e3a8a;">${formatCurrency(totalAmount)}</span>
+            </div>
+            <div>
+              <span style="color: #64748b; display: block; font-size: 10px;">المدفوع فعليًا:</span>
+              <span class="font-mono" style="font-weight: bold; color: #047857;">${formatCurrency(paidAmount)}</span>
+            </div>
+            <div>
+              <span style="color: #64748b; display: block; font-size: 10px;">رصيد العميل بعد الفاتورة:</span>
+              <span class="font-mono" style="font-weight: bold; color: #b91c1c;">${formatCurrency(custResultingBalance)}</span>
+            </div>
+          </div>
+        </div>
+      ` : ''}
 
       <!-- Signatures for Sales Document -->
       <div style="margin-top: 36px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center; font-size: 11px; font-weight: bold; color: #334155;" class="break-inside-avoid">

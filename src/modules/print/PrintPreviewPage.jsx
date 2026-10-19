@@ -60,6 +60,22 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   const [copies, setCopies] = useState(1);
   const [colorMode, setColorMode] = useState('color'); // 'color' | 'grayscale'
   const [zoomLevel, setZoomLevel] = useState(100); // 50 to 150
+  const [showAccountBalance, setShowAccountBalance] = useState(() => {
+    try {
+      return localStorage.getItem('erp_print_show_account_balances') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleShowAccountBalance = (checked) => {
+    setShowAccountBalance(checked);
+    try {
+      localStorage.setItem('erp_print_show_account_balances', String(checked));
+    } catch {
+      // ignore
+    }
+  };
 
   // Status messages
   const [printStatus, setPrintStatus] = useState(null); // { type: 'success' | 'error', text: '' }
@@ -176,13 +192,20 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           const found = payments.find(p => String(p.id) === String(docId) || String(p.payment_number) === String(docId)) || payments[0];
           setDocumentData(found || null);
         } else if (docType === 'statement') {
-          const [res, pRes] = await Promise.all([
-            api.getSupplierStatement ? api.getSupplierStatement(docId).catch(() => null) : null,
-            api.getParty ? api.getParty(docId).catch(() => null) : null
-          ]);
+          const pRes = await (api.getParty ? api.getParty(docId).catch(() => null) : null);
+          const party = pRes?.data || pRes || null;
+          let stmtRes = null;
+          if (party?.is_customer && !party?.is_supplier) {
+            stmtRes = await (api.getCustomerStatement ? api.getCustomerStatement(docId).catch(() => null) : null);
+          } else {
+            stmtRes = await (api.getSupplierStatement ? api.getSupplierStatement(docId).catch(() => null) : null);
+            if (!stmtRes && party?.is_customer) {
+              stmtRes = await (api.getCustomerStatement ? api.getCustomerStatement(docId).catch(() => null) : null);
+            }
+          }
           setDocumentData({
-            statementData: res?.data || res || null,
-            party: pRes?.data || pRes || null
+            statementData: stmtRes?.data || stmtRes || null,
+            party: party
           });
         } else if (isCutOrder) {
           let found = null;
@@ -438,7 +461,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       return (
         <div
           dangerouslySetInnerHTML={{
-            __html: generatePurchaseInvoiceHtml(po, settings, paperSize)
+            __html: generatePurchaseInvoiceHtml(po, settings, paperSize, showAccountBalance)
           }}
         />
       );
@@ -457,7 +480,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       return (
         <div
           dangerouslySetInnerHTML={{
-            __html: generateSalesInvoiceHtml(invoice, settings, paperSize)
+            __html: generateSalesInvoiceHtml(invoice, settings, paperSize, null, showAccountBalance)
           }}
         />
       );
@@ -659,7 +682,11 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     if (docType === 'statement' && documentData) {
       const party = documentData.party || {};
       const stData = documentData.statementData || {};
-      const transactions = Array.isArray(stData.transactions) ? stData.transactions : [];
+      const transactions = Array.isArray(stData.transactions)
+        ? stData.transactions
+        : (Array.isArray(stData.statement)
+            ? stData.statement
+            : (Array.isArray(stData.movements) ? stData.movements : []));
 
       return (
         <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
@@ -1175,6 +1202,26 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 </button>
               </div>
             </div>
+
+            {/* 6. Optional Account Balances Preference (Section 5.4, 6.4, 9.1) */}
+            {(['sales_invoice', 'sales_invoice_thermal', 'invoice', 'purchase_invoice', 'purchase_invoice_thermal', 'purchase_order'].includes(docType)) && (
+              <div className="pt-3 border-t border-slate-700">
+                <label className="flex items-start gap-2.5 text-xs font-bold text-slate-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showAccountBalance}
+                    onChange={(e) => handleToggleShowAccountBalance(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 rounded text-blue-600 focus:ring-0 cursor-pointer accent-blue-600"
+                  />
+                  <div>
+                    <span>إظهار أرصدة الحساب في الفاتورة المطبوعة</span>
+                    <span className="block text-[10px] text-slate-400 font-normal mt-0.5">
+                      (الافتراضي إخفاء تفاصيل رصيد الحساب للاكتفاء بإجمالي الفاتورة فقط)
+                    </span>
+                  </div>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Bottom Action Buttons */}

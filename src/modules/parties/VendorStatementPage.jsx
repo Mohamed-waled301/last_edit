@@ -37,6 +37,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchDoc, setSearchDoc] = useState('');
+  const [txTypeFilter, setTxTypeFilter] = useState('all');
   const [stageFilter, setStageFilter] = useState('all');
 
   useEffect(() => {
@@ -60,7 +61,10 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
 
         // Fetch statement data
         let statementMovements = [];
-        const isCustomerOnly = Boolean(vData?.is_customer && !vData?.is_supplier);
+        const isCustomer = Boolean(vData?.is_customer);
+        const isSupplier = Boolean(vData?.is_supplier !== 0);
+        const isCustomerOnly = Boolean(isCustomer && !isSupplier);
+
         let openBal = Number(
           isCustomerOnly
             ? (vData?.customer_opening_balance ?? vData?.opening_balance ?? 0)
@@ -70,74 +74,81 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
           ? (vData?.customer_opening_type || vData?.opening_balance_type || 'debit')
           : (vData?.supplier_opening_type || vData?.opening_balance_type || 'credit');
 
-        try {
-          if (isCustomerOnly) {
+        // 1. Fetch Customer movements if party has customer role
+        if (isCustomer) {
+          try {
             const stmtRes = await api.getCustomerStatement(vendorId);
-            if (stmtRes?.data) {
-              const d = stmtRes.data;
-              if (d.summary) {
+            if (stmtRes?.data || stmtRes?.statement || stmtRes?.movements) {
+              const d = stmtRes.data || stmtRes;
+              if (isCustomerOnly && d.summary) {
                 openBal = Number(d.summary.opening_balance || openBal);
                 openType = d.summary.opening_balance_type || openType;
               }
-              if (Array.isArray(d.statement)) {
-                // Filter out opening balance entry from transactional movements
-                statementMovements = d.statement
-                  .filter(m => !m.is_opening && m.reference !== 'OPENING')
-                  .map(m => ({
-                    id: m.id || `${m.date}-${m.reference}`,
-                    date: m.date,
-                    doc_number: m.reference || m.doc_number || '---',
-                    stage: m.type || (m.credit > 0 ? 'سند تحصيل' : 'فاتورة مبيعات'),
-                    description: m.description || (m.credit > 0 ? 'سداد دفعة نقدية' : 'فاتورة مبيعات'),
-                    debit: Number(m.debit || 0), // Customer owes us (increases balance)
-                    credit: Number(m.credit || 0), // Customer paid us (decreases balance)
-                    cut_order_id: null,
-                    po_id: null
-                  }));
+              const list = Array.isArray(d.statement) ? d.statement : (Array.isArray(d.movements) ? d.movements : []);
+              for (const m of list) {
+                if (m.is_opening || m.reference === 'OPENING') continue;
+                const isReceipt = m.type === 'سند تحصيل' || m.credit > 0;
+                const isRet = m.type === 'مرتجع مبيعات';
+                statementMovements.push({
+                  id: m.id || `cust-${m.date}-${m.reference}`,
+                  date: m.date,
+                  doc_number: m.reference || m.doc_number || '---',
+                  stage: m.type || (isReceipt ? 'سند تحصيل' : isRet ? 'مرتجع مبيعات' : 'فاتورة مبيعات'),
+                  category: isReceipt ? 'receipts' : isRet ? 'returns' : 'sales',
+                  description: m.description || (isReceipt ? 'سداد دفعة نقدية' : isRet ? 'رد بضاعة' : 'فاتورة مبيعات'),
+                  debit: Number(m.debit || 0), // Customer owes us (increases balance)
+                  credit: Number(m.credit || 0), // Customer paid us (decreases balance)
+                  cut_order_id: null,
+                  po_id: null
+                });
               }
             }
-          } else {
-            const stmtRes = await api.getSupplierStatement(vendorId);
-            if (stmtRes?.data) {
-              const d = stmtRes.data;
-              if (d.summary) {
-                openBal = Number(d.summary.opening_balance || openBal);
-                openType = d.summary.opening_balance_type || openType;
-              }
-              if (Array.isArray(d.statement)) {
-                // Filter out opening balance entry from transactional movements
-                statementMovements = d.statement
-                  .filter(m => !m.is_opening && m.reference !== 'OPENING')
-                  .map(m => {
-                    const isPay = m.type === 'سند صرف' || m.type === 'تسوية مقاصة' || m.reference?.startsWith('PAY-');
-                    const isRet = m.type === 'مرتجع خامات' || m.reference?.startsWith('RET-');
-                    const isInv = m.type === 'فاتورة توريد' || m.reference?.startsWith('INV-');
-
-                    // In supplier repository: invoices have credit: total_amount, payments have debit: amount
-                    // For the UI table columns: "المستحق (له)" = invoices/costs, "المسدد (منه)" = payments/returns
-                    const owedAmount = isInv ? Number(m.credit || m.amount || 0) : 0;
-                    const paidAmount = (isPay || isRet) ? Number(m.debit || m.amount || 0) : 0;
-
-                    return {
-                      id: m.id || `${m.date}-${m.reference}`,
-                      date: m.date,
-                      doc_number: m.reference || m.doc_number || '---',
-                      stage: m.type || (isInv ? 'فاتورة توريد' : 'سند صرف'),
-                      description: m.description || (isInv ? 'فاتورة توريد خامات' : 'سداد دفعة نقدية'),
-                      debit: owedAmount, // Increases supplier debt (المستحق له)
-                      credit: paidAmount, // Decreases supplier debt (المسدد منه)
-                      cut_order_id: m.cut_order_id || null,
-                      po_id: m.po_id || null
-                    };
-                  });
-              }
-            }
+          } catch (e) {
+            console.warn('Customer statement fetch warning:', e);
           }
-        } catch (err) {
-          console.warn('Failed to load statement movements:', err);
         }
 
-        // Also check production order stage allocations for workshops
+        // 2. Fetch Supplier movements if party has supplier role
+        if (isSupplier) {
+          try {
+            const stmtRes = await api.getSupplierStatement(vendorId);
+            if (stmtRes?.data || stmtRes?.statement || stmtRes?.movements) {
+              const d = stmtRes.data || stmtRes;
+              if (!isCustomerOnly && d.summary) {
+                openBal = Number(d.summary.opening_balance || openBal);
+                openType = d.summary.opening_balance_type || openType;
+              }
+              const list = Array.isArray(d.statement) ? d.statement : (Array.isArray(d.movements) ? d.movements : []);
+              for (const m of list) {
+                if (m.is_opening || m.reference === 'OPENING') continue;
+                const isPay = m.type === 'سند صرف' || m.reference?.startsWith('PAY-');
+                const isSet = m.type === 'تسوية مقاصة' || m.reference?.startsWith('SET-');
+                const isRet = m.type === 'مرتجع خامات' || m.reference?.startsWith('RET-');
+                const isInv = m.type === 'فاتورة توريد' || m.reference?.startsWith('INV-');
+
+                const owedAmount = isInv ? Number(m.credit || m.amount || 0) : 0;
+                const paidAmount = (isPay || isSet || isRet) ? Number(m.debit || m.amount || 0) : 0;
+
+                statementMovements.push({
+                  id: m.id || `sup-${m.date}-${m.reference}`,
+                  date: m.date,
+                  doc_number: m.reference || m.doc_number || '---',
+                  stage: m.type || (isInv ? 'فاتورة توريد' : isPay ? 'سند صرف' : isSet ? 'تسوية مقاصة' : 'مرتجع خامات'),
+                  category: isInv ? 'purchases' : isPay ? 'payments' : isSet ? 'settlements' : isRet ? 'returns' : 'purchases',
+                  description: m.description || (isInv ? 'فاتورة توريد خامات' : isPay ? 'سداد دفعة نقدية' : isSet ? 'تسوية مقاصة' : 'رد خامات'),
+                  debit: owedAmount,
+                  credit: paidAmount,
+                  cut_order_id: m.cut_order_id || null,
+                  po_id: m.po_id || null
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('Supplier statement fetch warning:', e);
+          }
+        }
+
+        // 3. Also check production order stage allocations for workshops
         try {
           const prodRes = await api.getProductionOrders().catch(() => ({ data: [] }));
           const pOrders = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.production_orders || []);
@@ -152,6 +163,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                     date: order.created_at || new Date().toISOString(),
                     doc_number: order.cutting_number || order.order_number || `قصة #${order.id}`,
                     stage: stageName,
+                    category: 'manufacturing',
                     description: `تشغيل مرحلة ${stageName} لأمر القص [${order.cutting_number || order.order_number}]`,
                     debit: Number(stg.stage_cost || stg.total_cost || 0),
                     credit: 0,
@@ -188,12 +200,18 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
 
   // Compute filtered movements with exact running balance
   const computedMovements = useMemo(() => {
-    let running = summary.opening_type === 'debit' ? -summary.opening_balance : summary.opening_balance;
+    const isCust = Boolean(vendor?.is_customer && !vendor?.is_supplier);
+    // For customers: debit is positive (+) owing us. Credit is negative (-).
+    // For suppliers: credit is positive (+) owing them. Debit is negative (-).
+    let running = isCust
+      ? (summary.opening_type === 'credit' ? -summary.opening_balance : summary.opening_balance)
+      : (summary.opening_type === 'debit' ? -summary.opening_balance : summary.opening_balance);
+
     let totDebit = 0;
     let totCredit = 0;
 
     const listWithBal = rawMovements.map((m) => {
-      // In supplier ledger: Debit (له / المستحق له) increases balance; Credit (المسدد له) decreases balance
+      // Debit increases balance; Credit decreases balance
       running = running + m.debit - m.credit;
       totDebit += m.debit;
       totCredit += m.credit;
@@ -209,7 +227,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
       total_credit: totCredit,
       closing_balance: running
     };
-  }, [rawMovements, summary.opening_balance, summary.opening_type]);
+  }, [rawMovements, summary.opening_balance, summary.opening_type, vendor]);
 
   // Helper to parse dd/mm/yyyy or yyyy-mm-dd to comparable YYYY-MM-DD
   const parseToIso = (val) => {
@@ -223,8 +241,9 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
     return clean;
   };
 
-  // Filtered rows by user criteria
+  // Filtered rows by user criteria (without corrupting actual running balances)
   const filteredRows = useMemo(() => {
+    if (txTypeFilter === 'opening') return [];
     const startIso = parseToIso(startDate);
     const endIso = parseToIso(endDate);
 
@@ -238,12 +257,15 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
         const matchesDesc = (row.description || '').toLowerCase().includes(term);
         if (!matchesDoc && !matchesDesc) return false;
       }
+      if (txTypeFilter !== 'all') {
+        if (row.category !== txTypeFilter) return false;
+      }
       if (stageFilter !== 'all') {
         if (!row.stage || !row.stage.includes(stageFilter)) return false;
       }
       return true;
     });
-  }, [computedMovements, startDate, endDate, searchDoc, stageFilter]);
+  }, [computedMovements, startDate, endDate, searchDoc, txTypeFilter, stageFilter]);
 
   const handleExportExcel = () => {
     if (!vendor) return;
@@ -397,7 +419,9 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                 {formatCurrency(summary.opening_balance)}
               </span>
               <span className="text-[11px] text-slate-500 font-semibold block mt-1">
-                الطبيعة: {summary.opening_type === 'credit' ? 'دائن (مستحق له)' : 'مدين (دفعة مقدمة)'}
+                الطبيعة: {vendor?.is_customer && !vendor?.is_supplier
+                  ? (summary.opening_type === 'debit' ? 'مدين (مستحق عليه)' : 'دائن (رصيد دائن)')
+                  : (summary.opening_type === 'credit' ? 'دائن (مستحق له)' : 'مدين (دفعة مقدمة)')}
               </span>
             </div>
 
@@ -423,7 +447,9 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                 {formatCurrency(computedMovements.closing_balance)}
               </span>
               <span className="text-[11px] text-slate-400 block mt-1">
-                {computedMovements.closing_balance > 0 ? 'مستحق للجهة (له)' : computedMovements.closing_balance < 0 ? 'مستحق على الجهة (لنا)' : 'حساب مسوى بالكامل'}
+                {vendor?.is_customer && !vendor?.is_supplier
+                  ? (computedMovements.closing_balance > 0 ? 'مستحق على العميل (لنا)' : computedMovements.closing_balance < 0 ? 'رصيد دائن للعميل' : 'حساب مسوى بالكامل')
+                  : (computedMovements.closing_balance > 0 ? 'مستحق للجهة (له)' : computedMovements.closing_balance < 0 ? 'مستحق على الجهة (لنا)' : 'حساب مسوى بالكامل')}
               </span>
             </div>
           </div>
@@ -431,7 +457,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
 
         {/* Filters Card */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-center">
             {/* Search by doc or cut order */}
             <div>
               <label className="block text-[11px] font-bold text-slate-600 mb-1">بحث برقم المستند أو القصة</label>
@@ -447,15 +473,35 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
               </div>
             </div>
 
+            {/* Transaction Type Filter */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">نوع الحركة المالية</label>
+              <select
+                value={txTypeFilter}
+                onChange={(e) => setTxTypeFilter(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 font-bold focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
+              >
+                <option value="all">كافة الحركات المالية</option>
+                <option value="opening">رصيد أول المدة فقط</option>
+                <option value="sales">فواتير المبيعات</option>
+                <option value="purchases">فواتير المشتريات والتوريد</option>
+                <option value="receipts">سندات التحصيل والقبض</option>
+                <option value="payments">سندات الصرف والدفع</option>
+                <option value="returns">المرتجعات (مبيعات ومشتريات)</option>
+                <option value="manufacturing">مراحل تشغيل الإنتاج والقص</option>
+                <option value="settlements">تسويات ومقاصات</option>
+              </select>
+            </div>
+
             {/* Stage filter */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">تصفية حسب المرحلة</label>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">تصفية مرحلة التشغيل</label>
               <select
                 value={stageFilter}
                 onChange={(e) => setStageFilter(e.target.value)}
                 className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 font-bold focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
               >
-                <option value="all">جميع المراحل والتوريدات</option>
+                <option value="all">كافة المراحل والتوريدات</option>
                 <option value="طباعة">طباعة</option>
                 <option value="تطريز">تطريز</option>
                 <option value="حياكة">حياكة</option>
@@ -511,26 +557,38 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {/* Initial opening balance row */}
-                <tr className="bg-slate-50/80 font-bold text-slate-800">
-                  <td className="p-3 text-center text-slate-400">-</td>
-                  <td className="p-3 font-mono text-slate-500">رصيد أول المدة</td>
-                  <td className="p-3 font-mono text-slate-400">---</td>
-                  <td className="p-3 text-slate-500">افتتاحي</td>
-                  <td className="p-3">رصيد افتتاحي مسجل بدفتر الأستاذ ({summary.opening_type === 'credit' ? 'دائن' : 'مدين'})</td>
-                  <td className="p-3 text-left font-mono">
-                    {vendor?.is_customer && !vendor?.is_supplier
-                      ? (summary.opening_type === 'debit' ? formatCurrency(summary.opening_balance) : '-')
-                      : (summary.opening_type === 'credit' ? formatCurrency(summary.opening_balance) : '-')}
-                  </td>
-                  <td className="p-3 text-left font-mono">
-                    {vendor?.is_customer && !vendor?.is_supplier
-                      ? (summary.opening_type === 'credit' ? formatCurrency(summary.opening_balance) : '-')
-                      : (summary.opening_type === 'debit' ? formatCurrency(summary.opening_balance) : '-')}
-                  </td>
-                  <td className="p-3 text-left font-mono text-[#1F3A5F]">
-                    {formatCurrency(summary.opening_type === 'debit' ? -summary.opening_balance : summary.opening_balance)}
-                  </td>
-                </tr>
+                {(txTypeFilter === 'all' || txTypeFilter === 'opening') && (
+                  <tr className="bg-slate-50/80 font-bold text-slate-800">
+                    <td className="p-3 text-center text-slate-400">-</td>
+                    <td className="p-3 font-mono text-slate-500">رصيد أول المدة</td>
+                    <td className="p-3 font-mono text-slate-400">---</td>
+                    <td className="p-3 text-slate-500">افتتاحي</td>
+                    <td className="p-3">
+                      رصيد افتتاحي مسجل بدفتر الأستاذ (
+                      {vendor?.is_customer && !vendor?.is_supplier
+                        ? (summary.opening_type === 'debit' ? 'مدين - مستحق عليه' : 'دائن - رصيد دائن')
+                        : (summary.opening_type === 'credit' ? 'دائن - مستحق له' : 'مدين - دفعة مقدمة')}
+                      )
+                    </td>
+                    <td className="p-3 text-left font-mono">
+                      {vendor?.is_customer && !vendor?.is_supplier
+                        ? (summary.opening_type === 'debit' ? formatCurrency(summary.opening_balance) : '-')
+                        : (summary.opening_type === 'credit' ? formatCurrency(summary.opening_balance) : '-')}
+                    </td>
+                    <td className="p-3 text-left font-mono">
+                      {vendor?.is_customer && !vendor?.is_supplier
+                        ? (summary.opening_type === 'credit' ? formatCurrency(summary.opening_balance) : '-')
+                        : (summary.opening_type === 'debit' ? formatCurrency(summary.opening_balance) : '-')}
+                    </td>
+                    <td className="p-3 text-left font-mono text-[#1F3A5F]">
+                      {formatCurrency(
+                        vendor?.is_customer && !vendor?.is_supplier
+                          ? (summary.opening_type === 'credit' ? -summary.opening_balance : summary.opening_balance)
+                          : (summary.opening_type === 'debit' ? -summary.opening_balance : summary.opening_balance)
+                      )}
+                    </td>
+                  </tr>
+                )}
 
                 {filteredRows.length === 0 ? (
                   <tr>

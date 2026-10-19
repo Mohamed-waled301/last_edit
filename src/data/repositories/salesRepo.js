@@ -16,13 +16,17 @@ export const salesRepo = {
     const list = await db.customers.toArray();
     const invoices = await db.sales_invoices.toArray();
     const returns = await db.customer_returns.toArray();
+    const payments = await db.customer_payments.toArray();
 
     return list.map(c => {
       const custInvoices = invoices.filter(i => i.customer_id === c.id);
       const custReturns = returns.filter(r => r.customer_id === c.id);
+      const unlinkedPayments = payments
+        .filter(p => p.customer_id === c.id && !p.invoice_id)
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       // Current Balance = Opening Balance + Credit Sales - Cash In / Receipts
       const opening = resolveOpeningBalance(c, 'customer');
-      const bal = BalanceCalculator.calculateCustomerBalance(custInvoices, custReturns, opening);
+      const bal = BalanceCalculator.calculateCustomerBalance(custInvoices, custReturns, opening, unlinkedPayments);
 
       return {
         ...c,
@@ -65,7 +69,10 @@ export const salesRepo = {
   },
 
   async getCustomerStatement(id) {
-    const customer = await db.customers.get(id);
+    let customer = await db.customers.get(id);
+    if (!customer && db.parties) {
+      customer = await db.parties.get(id);
+    }
     if (!customer) throw new Error('العميل غير موجود');
 
     const invoices = await db.sales_invoices.where('customer_id').equals(id).toArray();

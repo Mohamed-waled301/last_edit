@@ -16,12 +16,16 @@ export const suppliersRepo = {
     const list = await db.suppliers.toArray();
     const invoices = await db.supplier_invoices.toArray();
     const returns = await db.supplier_returns.toArray();
+    const payments = await db.payments.toArray();
 
     return list.map(s => {
       const supInvoices = invoices.filter(i => i.supplier_id === s.id);
       const supReturns = returns.filter(r => r.supplier_id === s.id);
+      const unlinkedPayments = payments
+        .filter(p => p.supplier_id === s.id && !p.invoice_id)
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       const opening = resolveOpeningBalance(s, 'supplier');
-      const bal = BalanceCalculator.calculateSupplierBalance(supInvoices, supReturns, opening);
+      const bal = BalanceCalculator.calculateSupplierBalance(supInvoices, supReturns, opening, unlinkedPayments);
 
       return {
         ...s,
@@ -37,12 +41,19 @@ export const suppliersRepo = {
   },
 
   async getById(id) {
-    const s = await db.suppliers.get(id);
+    let s = await db.suppliers.get(id);
+    if (!s && db.parties) {
+      s = await db.parties.get(id);
+    }
     if (!s) return null;
     const invoices = await db.supplier_invoices.where('supplier_id').equals(id).toArray();
     const returns = await db.supplier_returns.where('supplier_id').equals(id).toArray();
+    const payments = await db.payments.where('supplier_id').equals(id).toArray();
+    const unlinkedPayments = payments
+      .filter(p => !p.invoice_id)
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const opening = resolveOpeningBalance(s, 'supplier');
-    const bal = BalanceCalculator.calculateSupplierBalance(invoices, returns, opening);
+    const bal = BalanceCalculator.calculateSupplierBalance(invoices, returns, opening, unlinkedPayments);
     return {
       ...s,
       opening_balance: opening,
@@ -324,19 +335,10 @@ export const suppliersRepo = {
     const additionalExpenses = totals.additionalExpenses;
     const grandTotal = totals.finalNet;
 
-    // Installments validation for credit orders
+    // Installments validation for credit orders (optional)
     let installments = [];
-    if (paymentTerms === 'credit') {
-      const rawInst = Array.isArray(data.installments) && data.installments.length > 0
-        ? data.installments
-        : [
-            {
-              id: `inst-${Date.now()}-0`,
-              due_date: data.due_date || today,
-              amount: grandTotal,
-              notes: 'الدفعة الإجمالية'
-            }
-          ];
+    if (paymentTerms === 'credit' && Array.isArray(data.installments) && data.installments.length > 0) {
+      const rawInst = data.installments;
 
       const sumInst = Number(rawInst.reduce((s, it) => s + (Number(it.amount) || 0), 0).toFixed(2));
       if (Math.abs(sumInst - grandTotal) > 0.01) {
