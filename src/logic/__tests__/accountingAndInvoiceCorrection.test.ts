@@ -557,4 +557,52 @@ describe('Comprehensive Accounting & Invoice Correction Test Suite', () => {
       expect(filtered[1].running_balance).toBe(1400); // Uncorrupted! Not recalculated from filtered subset!
     });
   });
+
+  /* -------------------------------------------------------------
+   * 6. Sequential Invoice Numbering (Starts from 0001)
+   * ------------------------------------------------------------- */
+  describe('6. Sequential Invoice Numbering (Starts from 0001)', () => {
+    it('Sequential Sales Invoice numbers start at 0001 and increment without relying on random timestamps', async () => {
+      // 1. Initial next number is 0001
+      const firstNum = await salesRepo.getNextInvoiceNumber(2026);
+      expect(firstNum).toBe('INV-SLS-2026-0001');
+
+      // 2. Add an invoice with 0001
+      await db.sales_invoices.add({
+        id: 'sinv-1',
+        invoice_number: 'INV-SLS-2026-0001',
+        invoice_date: '2026-10-19',
+        total_invoice_amount: 100
+      });
+
+      const secondNum = await salesRepo.getNextInvoiceNumber(2026);
+      expect(secondNum).toBe('INV-SLS-2026-0002');
+
+      // 3. Even if an old timestamp-based invoice like 7282 exists in database, it does NOT skip to 7283
+      await db.sales_invoices.add({
+        id: 'sinv-old-ts',
+        invoice_number: 'INV-SLS-2026-7282',
+        invoice_date: '2026-10-19',
+        total_invoice_amount: 100
+      });
+
+      const thirdNum = await salesRepo.getNextInvoiceNumber(2026);
+      expect(thirdNum).toBe('INV-SLS-2026-0002'); // Still 0002 since 0001 is the only real sequential invoice
+    });
+
+    it('Sequential Purchase Order numbers start at 0001 and increment properly', async () => {
+      const firstPo = await suppliersRepo.getNextPONumber(2026);
+      expect(firstPo).toBe('PO-2026-0001');
+
+      await db.purchase_orders.add({
+        id: 'po-1',
+        po_number: 'PO-2026-0001',
+        order_date: '2026-10-19'
+      });
+
+      const secondPo = await suppliersRepo.getNextPONumber(2026);
+      expect(secondPo).toBe('PO-2026-0002');
+    });
+  });
 });
+

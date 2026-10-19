@@ -32,6 +32,7 @@ import { handleFormKeyDown } from '../../utils/formNavigation';
 import { calculatePurchaseOrderTotals } from '../../logic/purchaseOrderCalculations';
 import { generatePurchaseInvoiceHtml } from '../print/invoicePrintTemplates';
 import { toPiasters, fromPiasters } from '../../utils/money';
+import { suppliersRepo } from '../../data/repositories/suppliersRepo';
 
 export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCancel, onNotify, onBack }) {
   const isEdit = Boolean(orderId);
@@ -201,7 +202,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         setSectionsList(secs);
         setTreasuries(tList);
 
-        const poNum = `PO-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+        const poNum = await suppliersRepo.getNextPONumber().catch(() => `PO-${new Date().getFullYear()}-0001`);
         const mainT = tList.find((t) => t.is_main === 1 || t.is_main === true) || tList[0];
 
         setForm((prev) => ({

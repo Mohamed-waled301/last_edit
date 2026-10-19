@@ -103,7 +103,8 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
         setProducts(finishedProds);
         setOutlets(outs);
 
-        const invNum = `INV-SLS-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+        const nextInvRes = await api.getNextSalesInvoiceNumber().catch(() => null);
+        const invNum = nextInvRes?.data || `INV-SLS-${new Date().getFullYear()}-0001`;
         setForm(prev => ({
           ...prev,
           invoice_number: invNum,

@@ -289,6 +289,62 @@ export const suppliersRepo = {
     };
   },
 
+  async getNextPONumber(year = new Date().getFullYear()) {
+    const prefix = `PO-${year}-`;
+    const orders = await db.purchase_orders.toArray();
+    const existingNumbers = new Set(orders.map(o => o.po_number));
+
+    let maxSeq = 0;
+    for (const o of orders) {
+      if (o.po_number && o.po_number.startsWith(prefix)) {
+        const suffix = o.po_number.substring(prefix.length);
+        const num = parseInt(suffix, 10);
+        if (!isNaN(num)) {
+          if (num <= Math.max(500, orders.length * 2)) {
+            if (num > maxSeq) {
+              maxSeq = num;
+            }
+          }
+        }
+      }
+    }
+
+    let nextNum = maxSeq + 1;
+    while (existingNumbers.has(`${prefix}${String(nextNum).padStart(4, '0')}`)) {
+      nextNum++;
+    }
+
+    return `${prefix}${String(nextNum).padStart(4, '0')}`;
+  },
+
+  async getNextSupplierInvoiceNumber(year = new Date().getFullYear()) {
+    const prefix = `INV-SUP-${year}-`;
+    const invoices = await db.supplier_invoices.toArray();
+    const existingNumbers = new Set(invoices.map(i => i.invoice_number));
+
+    let maxSeq = 0;
+    for (const inv of invoices) {
+      if (inv.invoice_number && inv.invoice_number.startsWith(prefix)) {
+        const suffix = inv.invoice_number.substring(prefix.length);
+        const num = parseInt(suffix, 10);
+        if (!isNaN(num)) {
+          if (num <= Math.max(500, invoices.length * 2)) {
+            if (num > maxSeq) {
+              maxSeq = num;
+            }
+          }
+        }
+      }
+    }
+
+    let nextNum = maxSeq + 1;
+    while (existingNumbers.has(`${prefix}${String(nextNum).padStart(4, '0')}`)) {
+      nextNum++;
+    }
+
+    return `${prefix}${String(nextNum).padStart(4, '0')}`;
+  },
+
   /**
    * Create Purchase Order
    * Status defaults to 'ordered'. Stock and supplier balances DO NOT CHANGE unless receive_now is true.
@@ -296,7 +352,7 @@ export const suppliersRepo = {
   async createPurchaseOrder(data, userId = 'usr-purchasing') {
     if (data.order_date) validateNotPastDate(data.order_date, 'تاريخ أمر التوريد');
     const id = data.id || `po-${Date.now()}`;
-    const poNumber = data.po_number || `PO-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+    const poNumber = data.po_number || (await this.getNextPONumber(new Date().getFullYear()));
     const now = new Date().toISOString();
     const today = now.split('T')[0];
 
@@ -1261,7 +1317,7 @@ export const suppliersRepo = {
     if (data.invoice_date) validateNotPastDate(data.invoice_date, 'تاريخ فاتورة المورد');
     if (data.due_date) validateNotPastDate(data.due_date, 'تاريخ استحقاق الفاتورة');
     const id = `sinv-${Date.now()}`;
-    const invoiceNumber = data.invoice_number || `INV-SUP-${Date.now().toString().slice(-4)}`;
+    const invoiceNumber = data.invoice_number || (await this.getNextSupplierInvoiceNumber(new Date().getFullYear()));
     const now = new Date().toISOString();
 
     const subtotal = Math.max(0, Number(data.subtotal) || 0);

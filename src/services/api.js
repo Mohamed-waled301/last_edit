@@ -726,6 +726,10 @@ export const api = {
     const res = await salesRepo.getSalesReport(filters);
     return { success: true, data: res.customerRows, ...res };
   },
+  getNextSalesInvoiceNumber: async (year = new Date().getFullYear()) => {
+    const num = await salesRepo.getNextInvoiceNumber(year);
+    return { success: true, data: num, invoice_number: num };
+  },
   createSalesInvoice: async (data) => {
     const res = await salesRepo.createSalesInvoice(data, currentUserId);
     syncPush('sales_invoices', 'insert', res);

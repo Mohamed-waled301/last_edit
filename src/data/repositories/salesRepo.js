@@ -496,11 +496,39 @@ export const salesRepo = {
     };
   },
 
+  async getNextInvoiceNumber(year = new Date().getFullYear()) {
+    const prefix = `INV-SLS-${year}-`;
+    const invoices = await db.sales_invoices.toArray();
+    const existingNumbers = new Set(invoices.map(i => i.invoice_number));
+
+    let maxSeq = 0;
+    for (const inv of invoices) {
+      if (inv.invoice_number && inv.invoice_number.startsWith(prefix)) {
+        const suffix = inv.invoice_number.substring(prefix.length);
+        const num = parseInt(suffix, 10);
+        if (!isNaN(num)) {
+          if (num <= Math.max(500, invoices.length * 2)) {
+            if (num > maxSeq) {
+              maxSeq = num;
+            }
+          }
+        }
+      }
+    }
+
+    let nextNum = maxSeq + 1;
+    while (existingNumbers.has(`${prefix}${String(nextNum).padStart(4, '0')}`)) {
+      nextNum++;
+    }
+
+    return `${prefix}${String(nextNum).padStart(4, '0')}`;
+  },
+
   async createSalesInvoice(data, userId = 'usr-accountant') {
     if (data.invoice_date) validateNotPastDate(data.invoice_date, 'تاريخ فاتورة المبيعات');
     if (data.due_date && data.payment_terms === 'credit') validateNotPastDate(data.due_date, 'تاريخ استحقاق الفاتورة');
     const id = `sinv-${Date.now()}`;
-    const invoiceNumber = data.invoice_number || `INV-SLS-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+    const invoiceNumber = data.invoice_number || (await this.getNextInvoiceNumber(new Date().getFullYear()));
     const now = new Date().toISOString();
 
     const paymentTerms = data.payment_terms || 'cash';
