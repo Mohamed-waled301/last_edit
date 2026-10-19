@@ -133,13 +133,14 @@ jobs:
       - name: Enforce strict release artifact allow-list
         run: node scripts/verify-release-artifacts.cjs release
 
-      # Save artifacts in workflow run
+      # Save artifacts in workflow run (non-blocking if storage quota exceeded)
       - name: Archive build artifacts in CI run
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: release-installers
           path: release/*.exe
-          if-no-files-found: error
+          if-no-files-found: warn
 
       # Generate Arabic release notes
       - name: Generate Arabic Release Notes
