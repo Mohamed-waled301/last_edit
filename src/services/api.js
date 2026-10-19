@@ -873,6 +873,124 @@ export const api = {
     return { success: true, data: enriched, receipts: enriched };
   },
 
+  // Single Receipt & Payment Fetchers
+  getSupplierPayment: async (id) => {
+    if (!id) return { success: false, data: null };
+    let pay = await db.payments.get(id);
+    if (!pay && !isNaN(Number(id))) {
+      pay = await db.payments.get(Number(id));
+    }
+    if (!pay) {
+      pay = await db.payments.where('payment_number').equals(String(id)).first();
+    }
+    if (!pay) {
+      const all = await db.payments.toArray();
+      pay = all.find(p => String(p.id) === String(id) || String(p.payment_number) === String(id));
+    }
+    if (!pay) return { success: false, data: null };
+    const party = (db.parties && await db.parties.get(pay.supplier_id)) || (db.suppliers && await db.suppliers.get(pay.supplier_id));
+    const account = db.treasury_accounts && await db.treasury_accounts.get(pay.account_id);
+    const enriched = {
+      ...pay,
+      supplier_name: party?.name || pay.supplier_name || pay.supplier_id,
+      supplier_code: party?.code || '',
+      account_name: account?.name || pay.account_name || pay.account_id
+    };
+    return { success: true, data: enriched, payment: enriched };
+  },
+
+  getCustomerReceipt: async (id) => {
+    if (!id) return { success: false, data: null };
+    let rec = await db.customer_payments.get(id);
+    if (!rec && !isNaN(Number(id))) {
+      rec = await db.customer_payments.get(Number(id));
+    }
+    if (!rec) {
+      rec = await db.customer_payments.where('receipt_number').equals(String(id)).first();
+    }
+    if (!rec) {
+      const all = await db.customer_payments.toArray();
+      rec = all.find(r => String(r.id) === String(id) || String(r.receipt_number) === String(id));
+    }
+    if (!rec) return { success: false, data: null };
+    const party = (db.parties && await db.parties.get(rec.customer_id)) || (db.customers && await db.customers.get(rec.customer_id));
+    const account = db.treasury_accounts && await db.treasury_accounts.get(rec.account_id);
+    const enriched = {
+      ...rec,
+      customer_name: party?.name || rec.customer_name || rec.customer_id,
+      customer_code: party?.code || '',
+      account_name: account?.name || rec.account_name || rec.account_id
+    };
+    return { success: true, data: enriched, receipt: enriched };
+  },
+
+  // Sales Invoices & Reports
+  getSalesInvoices: async (outletId = null) => {
+    const list = await salesRepo.getSalesInvoices(outletId);
+    return { success: true, data: list, invoices: list };
+  },
+  getSalesInvoice: async (id) => {
+    const inv = await salesRepo.getSalesInvoice(id);
+    return { success: Boolean(inv), data: inv, invoice: inv };
+  },
+  getSalesReport: async (filters = {}) => {
+    const res = await salesRepo.getSalesReport(filters);
+    return { success: true, data: res, report: res };
+  },
+
+  // Purchase Orders & Invoices
+  getPurchaseOrders: async () => {
+    const list = await suppliersRepo.getPurchaseOrders();
+    return { success: true, data: list, purchase_orders: list };
+  },
+  getPurchaseOrder: async (id) => {
+    const po = await suppliersRepo.getPurchaseOrder(id);
+    return { success: Boolean(po), data: po, purchase_order: po };
+  },
+
+  // Parties & Statements
+  getParties: async () => {
+    const list = await partiesRepo.getAll();
+    return { success: true, data: list, parties: list };
+  },
+  getParty: async (id) => {
+    if (!id) return { success: false, data: null };
+    let party = await partiesRepo.getById(id);
+    if (!party && db.customers) {
+      const cust = await db.customers.get(id);
+      if (cust) {
+        party = {
+          ...cust,
+          is_customer: 1,
+          is_supplier: 0,
+          customer_balance: cust.balance_due || cust.current_balance || 0,
+          balance_due: cust.balance_due || cust.current_balance || 0,
+        };
+      }
+    }
+    if (!party && db.suppliers) {
+      const sup = await db.suppliers.get(id);
+      if (sup) {
+        party = {
+          ...sup,
+          is_customer: 0,
+          is_supplier: 1,
+          supplier_balance: sup.balance_due || sup.current_balance || 0,
+          balance_due: sup.balance_due || sup.current_balance || 0,
+        };
+      }
+    }
+    return { success: Boolean(party), data: party, party };
+  },
+  getCustomerStatement: async (customerId) => {
+    const res = await salesRepo.getCustomerStatement(customerId);
+    return { success: true, data: res, ...res };
+  },
+  getSupplierStatement: async (supplierId) => {
+    const res = await suppliersRepo.getStatement(supplierId);
+    return { success: true, data: res, ...res };
+  },
+
 
   // Reports & Dashboard
   getDashboard: async () => {

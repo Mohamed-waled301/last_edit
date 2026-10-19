@@ -31,7 +31,17 @@ export default function PaymentReceiptPrintPage({ type = 'supplier_payment', id 
   }, [type, id]);
 
   const handlePrint = () => {
-    window.location.hash = `#/print-preview?type=${type}&id=${id || (record?.id || record?.receipt_number || record?.payment_number)}&returnUrl=${encodeURIComponent('#/disbursements')}`;
+    const docId = id || (record?.id || record?.receipt_number || record?.payment_number);
+    if (record) {
+      try {
+        sessionStorage.setItem('print_preview_payload', JSON.stringify({
+          ...record,
+          id: docId,
+          type
+        }));
+      } catch {}
+    }
+    window.location.hash = `#/print-preview?type=${type}&id=${docId}&returnUrl=${encodeURIComponent('#/disbursements')}`;
   };
 
   if (loading) {

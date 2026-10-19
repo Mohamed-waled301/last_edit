@@ -564,8 +564,9 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
     try {
       sessionStorage.setItem('print_preview_payload', JSON.stringify({
         type: 'report',
+        id: activeReport,
         reportKey: activeReport,
-        reportTitle: currentReportMeta?.title,
+        reportTitle: currentReportMeta?.title || 'تقرير النظام',
         data: filteredData,
       }));
     } catch {}

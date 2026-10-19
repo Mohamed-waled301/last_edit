@@ -332,14 +332,20 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
 
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            <a
-                              href={`#/print-preview?type=purchase_invoice&id=${o.id}&returnUrl=${encodeURIComponent('#/purchases')}`}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  sessionStorage.setItem('print_preview_payload', JSON.stringify({ ...o, type: 'purchase_invoice' }));
+                                } catch {}
+                                window.location.hash = `#/print-preview?type=purchase_invoice&id=${o.id}&returnUrl=${encodeURIComponent('#/purchases')}`;
+                              }}
                               className="px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md font-semibold transition-colors inline-flex items-center gap-1 border border-slate-200 cursor-pointer"
                               title="طباعة / معاينة فاتورة الشراء"
                             >
                               <Printer className="w-3.5 h-3.5" />
                               <span>طباعة</span>
-                            </a>
+                            </button>
 
                             {canCancel && (
                               <button

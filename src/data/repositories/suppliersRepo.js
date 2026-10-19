@@ -267,29 +267,61 @@ export const suppliersRepo = {
   },
 
   async getPurchaseOrder(id) {
-    const order = await db.purchase_orders.get(id);
+    if (!id) return null;
+    let order = await db.purchase_orders.get(id);
+    if (!order && !isNaN(Number(id))) {
+      order = await db.purchase_orders.get(Number(id));
+    }
+    if (!order) {
+      order = await db.purchase_orders.where('po_number').equals(String(id)).first();
+    }
+    if (!order) {
+      const all = await db.purchase_orders.toArray();
+      order = all.find(o => String(o.id) === String(id) || String(o.po_number) === String(id));
+    }
     if (!order) return null;
-    const supplier = await db.suppliers.get(order.supplier_id);
-    const party = await db.parties.get(order.supplier_id);
-    const orderItems = await db.purchase_order_items.where('po_id').equals(id).toArray();
-    const itemMasterList = await db.items.toArray();
+
+    let supplier = null;
+    if (db.suppliers) {
+      supplier = await db.suppliers.get(order.supplier_id);
+    }
+    let party = null;
+    if (db.parties) {
+      party = await db.parties.get(order.supplier_id);
+    }
+
+    let orderItems = [];
+    if (db.purchase_order_items) {
+      orderItems = await db.purchase_order_items.where('po_id').equals(order.id).toArray();
+      if (orderItems.length === 0 && !isNaN(Number(order.id))) {
+        orderItems = await db.purchase_order_items.where('po_id').equals(Number(order.id)).toArray();
+      }
+    }
+    const itemMasterList = db.items ? await db.items.toArray() : [];
     const itemMap = new Map(itemMasterList.map(i => [i.id, i]));
+    const materials = db.materials ? await db.materials.toArray() : [];
+    const matMap = new Map(materials.map(m => [m.id, m]));
 
     const populatedItems = orderItems.map(i => {
-      const itm = itemMap.get(i.material_id);
+      const itm = itemMap.get(i.material_id) || matMap.get(i.material_id);
       return {
         ...i,
-        material_name: itm ? itm.name : i.material_id,
-        material_code: itm ? itm.code : '',
-        material_unit: itm ? itm.unit : 'قطعة',
+        material_name: itm ? itm.name : (i.material_name || i.material_id),
+        material_code: itm ? (itm.code || itm.sku) : (i.material_code || ''),
+        material_unit: itm ? itm.unit : (i.material_unit || 'قطعة'),
+        quantity: Number(i.quantity) || 0,
+        unit_price: Number(i.unit_price) || 0,
+        total_price: Number(i.total_price) || (Number(i.quantity || 0) * Number(i.unit_price || 0)),
       };
     });
 
     return {
       ...order,
-      supplier_name: supplier?.name || party?.name || order.supplier_id,
-      party,
-      items: populatedItems
+      supplier_name: supplier?.name || party?.name || order.supplier_name || order.supplier_id,
+      supplier_code: supplier?.code || party?.code || '',
+      supplier_phone: supplier?.phone || party?.phone || '',
+      party: party || supplier,
+      items: populatedItems.length > 0 ? populatedItems : (Array.isArray(order.items) ? order.items : [])
     };
   },
 

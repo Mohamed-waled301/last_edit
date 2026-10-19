@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../services/api';
 import db from '../../data/db';
+import { salesRepo, suppliersRepo, partiesRepo, manufacturingRepo, itemsRepo, reportsRepo } from '../../data';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
 import { generatePurchaseInvoiceHtml, generateSalesInvoiceHtml, generateCutOrderHtml } from './invoicePrintTemplates';
 
@@ -131,153 +132,312 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         setLoading(true);
         setLoadError('');
 
-        // Custom payload from sessionStorage if present
+        // 1. Check custom payload from sessionStorage if present
         if (typeof window !== 'undefined') {
           const storedPayload = sessionStorage.getItem('print_preview_payload');
           if (storedPayload) {
             try {
               const parsed = JSON.parse(storedPayload);
               if (parsed) {
-                const matchesId = !docId || String(parsed.id) === String(docId) || String(parsed.item?.id) === String(docId) || String(parsed.cutting_number) === String(docId) || String(parsed.order_number) === String(docId) || String(parsed.invoice_number) === String(docId) || String(parsed.po_number) === String(docId);
-                const payloadIsCut = isCutOrder || parsed.type === 'cut_order' || Boolean(parsed.matrix) || Boolean(parsed.cutting_number);
+                const matchesId = !docId ||
+                  String(parsed.id) === String(docId) ||
+                  String(parsed.item?.id) === String(docId) ||
+                  String(parsed.cutting_number) === String(docId) ||
+                  String(parsed.order_number) === String(docId) ||
+                  String(parsed.invoice_number) === String(docId) ||
+                  String(parsed.po_number) === String(docId) ||
+                  String(parsed.receipt_number) === String(docId) ||
+                  String(parsed.payment_number) === String(docId) ||
+                  String(parsed.reportKey) === String(docId);
 
-                if (matchesId && (!docType || parsed.type === docType || (isCutOrder && payloadIsCut))) {
+                const payloadIsCut = isCutOrder || parsed.type === 'cut_order' || Boolean(parsed.matrix) || Boolean(parsed.cutting_number);
+                const payloadIsSales = (docType === 'sales_invoice' || docType === 'invoice' || docType === 'sales_invoice_thermal') &&
+                  (parsed.type === 'sales_invoice' || parsed.type === 'sales_invoice_thermal' || parsed.type === 'invoice');
+                const payloadIsPurchase = (docType === 'purchase_invoice' || docType === 'purchase_order' || docType === 'purchase_invoice_thermal') &&
+                  (parsed.type === 'purchase_invoice' || parsed.type === 'purchase_invoice_thermal' || parsed.type === 'purchase_order');
+                const payloadIsReport = (docType === 'report' || parsed.type === 'report' || Boolean(parsed.reportKey));
+
+                if (matchesId && (!docType || parsed.type === docType || (isCutOrder && payloadIsCut) || payloadIsSales || payloadIsPurchase || payloadIsReport)) {
                   setDocumentData(parsed);
                   if (parsed.paperSize) setPaperSize(parsed.paperSize);
                   setLoading(false);
                   return;
                 }
               }
-            } catch {}
+            } catch (err) {
+              console.warn('Failed to parse sessionStorage payload:', err);
+            }
           }
         }
 
-        // Fetch based on docType and docId
+        // 2. Persistent storage retrieval based on docType and docId
         if (docType === 'sales_invoice' || docType === 'invoice' || docType === 'sales_invoice_thermal') {
-          const res = await api.getSalesInvoices();
-          const invoices = Array.isArray(res.data) ? res.data : (res.invoices || (Array.isArray(res) ? res : []));
-          let found = invoices.find(i => String(i.id) === String(docId) || String(i.invoice_number) === String(docId));
-          if (!found && docId && api.getSalesInvoice) {
+          let found = null;
+          if (docId) {
             try {
               const sRes = await api.getSalesInvoice(docId);
               found = sRes?.data || sRes?.invoice || sRes;
             } catch {}
-          }
-          if (!found) {
-            found = invoices[0] || null;
-          }
-          setDocumentData(found);
-        } else if (docType === 'purchase_invoice' || docType === 'purchase_order' || docType === 'purchase_invoice_thermal') {
-          const res = await api.getPurchaseOrders();
-          const orders = Array.isArray(res.data) ? res.data : (res.purchase_orders || (Array.isArray(res) ? res : []));
-          let found = orders.find(o => String(o.id) === String(docId) || String(o.po_number) === String(docId));
-          if (!found && docId) {
-            try {
-              const poFromDb = await db.purchase_orders.get(docId);
-              if (poFromDb) found = poFromDb;
-            } catch {}
-          }
-          if (!found) {
-            found = orders[0] || null;
-          }
-          setDocumentData(found);
-        } else if (docType === 'customer_receipt') {
-          const res = await api.getCustomerReceipts();
-          const receipts = Array.isArray(res.data) ? res.data : (res.receipts || (Array.isArray(res) ? res : []));
-          const found = receipts.find(r => String(r.id) === String(docId) || String(r.receipt_number) === String(docId)) || receipts[0];
-          setDocumentData(found || null);
-        } else if (docType === 'supplier_payment') {
-          const res = await api.getSupplierPayments();
-          const payments = Array.isArray(res.data) ? res.data : (res.payments || (Array.isArray(res) ? res : []));
-          const found = payments.find(p => String(p.id) === String(docId) || String(p.payment_number) === String(docId)) || payments[0];
-          setDocumentData(found || null);
-        } else if (docType === 'statement') {
-          const pRes = await (api.getParty ? api.getParty(docId).catch(() => null) : null);
-          const party = pRes?.data || pRes || null;
-          let stmtRes = null;
-          if (party?.is_customer && !party?.is_supplier) {
-            stmtRes = await (api.getCustomerStatement ? api.getCustomerStatement(docId).catch(() => null) : null);
-          } else {
-            stmtRes = await (api.getSupplierStatement ? api.getSupplierStatement(docId).catch(() => null) : null);
-            if (!stmtRes && party?.is_customer) {
-              stmtRes = await (api.getCustomerStatement ? api.getCustomerStatement(docId).catch(() => null) : null);
+            if (!found) {
+              try {
+                found = await salesRepo.getSalesInvoice(docId);
+              } catch {}
+            }
+            if (!found) {
+              try {
+                const res = await api.getSalesInvoices();
+                const invoices = Array.isArray(res.data) ? res.data : (res.invoices || (Array.isArray(res) ? res : []));
+                found = invoices.find(i => String(i.id) === String(docId) || String(i.invoice_number) === String(docId));
+              } catch {}
             }
           }
-          setDocumentData({
-            statementData: stmtRes?.data || stmtRes || null,
-            party: party
-          });
+          if (!found) {
+            setDocumentData(null);
+            setLoadError(docId ? `لم يتم العثور على فاتورة المبيعات برقم / كود: ${docId}` : 'لم يتم تحديد رقم فاتورة المبيعات للطباعة.');
+          } else {
+            setDocumentData(found);
+          }
+        } else if (docType === 'purchase_invoice' || docType === 'purchase_order' || docType === 'purchase_invoice_thermal') {
+          let found = null;
+          if (docId) {
+            try {
+              const poRes = await api.getPurchaseOrder(docId);
+              found = poRes?.data || poRes?.purchase_order || poRes;
+            } catch {}
+            if (!found) {
+              try {
+                found = await suppliersRepo.getPurchaseOrder(docId);
+              } catch {}
+            }
+            if (!found) {
+              try {
+                const res = await api.getPurchaseOrders();
+                const orders = Array.isArray(res.data) ? res.data : (res.purchase_orders || (Array.isArray(res) ? res : []));
+                found = orders.find(o => String(o.id) === String(docId) || String(o.po_number) === String(docId));
+              } catch {}
+            }
+          }
+          if (!found) {
+            setDocumentData(null);
+            setLoadError(docId ? `لم يتم العثور على فاتورة / أمر الشراء برقم: ${docId}` : 'لم يتم تحديد رقم أمر الشراء للطباعة.');
+          } else {
+            setDocumentData(found);
+          }
+        } else if (docType === 'customer_receipt') {
+          let found = null;
+          if (docId) {
+            try {
+              const recRes = await api.getCustomerReceipt(docId);
+              found = recRes?.data || recRes?.receipt || recRes;
+            } catch {}
+            if (!found) {
+              try {
+                const res = await api.getCustomerReceipts();
+                const receipts = Array.isArray(res.data) ? res.data : (res.receipts || []);
+                found = receipts.find(r => String(r.id) === String(docId) || String(r.receipt_number) === String(docId));
+              } catch {}
+            }
+          }
+          if (!found) {
+            setDocumentData(null);
+            setLoadError(docId ? `لم يتم العثور على سند قبض العميل برقم: ${docId}` : 'لم يتم تحديد رقم سند القبض للطباعة.');
+          } else {
+            setDocumentData(found);
+          }
+        } else if (docType === 'supplier_payment') {
+          let found = null;
+          if (docId) {
+            try {
+              const payRes = await api.getSupplierPayment(docId);
+              found = payRes?.data || payRes?.payment || payRes;
+            } catch {}
+            if (!found) {
+              try {
+                const res = await api.getSupplierPayments();
+                const payments = Array.isArray(res.data) ? res.data : (res.payments || []);
+                found = payments.find(p => String(p.id) === String(docId) || String(p.payment_number) === String(docId));
+              } catch {}
+            }
+          }
+          if (!found) {
+            setDocumentData(null);
+            setLoadError(docId ? `لم يتم العثور على سند صرف المورد برقم: ${docId}` : 'لم يتم تحديد رقم سند الصرف للطباعة.');
+          } else {
+            setDocumentData(found);
+          }
+        } else if (docType === 'statement') {
+          if (!docId) {
+            setDocumentData(null);
+            setLoadError('لم يتم تحديد كود أو معرف جهة التعامل لعرض كشف الحساب.');
+          } else {
+            let party = null;
+            try {
+              const pRes = await api.getParty(docId);
+              party = pRes?.data || pRes?.party || pRes;
+            } catch {}
+            if (!party) {
+              try {
+                party = await partiesRepo.getById(docId);
+              } catch {}
+            }
+            if (!party && db.customers) {
+              const cust = await db.customers.get(docId);
+              if (cust) party = { ...cust, is_customer: 1, is_supplier: 0 };
+            }
+            if (!party && db.suppliers) {
+              const sup = await db.suppliers.get(docId);
+              if (sup) party = { ...sup, is_customer: 0, is_supplier: 1 };
+            }
+
+            if (!party) {
+              setDocumentData(null);
+              setLoadError(`لم يتم العثور على بيانات جهة التعامل برقم: ${docId}`);
+            } else {
+              let stmtRes = null;
+              if (party.is_customer && !party.is_supplier) {
+                stmtRes = await api.getCustomerStatement(docId).catch(() => null);
+              } else {
+                stmtRes = await api.getSupplierStatement(docId).catch(() => null);
+                if (!stmtRes && party.is_customer) {
+                  stmtRes = await api.getCustomerStatement(docId).catch(() => null);
+                }
+              }
+              const statementData = stmtRes?.data || stmtRes?.statement || stmtRes || null;
+              setDocumentData({
+                statementData,
+                party
+              });
+            }
+          }
         } else if (isCutOrder) {
           let found = null;
-          if (docId && api.getProductionOrder) {
+          if (docId) {
             try {
               const sRes = await api.getProductionOrder(docId);
               found = sRes?.data || sRes?.order || sRes;
             } catch {}
+            if (!found && manufacturingRepo.getProductionOrder) {
+              try {
+                found = await manufacturingRepo.getProductionOrder(docId);
+              } catch {}
+            }
+            if (!found && db.production_orders) {
+              try {
+                found = await db.production_orders.get(docId);
+                if (!found && !isNaN(Number(docId))) {
+                  found = await db.production_orders.get(Number(docId));
+                }
+                if (!found) {
+                  found = await db.production_orders.where('cutting_number').equals(String(docId)).first();
+                }
+                if (!found) {
+                  found = await db.production_orders.where('order_number').equals(String(docId)).first();
+                }
+              } catch {}
+            }
           }
           if (!found) {
-            const res = await api.getProductionOrders();
-            const orders = Array.isArray(res.data) ? res.data : (res.production_orders || (Array.isArray(res) ? res : []));
-            if (docId) {
-              found = orders.find(o => String(o.id) === String(docId) || String(o.cutting_number) === String(docId) || String(o.order_number) === String(docId));
-            }
-            if (!found && orders.length > 0) {
-              found = orders[0];
-            }
+            setDocumentData(null);
+            setLoadError(docId ? `لم يتم العثور على أمر القص والتشغيل برقم: ${docId}` : 'لم يتم تحديد رقم أمر التشغيل للطباعة.');
+          } else {
+            setDocumentData(found);
           }
-          if (!found && docId && db.production_orders) {
-            try {
-              found = await db.production_orders.get(docId);
-              if (!found && !isNaN(Number(docId))) {
-                found = await db.production_orders.get(Number(docId));
-              }
-              if (!found) {
-                found = await db.production_orders.where('cutting_number').equals(String(docId)).first();
-              }
-              if (!found) {
-                found = await db.production_orders.where('order_number').equals(String(docId)).first();
-              }
-            } catch {}
-          }
-          setDocumentData(found || null);
         } else if (docType === 'stock_card') {
-          if (docId) {
+          if (!docId) {
+            setDocumentData(null);
+            setLoadError('لم يتم تحديد كود الصنف لعرض كارت الصنف المخزني.');
+          } else {
+            let cardRes = null;
             try {
-              const cardRes = await (api.getItemStockCard ? api.getItemStockCard(docId) : Promise.resolve(null)).catch(() => null);
-              const cardData = cardRes?.data || cardRes;
-              let itm = null;
-              if (db.items) itm = await db.items.get(docId).catch(() => null);
-              if (!itm && db.materials) itm = await db.materials.get(docId).catch(() => null);
-              if (!itm && db.products) itm = await db.products.get(docId).catch(() => null);
-              if (!itm) itm = cardData?.item;
+              cardRes = await api.getItemStockCard(docId);
+            } catch {}
+            let cardData = cardRes?.data || cardRes;
+            let itm = null;
+            if (db.items) itm = await db.items.get(docId).catch(() => null);
+            if (!itm && db.materials) itm = await db.materials.get(docId).catch(() => null);
+            if (!itm && db.products) itm = await db.products.get(docId).catch(() => null);
+            if (!itm) itm = cardData?.item;
 
-              if (cardData || itm) {
-                const rawEntries = cardData?.entries || cardData?.movements || [];
-                const formattedMovements = rawEntries.map((entry) => ({
+            if (!cardData && !itm) {
+              setDocumentData(null);
+              setLoadError(`لم يتم العثور على بيانات الصنف برقم: ${docId}`);
+            } else {
+              const rawEntries = cardData?.entries || cardData?.movements || [];
+              let running = 0;
+              const formattedMovements = rawEntries.map((entry) => {
+                const qIn = Number(entry.quantity_in || entry.qty_in || 0);
+                const qOut = Number(entry.quantity_out || entry.qty_out || 0);
+                if (entry.running_balance !== undefined && entry.running_balance !== null) {
+                  running = Number(entry.running_balance);
+                } else {
+                  running += qIn - qOut;
+                }
+                return {
                   date: entry.date,
                   movement_type_ar: entry.movement_type_ar || entry.movement_type,
                   type: entry.movement_type,
                   document_number: entry.document_id || entry.reference_id || entry.document_number || '-',
-                  quantity_in: entry.direction === 'in' ? entry.quantity : (entry.quantity_in || entry.in_qty || 0),
-                  quantity_out: entry.direction === 'out' ? entry.quantity : (entry.quantity_out || entry.out_qty || 0),
-                  running_balance: entry.running_balance,
+                  quantity_in: qIn,
+                  quantity_out: qOut,
+                  running_balance: running,
                   notes: entry.notes || '-'
-                }));
-                setDocumentData({
-                  type: 'stock_card',
-                  id: docId,
-                  item: itm || { id: docId, name: 'الصنف', code: '', unit: 'قطعة' },
-                  movements: formattedMovements,
-                  currentStock: cardData?.closing_balance ?? cardData?.current_balance ?? itm?.actual_balance ?? 0,
-                  totalIn: cardData?.total_in ?? 0,
-                  totalOut: cardData?.total_out ?? 0,
-                  openingBalance: cardData?.opening_balance ?? 0
-                });
-              }
-            } catch (scErr) {
-              console.error('Failed to load stock card for print preview:', scErr);
+                };
+              });
+
+              setDocumentData({
+                type: 'stock_card',
+                id: docId,
+                item: itm || { id: docId, name: 'الصنف', code: '', unit: 'قطعة' },
+                movements: formattedMovements,
+                currentStock: cardData?.closing_balance ?? cardData?.current_balance ?? itm?.actual_balance ?? itm?.current_stock ?? running,
+                totalIn: cardData?.total_in ?? 0,
+                totalOut: cardData?.total_out ?? 0,
+                openingBalance: cardData?.opening_balance ?? 0
+              });
             }
           }
+        } else if (docType === 'report') {
+          let reportTitle = 'تقرير النظام المالي والإداري';
+          let reportRows = [];
+          if (docId === 'sales-invoices' || docId === 'sales' || docId === 'daily-sales' || docId === 'sales-by-customer') {
+            reportTitle = 'تقرير المبيعات المعتمدة وتجميع مبيعات العملاء';
+            const sRep = await salesRepo.getSalesReport();
+            reportRows = Array.isArray(sRep?.customers) ? sRep.customers : (Array.isArray(sRep) ? sRep : []);
+          } else if (docId === 'cost-breakdown') {
+            reportTitle = 'تقرير تفصيلي لتكاليف أوامر التشغيل والقص';
+            const cb = await reportsRepo.getCostBreakdown();
+            reportRows = cb?.breakdown || (Array.isArray(cb) ? cb : []);
+          } else if (docId === 'profitability') {
+            reportTitle = 'تقرير الربحية ومعدل العائد على المنتجات';
+            const prof = await reportsRepo.getProfitability();
+            reportRows = Array.isArray(prof) ? prof : [];
+          } else if (docId === 'debt-aging') {
+            reportTitle = 'تقرير أعمار الديون والمستحقات المالية';
+            const da = await reportsRepo.getDebtAging();
+            reportRows = Array.isArray(da?.supplierAging) ? da.supplierAging : (Array.isArray(da?.customerAging) ? da.customerAging : []);
+          } else if (docId === 'items' || docId === 'low-stock' || docId === 'inventory-valuation') {
+            reportTitle = docId === 'low-stock' ? 'تقرير نواقص ومستويات إعادة الطلب' : 'تقرير المخزون وأرصدة المستودعات';
+            const items = await itemsRepo.getAll();
+            reportRows = docId === 'low-stock' ? items.filter(i => (i.actual_balance ?? 0) <= (i.min_reorder_level ?? 0)) : items;
+          } else if (docId === 'customer-statements') {
+            reportTitle = 'تقرير أرصدة ومستحقات العملاء';
+            const parties = await partiesRepo.getAll();
+            reportRows = parties.filter(p => p.is_customer === 1);
+          } else if (docId === 'supplier-statements') {
+            reportTitle = 'تقرير أرصدة ومديونيات الموردين';
+            const parties = await partiesRepo.getAll();
+            reportRows = parties.filter(p => p.is_supplier === 1);
+          } else if (docId === 'purchase-orders') {
+            reportTitle = 'تقرير فواتير وأوامر الشراء';
+            reportRows = await suppliersRepo.getPurchaseOrders();
+          }
+
+          setDocumentData({
+            type: 'report',
+            reportKey: docId,
+            reportTitle,
+            data: reportRows
+          });
         }
       } catch (err) {
         console.error('Failed to load document for print preview:', err);
@@ -968,11 +1128,245 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       );
     }
 
-    // 6. Generic Fallback Document View
+    // 6. Reports View (تقارير النظام والقوائم الإدارية والمالية)
+    if (docType === 'report' || documentData?.type === 'report') {
+      const reportTitle = documentData.reportTitle || documentData.title || 'تقرير النظام المالي والإداري';
+      const reportRows = Array.isArray(documentData.data) ? documentData.data : (Array.isArray(documentData.rows) ? documentData.rows : []);
+
+      // Derive columns dynamically from data rows if not predefined
+      let columnKeys = [];
+      if (reportRows.length > 0 && typeof reportRows[0] === 'object' && reportRows[0] !== null) {
+        columnKeys = Object.keys(reportRows[0]).filter(k =>
+          !['id', '_id', 'uuid', 'created_by', 'updated_at', 'is_active', 'raw_date', 'password', 'salt'].includes(k) &&
+          typeof reportRows[0][k] !== 'object'
+        ).slice(0, 8);
+      }
+
+      const columnLabels = {
+        invoice_number: 'رقم الفاتورة',
+        po_number: 'رقم أمر الشراء',
+        customer_name: 'اسم العميل',
+        customer_code: 'كود العميل',
+        supplier_name: 'اسم المورد',
+        supplier_code: 'كود المورد',
+        party_name: 'اسم الطرف',
+        name: 'البيان / الاسم',
+        code: 'الكود',
+        date: 'التاريخ',
+        created_at: 'تاريخ الإنشاء',
+        due_date: 'تاريخ الاستحقاق',
+        payment_date: 'تاريخ السداد',
+        payment_terms: 'طريقة الدفع',
+        status: 'الحالة',
+        quantity: 'الكمية',
+        unit_price: 'سعر الوحدة',
+        total_amount: 'الإجمالي',
+        total_invoice_amount: 'إجمالي الفاتورة',
+        total_product_cost: 'إجمالي التكلفة',
+        paid_amount: 'المسدد',
+        remaining_amount: 'المتبقي',
+        balance: 'الرصيد',
+        balance_due: 'المستحق',
+        current_balance: 'الرصيد الحالي',
+        supplier_balance: 'رصيد المورد',
+        customer_balance: 'رصيد العميل',
+        net_balance: 'صافي الرصيد',
+        actual_balance: 'الرصيد الفعلي',
+        invoices_count: 'عدد الفواتير',
+        total_sales: 'إجمالي المبيعات'
+      };
+
+      // Summary sums
+      let totalAmountSum = 0;
+      let hasAmountSum = false;
+      for (const row of reportRows) {
+        const amt = row.total_amount ?? row.total_invoice_amount ?? row.balance_due ?? row.current_balance ?? row.total_sales;
+        if (amt !== undefined && amt !== null && !isNaN(Number(amt))) {
+          totalAmountSum += Number(amt);
+          hasAmountSum = true;
+        }
+      }
+
+      // 6.A) Thermal 80mm Layout for Report Summary
+      if (isThermal) {
+        return (
+          <div className="p-3 bg-white text-slate-900 font-mono text-xs w-[80mm] max-w-[80mm] mx-auto select-text" dir="rtl">
+            <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-10 w-auto max-w-[90px] object-contain mx-auto mb-1"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <h2 className="font-extrabold text-sm text-slate-900">{companyName}</h2>
+              <div className="text-[11px] font-bold text-[#1F3A5F]">{reportTitle}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">تاريخ الطباعة: {formatDate(new Date().toISOString())}</div>
+            </div>
+
+            <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-center mb-3">
+              <div className="text-[10px] text-slate-500">إجمالي عدد السجلات: <span className="font-bold text-slate-900">{formatNumber(reportRows.length)}</span></div>
+              {hasAmountSum && (
+                <div className="text-sm font-bold text-emerald-700 mt-1">{formatCurrency(totalAmountSum)}</div>
+              )}
+            </div>
+
+            <div className="border-t border-dotted border-slate-300 pt-2 text-[10px] space-y-1">
+              {reportRows.slice(0, 30).map((row, idx) => (
+                <div key={idx} className="flex justify-between border-b border-dashed border-slate-200 pb-1">
+                  <span className="font-bold truncate max-w-[130px]">{row.customer_name || row.supplier_name || row.name || row.code || `#${idx + 1}`}</span>
+                  <span className="font-mono">{formatNumber(row.total_amount ?? row.balance_due ?? row.quantity ?? row.total_sales ?? 0)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center text-[9px] text-slate-400 pt-3 border-t border-dashed border-slate-400 mt-3">
+              code systems ERP • تقرير صادر معتمد
+            </div>
+          </div>
+        );
+      }
+
+      // 6.B) A4 Official Report Layout
+      return (
+        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
+          {/* Header */}
+          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-4">
+            <div className="flex items-center gap-3">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-14 w-auto max-w-[120px] object-contain rounded"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <div>
+                <h2 className="text-xl font-bold text-[#1F3A5F]">{companyName}</h2>
+                <p className="text-xs text-slate-500">{settings?.address || 'جمهورية مصر العربية'}</p>
+                {settings?.phone && <p className="text-xs text-slate-500 font-mono">هاتف: {settings.phone}</p>}
+              </div>
+            </div>
+            <div className="text-left">
+              <span className="px-3 py-1 bg-[#1F3A5F] text-white font-bold text-xs rounded">
+                تقرير نظام معتمد
+              </span>
+              <div className="text-xs text-slate-500 font-mono mt-1">تاريخ الطباعة: {formatDate(new Date().toISOString())}</div>
+            </div>
+          </div>
+
+          {/* Title Banner */}
+          <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">{reportTitle}</h3>
+              <p className="text-xs text-slate-500 mt-0.5">تقرير إداري شامل مستخرج آلياً من قاعدة البيانات</p>
+            </div>
+            <div className="flex items-center gap-4 text-xs font-bold">
+              <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                <span className="text-slate-500 ml-1.5">عدد السجلات:</span>
+                <span className="font-mono text-slate-900">{formatNumber(reportRows.length)}</span>
+              </div>
+              {hasAmountSum && (
+                <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                  <span className="text-slate-500 ml-1.5">الإجمالي الكلي:</span>
+                  <span className="font-mono text-emerald-700">{formatCurrency(totalAmountSum)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Data Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#1F3A5F] text-white border-b border-slate-300">
+                  <th className="p-2 border border-slate-200 text-center w-12 font-bold">#</th>
+                  {columnKeys.map(k => (
+                    <th key={k} className="p-2 border border-slate-200 font-bold">
+                      {columnLabels[k] || k}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {reportRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={columnKeys.length + 1} className="p-8 text-center text-slate-500 font-bold">
+                      لا توجد بيانات مطابقة لمعايير هذا التقرير.
+                    </td>
+                  </tr>
+                ) : (
+                  reportRows.map((row, idx) => (
+                    <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
+                      <td className="p-2 border border-slate-200 text-center font-mono text-slate-500">{idx + 1}</td>
+                      {columnKeys.map(k => {
+                        const val = row[k];
+                        const isNum = typeof val === 'number';
+                        const isDate = typeof val === 'string' && (k.includes('date') || k.includes('created_at'));
+                        return (
+                          <td key={k} className={`p-2 border border-slate-200 ${isNum ? 'text-left font-mono font-bold' : ''}`}>
+                            {isDate ? formatDate(val) : (isNum ? formatNumber(val) : (String(val ?? '-')))}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {hasAmountSum && reportRows.length > 0 && (
+                <tfoot>
+                  <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
+                    <td colSpan={columnKeys.length} className="p-2 text-right">الإجمالي الكلي للمطابقات:</td>
+                    <td className="p-2 text-left font-mono text-emerald-700 text-sm">{formatCurrency(totalAmountSum)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          {/* Signatures */}
+          <div className="grid grid-cols-3 gap-6 pt-10 text-center text-xs font-bold text-slate-700">
+            <div className="space-y-6">
+              <span>المحاسب المسؤول</span>
+              <div className="border-b border-slate-400 w-32 mx-auto"></div>
+            </div>
+            <div className="space-y-6">
+              <span>المدير المالي</span>
+              <div className="border-b border-slate-400 w-32 mx-auto"></div>
+            </div>
+            <div className="space-y-6">
+              <span>اعتماد الإدارة</span>
+              <div className="border-b border-slate-400 w-32 mx-auto"></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 7. Generic Fallback Document View
     if (!documentData) {
       return (
-        <div className="p-8 text-center text-slate-500 font-bold" dir="rtl">
-          لم يتم العثور على بيانات المستند المطلوب للطباعة.
+        <div className="p-8 text-center text-slate-600 space-y-4" dir="rtl">
+          <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div className="text-base font-bold text-slate-900">
+            {loadError || 'لم يتم العثور على بيانات المستند المطلوب للطباعة.'}
+          </div>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            يرجى التأكد من اختيار المستند المطلوب من القائمة أو التحقق من صحة رقم المستند.
+          </p>
+          <div>
+            <button
+              type="button"
+              onClick={handleBack}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-xs"
+            >
+              <ArrowRight className="w-4 h-4" />
+              <span>العودة للشاشة السابقة</span>
+            </button>
+          </div>
         </div>
       );
     }
@@ -1062,6 +1456,20 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             width: ${paperSize === '80mm' ? '80mm !important' : '100% !important'};
             max-width: ${paperSize === '80mm' ? '80mm !important' : 'none !important'};
           }
+          table {
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+          }
+          tr {
+            page-break-inside: avoid !important;
+            page-break-after: auto !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+          tfoot {
+            display: table-footer-group !important;
+          }
           @page {
             size: ${paperSize === '80mm' ? '80mm auto' : `${paperSize} ${orientation}`};
             margin: ${paperSize === '80mm' ? '0' : margins === 'none' ? '0' : margins === 'minimal' ? '5mm' : '10mm'};
@@ -1128,9 +1536,26 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             <div className="text-center font-bold text-slate-400 text-sm">
               جاري تجهيز المستند ومعاينة الطباعة...
             </div>
-          ) : loadError ? (
-            <div className="text-center text-rose-400 text-sm font-bold">
-              {loadError}
+          ) : loadError && !documentData ? (
+            <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-xl border border-rose-200 text-center space-y-4" dir="rtl">
+              <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">تعذر عرض المستند للطباعة</h3>
+              <p className="text-xs text-rose-600 font-semibold">{loadError}</p>
+              <p className="text-xs text-slate-500">
+                يرجى التأكد من اختيار المستند المطلوب من القائمة أو التحقق من صحة رقم المستند.
+              </p>
+              <div>
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-xs"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                  <span>العودة للشاشة السابقة</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div

@@ -284,6 +284,24 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
   };
 
   const handleOpenPrintPreview = () => {
+    try {
+      sessionStorage.setItem('print_preview_payload', JSON.stringify({
+        type: 'statement',
+        id: vendorId,
+        party: vendor,
+        statementData: {
+          statement: movements,
+          movements,
+          balance_due: finalBalance,
+          remaining_balance: finalBalance,
+          summary: {
+            opening_balance: openingBalance,
+            opening_balance_type: openingType,
+            balance_due: finalBalance
+          }
+        }
+      }));
+    } catch {}
     window.location.hash = `#/print-preview?type=statement&id=${vendorId}`;
   };
 
