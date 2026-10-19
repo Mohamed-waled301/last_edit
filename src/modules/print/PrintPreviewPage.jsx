@@ -682,12 +682,118 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     if (docType === 'statement' && documentData) {
       const party = documentData.party || {};
       const stData = documentData.statementData || {};
-      const transactions = Array.isArray(stData.transactions)
+      const rawTransactions = Array.isArray(stData.transactions)
         ? stData.transactions
         : (Array.isArray(stData.statement)
             ? stData.statement
             : (Array.isArray(stData.movements) ? stData.movements : []));
 
+      // Calculate running balance robustly without zeros
+      let runningAcc = 0;
+      const transactions = rawTransactions.map((tr) => {
+        const d = Number(tr.debit || 0);
+        const c = Number(tr.credit || 0);
+        let rowBal = null;
+        if (tr.balance_after !== undefined && tr.balance_after !== null) {
+          rowBal = Number(tr.balance_after);
+          runningAcc = rowBal;
+        } else if (tr.running_balance !== undefined && tr.running_balance !== null) {
+          rowBal = Number(tr.running_balance);
+          runningAcc = rowBal;
+        } else if (tr.balance !== undefined && tr.balance !== null) {
+          rowBal = Number(tr.balance);
+          runningAcc = rowBal;
+        } else {
+          const isSup = party?.is_supplier && !party?.is_customer;
+          runningAcc = isSup ? (runningAcc + c - d) : (runningAcc + d - c);
+          rowBal = runningAcc;
+        }
+        return {
+          ...tr,
+          running_balance: rowBal
+        };
+      });
+
+      const finalClosingBalance = stData.balance_due ??
+        stData.remaining_balance ??
+        stData.summary?.remaining_balance ??
+        stData.summary?.balance_due ??
+        party.customer_balance ??
+        party.supplier_balance ??
+        party.balance_due ??
+        party.current_balance ??
+        party.balance ??
+        (transactions.length > 0 ? transactions[transactions.length - 1].running_balance : 0);
+
+      // 4.A) Thermal 80mm Layout for Account Statement
+      if (isThermal) {
+        return (
+          <div className="p-3 bg-white text-slate-900 font-mono text-xs w-[80mm] max-w-[80mm] mx-auto select-text" dir="rtl">
+            <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-10 w-auto max-w-[90px] object-contain mx-auto mb-1"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <h2 className="font-extrabold text-sm text-slate-900">{companyName}</h2>
+              <div className="text-[11px] font-bold text-[#1F3A5F]">كشف حساب مالي معتمد</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">تاريخ الكشف: {formatDate(new Date().toISOString())}</div>
+              <div className="mt-2 text-right pt-2 border-t border-dotted border-slate-300 text-[11px] space-y-0.5">
+                <div><strong>الطرف:</strong> {party.name || 'عميل / مورد'}</div>
+                <div><strong>كود الحساب:</strong> <span className="font-mono">{party.code || '-'}</span></div>
+              </div>
+            </div>
+
+            <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-center mb-3">
+              <span className="text-[10px] text-slate-500 block mb-0.5">الرصيد الختامي الحالي:</span>
+              <span className="text-base font-bold font-mono text-blue-800 block">
+                {formatCurrency(finalClosingBalance)}
+              </span>
+            </div>
+
+            <table className="w-full text-right text-[10px] border-collapse mb-3">
+              <thead>
+                <tr className="border-b border-slate-400 font-bold">
+                  <th className="py-1">الحركة / المستند</th>
+                  <th className="py-1 text-left font-mono">مدين</th>
+                  <th className="py-1 text-left font-mono">دائن</th>
+                  <th className="py-1 text-left font-mono">الرصيد</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-dotted divide-slate-300">
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-3 text-center text-slate-400">لا توجد حركات مسجلة.</td>
+                  </tr>
+                ) : (
+                  transactions.map((tr, idx) => (
+                    <tr key={idx}>
+                      <td className="py-1.5 leading-tight">
+                        <div className="font-mono text-[9px] text-slate-500">{formatDate(tr.date)}</div>
+                        <div className="font-semibold text-slate-800">{tr.description || tr.type}</div>
+                        {tr.reference && <div className="font-mono text-[9px] text-slate-400">{tr.reference}</div>}
+                      </td>
+                      <td className="py-1.5 text-left font-mono text-rose-700">{tr.debit > 0 ? formatCurrency(tr.debit) : '-'}</td>
+                      <td className="py-1.5 text-left font-mono text-emerald-700">{tr.credit > 0 ? formatCurrency(tr.credit) : '-'}</td>
+                      <td className="py-1.5 text-left font-mono font-bold text-slate-900">{formatCurrency(tr.running_balance)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+            <div className="flex justify-between text-[10px] font-bold pt-3 border-t border-dashed border-slate-400 text-center">
+              <div>توقيع المحاسب</div>
+              <div>اعتماد الطرف</div>
+            </div>
+          </div>
+        );
+      }
+
+      // 4.B) A4 Official Statement Layout
       return (
         <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
           <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
@@ -725,7 +831,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             <div className="text-left">
               <span className="text-slate-500 block mb-1">الرصيد الختامي الحالي:</span>
               <span className="text-base font-mono font-bold text-blue-800 block">
-                {formatCurrency(party.balance ?? stData.closing_balance ?? 0)}
+                {formatCurrency(finalClosingBalance)}
               </span>
             </div>
           </div>

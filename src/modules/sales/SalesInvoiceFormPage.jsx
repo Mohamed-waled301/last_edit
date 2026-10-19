@@ -509,8 +509,8 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
     const doc = documentData || issuedInvoice;
     if (window.electronAPI?.printHtml) {
       try {
-        const settingsRes = await api.getSettings().catch(() => null);
-        const html = generateSalesInvoiceHtml(doc, settingsRes, paperSize);
+        const showBalances = localStorage.getItem('erp_print_show_account_balances') === 'true';
+        const html = generateSalesInvoiceHtml(doc, settingsRes, paperSize, null, showBalances);
         const res = await window.electronAPI.printHtml(html, {
           silent: Boolean(printerName),
           printerName,
@@ -577,8 +577,9 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
           const savedPref = JSON.parse(localStorage.getItem('erp_post_issue_print_sales_invoice') || '{}');
           const paperSize = savedPref.paperSize || 'a4';
           const printerName = savedPref.printerName || '';
+          const showBalances = localStorage.getItem('erp_print_show_account_balances') === 'true';
           if (window.electronAPI?.printHtml) {
-            const html = generateSalesInvoiceHtml(res, settingsRes, paperSize);
+            const html = generateSalesInvoiceHtml(res, settingsRes, paperSize, null, showBalances);
             await window.electronAPI.printHtml(html, {
               silent: Boolean(printerName),
               printerName,

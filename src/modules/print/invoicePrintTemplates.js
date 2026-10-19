@@ -219,16 +219,20 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
 
         ${showAccountBalance ? `
           <div style="margin-top: 6px; border-top: 1px dashed #64748b; padding-top: 4px; font-size: 10px;">
-            <div style="font-weight: bold; color: #1e3a8a; margin-bottom: 3px;">حساب المورد (الأرصدة):</div>
+            <div style="font-weight: bold; color: #1e3a8a; margin-bottom: 3px;">ملخص حساب المورد (الأرصدة المالية):</div>
             <div style="display: flex; justify-content: space-between;">
-              <span>رصيد المورد قبل:</span>
+              <span>رصيد المورد قبل الفاتورة:</span>
               <span class="font-mono">${formatCurrency(supPrevBalance)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>إجمالي الفاتورة:</span>
+              <span class="font-mono font-bold">${formatCurrency(totalAmount)}</span>
             </div>
             <div style="display: flex; justify-content: space-between;">
               <span>المدفوع فعليًا:</span>
               <span class="font-mono">${formatCurrency(supActualPaid)}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; font-weight: bold; color: #1e3a8a;">
+            <div style="display: flex; justify-content: space-between; font-weight: bold; color: #1e3a8a; border-top: 1px dotted #93c5fd; padding-top: 2px; margin-top: 2px;">
               <span>الرصيد بعد الفاتورة:</span>
               <span class="font-mono">${formatCurrency(supResultingBalance)}</span>
             </div>
@@ -591,23 +595,27 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
               <span>المتبقي الآجل:</span>
               <span class="font-mono font-bold">${formatCurrency(remainingAmount)}</span>
             </div>
-            ${showAccountBalance ? `
-              <div style="margin-top: 6px; border-top: 1px dashed #64748b; padding-top: 4px; font-size: 10px;">
-                <div style="font-weight: bold; color: #1e3a8a; margin-bottom: 3px;">حساب العميل (الأرصدة):</div>
-                <div style="display: flex; justify-content: space-between;">
-                  <span>رصيد العميل قبل:</span>
-                  <span class="font-mono">${formatCurrency(custPrevBalance)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                  <span>المدفوع فعليًا:</span>
-                  <span class="font-mono">${formatCurrency(paidAmount)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-weight: bold; color: #1e3a8a;">
-                  <span>رصيد العميل بعد الفاتورة:</span>
-                  <span class="font-mono">${formatCurrency(custResultingBalance)}</span>
-                </div>
+          ` : ''}
+          ${showAccountBalance ? `
+            <div style="margin-top: 6px; border-top: 1px dashed #64748b; padding-top: 4px; font-size: 10px;">
+              <div style="font-weight: bold; color: #1e3a8a; margin-bottom: 3px;">ملخص حساب العميل (الأرصدة المالية):</div>
+              <div style="display: flex; justify-content: space-between;">
+                <span>رصيد العميل قبل الفاتورة:</span>
+                <span class="font-mono">${formatCurrency(custPrevBalance)}</span>
               </div>
-            ` : ''}
+              <div style="display: flex; justify-content: space-between;">
+                <span>إجمالي الفاتورة:</span>
+                <span class="font-mono font-bold">${formatCurrency(totalAmount)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span>المدفوع فعليًا:</span>
+                <span class="font-mono">${formatCurrency(paidAmount)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-weight: bold; color: #1e3a8a; border-top: 1px dotted #93c5fd; padding-top: 2px; margin-top: 2px;">
+                <span>رصيد العميل بعد الفاتورة:</span>
+                <span class="font-mono">${formatCurrency(custResultingBalance)}</span>
+              </div>
+            </div>
           ` : ''}
         </div>
 

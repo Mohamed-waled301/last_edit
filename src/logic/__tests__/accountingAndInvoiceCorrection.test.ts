@@ -395,9 +395,15 @@ describe('Comprehensive Accounting & Invoice Correction Test Suite', () => {
       expect(enabledHtml).toContain('رصيد العميل بعد الفاتورة');
       expect(enabledHtml).toContain('1,000.00 ج.م');
       expect(enabledHtml).toContain('1,150.00 ج.م');
+
+      // 3. Enabled in Thermal 80mm
+      const thermalHtml = generateSalesInvoiceHtml(invoice, {}, '80mm', null, true);
+      expect(thermalHtml).toContain('ملخص حساب العميل (الأرصدة المالية)');
+      expect(thermalHtml).toContain('رصيد العميل قبل الفاتورة');
+      expect(thermalHtml).toContain('رصيد العميل بعد الفاتورة');
     });
 
-    it('Test L: Supplier Balance on Purchase Invoice is hidden by default and shown only when enabled', () => {
+    it('Test L: Supplier Balance on Purchase Invoice is hidden by default and shown only when enabled (A4 & 80mm)', () => {
       const po = {
         po_number: 'PO-PRT-01',
         order_date: '2026-10-19',
@@ -422,6 +428,12 @@ describe('Comprehensive Accounting & Invoice Correction Test Suite', () => {
       expect(enabledHtml).toContain('الرصيد بعد الفاتورة');
       expect(enabledHtml).toContain('100,000.00 ج.م');
       expect(enabledHtml).toContain('115,000.00 ج.م');
+
+      // 3. Enabled in Thermal 80mm
+      const thermalHtml = generatePurchaseInvoiceHtml(po, {}, '80mm', true);
+      expect(thermalHtml).toContain('ملخص حساب المورد (الأرصدة المالية)');
+      expect(thermalHtml).toContain('رصيد المورد قبل الفاتورة');
+      expect(thermalHtml).toContain('الرصيد بعد الفاتورة');
     });
   });
 
