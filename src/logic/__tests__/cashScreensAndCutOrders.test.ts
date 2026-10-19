@@ -8,6 +8,7 @@ import { treasuriesRepo } from '../../data/repositories/treasuriesRepo';
 import { manufacturingRepo } from '../../data/repositories/manufacturingRepo';
 import { auditRepo } from '../../data/repositories/auditRepo';
 import { isFeatureEnabled } from '../../editions/editionConfig';
+import { getTodayDateString } from '../../utils/formatters';
 
 describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens, Shared Supplier Payments, and Cut Order Overhaul', () => {
   beforeEach(async () => {
@@ -67,7 +68,7 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         supplier_id: sup.id,
         account_id: trs.id,
         amount: 800,
-        payment_date: new Date().toISOString().split('T')[0],
+        payment_date: getTodayDateString(),
         payment_method: 'نقداً',
         notes: 'سداد دفعة نقدية'
       }, 'usr-accountant');
@@ -134,7 +135,7 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         supplier_id: sup.id,
         account_id: trs.id,
         amount: 300,
-        payment_date: new Date().toISOString().split('T')[0]
+        payment_date: getTodayDateString()
       });
 
       // Balances after payment
@@ -184,7 +185,7 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         customer_id: cust.id,
         account_id: trs.id,
         amount: 1500,
-        payment_date: new Date().toISOString().split('T')[0],
+        payment_date: getTodayDateString(),
         payment_method: 'نقداً',
         notes: 'دفعة حساب'
       });
@@ -218,7 +219,7 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         customer_id: cust.id,
         account_id: trs.id,
         amount: 800,
-        payment_date: new Date().toISOString().split('T')[0]
+        payment_date: getTodayDateString()
       });
 
       expect((await db.treasury_accounts.get(trs.id)).current_balance).toBe(1800);

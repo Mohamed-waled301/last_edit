@@ -950,6 +950,7 @@ async function recalculateBalancesInTransaction(tableName) {
           balance_due: summary.balanceDue,
           total_invoiced: summary.totalInvoiced,
           total_paid: summary.totalPaid,
+          total_sales: summary.totalInvoiced,
         });
       }
     }
@@ -985,12 +986,19 @@ async function recalculateBalancesInTransaction(tableName) {
           unlinkedCust
         );
 
+        const custCalc = BalanceCalculator.calculateCustomerBalance(cInvs, cRets, custOpening, unlinkedCust);
+        const supCalc = BalanceCalculator.calculateSupplierBalance(sInvs, sRets, supOpening, unlinkedSup);
+
         await db.parties.update(party.id, {
           supplier_balance: summary.supplierBalance,
           customer_balance: summary.customerBalance,
           net_balance: summary.netBalance,
           max_offset: summary.maxOffsetAmount,
           balance_due: party.is_supplier ? summary.supplierBalance : summary.customerBalance,
+          total_sales: custCalc.totalInvoiced,
+          total_purchases: supCalc.totalInvoiced,
+          total_paid: party.is_supplier ? supCalc.totalPaid : custCalc.totalPaid,
+          total_collected: custCalc.totalPaid,
         });
       }
     }

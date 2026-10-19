@@ -8,7 +8,7 @@ import BalanceCalculator, {
   DEFAULT_SUPPLIER_OPENING_TYPE,
 } from '../../logic/balances';
 import auditRepo from './auditRepo';
-import { validateNotPastDate } from '../../utils/formatters';
+import { validateNotPastDate, getTodayDateString } from '../../utils/formatters';
 import { calculatePurchaseOrderTotals } from '../../logic/purchaseOrderCalculations';
 
 export const suppliersRepo = {
@@ -59,6 +59,9 @@ export const suppliersRepo = {
       opening_balance: opening,
       opening_balance_type: resolveOpeningType(s, 'supplier'),
       ...bal,
+      total_invoiced: bal.totalInvoiced,
+      total_purchases: bal.totalInvoiced,
+      total_paid: bal.totalPaid,
       balance_due: bal.balanceDue,
       outstanding_balance: bal.balanceDue,
       current_balance: bal.balanceDue,
@@ -227,6 +230,7 @@ export const suppliersRepo = {
         balance_due: Math.max(0, finalBalance),
       },
       total_invoiced: totalPurchases,
+      total_purchases: totalPurchases,
       total_paid: totalPaid,
       balance_due: Math.max(0, finalBalance),
     };
@@ -1281,7 +1285,7 @@ export const suppliersRepo = {
     const supMap = new Map(suppliers.map(s => [s.id, s.name]));
 
     const dueList = [];
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDateString();
 
     for (const o of orders) {
       const installments = Array.isArray(o.installments) ? o.installments : [];

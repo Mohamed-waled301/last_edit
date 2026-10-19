@@ -2,7 +2,7 @@ import db from '../db';
 import CostCalculator from '../../logic/costCalculator';
 import auditRepo from './auditRepo';
 import { cashRepo } from './cashRepo';
-import { validateNotPastDate } from '../../utils/formatters';
+import { validateNotPastDate, getTodayDateString } from '../../utils/formatters';
 import { toPiasters, fromPiasters, distributeCostLargestRemainder } from '../../utils/money';
 import {
   calculateMaterialLineCost,
@@ -316,7 +316,7 @@ export const manufacturingRepo = {
         fixed_total: Number(src.fixed_total) || 0,
         batches: batches.map((b, idx) => ({
           id: b.id || `btch-${key}-${idx}-${Date.now()}`,
-          date: b.date || new Date().toISOString().split('T')[0],
+          date: b.date || getTodayDateString(),
           pieces: Math.max(0, Number(b.pieces) || 0),
           unit_price: Math.max(0, Number(b.unit_price) || 0),
           total: Number(((Math.max(0, Number(b.pieces) || 0)) * (Math.max(0, Number(b.unit_price) || 0))).toFixed(2)),
@@ -1288,7 +1288,7 @@ export const manufacturingRepo = {
     const res = await cashRepo.recordSupplierPayment({
       supplier_id: vendorId,
       amount,
-      payment_date: paymentData.payment_date || new Date().toISOString().split('T')[0],
+      payment_date: paymentData.payment_date || getTodayDateString(),
       payment_method: paymentData.payment_method || 'نقداً',
       account_id: paymentData.account_id,
       notes: paymentData.notes || `دفعة مرحلة ${STAGE_CONFIGS[stageKey]?.title} لأمر القص ${order.cutting_number}`,

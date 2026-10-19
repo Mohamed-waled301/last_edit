@@ -179,7 +179,7 @@ describe('Part 1: Sales Invoice Outlet and Due Date Rules', () => {
     await salesRepo.createSalesInvoice({
       customer_id: customer.id,
       outlet_id: null,
-      invoice_date: new Date().toISOString().split('T')[0],
+      invoice_date: getTodayDateString(),
       payment_terms: 'credit',
       due_date: null,
       items: [{ product_id: item.id, quantity: 1, unit_selling_price: 300 }],
