@@ -440,8 +440,8 @@ describe('Comprehensive Accounting & Invoice Correction Test Suite', () => {
       // Check opening entry in statement movements
       const openEntry = stmt.statement.find(s => s.is_opening || s.reference === 'OPENING');
       expect(openEntry).toBeDefined();
-      expect(openEntry.debit).toBe(120000);
-      expect(openEntry.balance_after).toBe(120000);
+      expect(openEntry!.debit).toBe(120000);
+      expect(openEntry!.balance_after).toBe(120000);
     });
 
     it('Test N: Customer Account Movements (Opening, Sales, Returns, Receipts)', async () => {

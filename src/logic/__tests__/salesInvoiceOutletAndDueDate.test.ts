@@ -188,9 +188,9 @@ describe('Part 1: Sales Invoice Outlet and Due Date Rules', () => {
     const aging = await reportsRepo.getDebtAging();
     const custRow = aging.customerAging.find((r) => r.entity_name === customer.name);
     expect(custRow).toBeDefined();
-    expect(custRow.due_date).toBeNull();
-    expect(custRow.days_overdue).toBe(0);
-    expect(custRow.bucket).toBe('بدون تاريخ استحقاق');
+    expect(custRow!.due_date).toBeNull();
+    expect(custRow!.days_overdue).toBe(0);
+    expect(custRow!.bucket).toBe('بدون تاريخ استحقاق');
   });
 
   it('5. Print layouts (A4 and 80mm thermal) render cleanly without a due date or outlet', () => {
