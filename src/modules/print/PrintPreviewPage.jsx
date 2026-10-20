@@ -441,9 +441,9 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 db.party_settlements ? db.party_settlements.toArray().catch(() => []) : Promise.resolve([])
               ]);
               reportRows = parties.map(p => {
-                const pInvs = salesInvoices.filter(i => i.customer_id === p.id && i.status !== 'cancelled');
+                const pInvs = (Array.isArray(salesInvoices) ? salesInvoices : []).filter(i => i.customer_id === p.id && i.status !== 'cancelled');
                 const totSales = pInvs.reduce((s, i) => s + (Number(i.total_invoice_amount ?? i.total_amount) || 0), 0);
-                const pPays = custPayments.filter(cp => cp.customer_id === p.id && cp.status !== 'cancelled');
+                const pPays = (Array.isArray(custPayments) ? custPayments : []).filter(cp => cp.customer_id === p.id && cp.status !== 'cancelled');
                 const totPaid = pPays.reduce((s, cp) => s + (Number(cp.amount) || 0), 0);
                 return {
                   code: p.code || '---',
@@ -459,7 +459,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               });
             } catch {
               const parties = await partiesRepo.getAll();
-              reportRows = parties.filter(p => p.is_customer === 1);
+              reportRows = (Array.isArray(parties) ? parties : []).filter(p => p.is_customer === 1);
             }
           } else if (docId === 'supplier-statements') {
             reportTitle = 'تقرير أرصدة ومديونيات الموردين والورش';
@@ -471,9 +471,9 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 db.supplier_returns.toArray()
               ]);
               reportRows = parties.map(p => {
-                const pInvs = supInvoices.filter(i => i.supplier_id === p.id && i.status !== 'cancelled');
+                const pInvs = (Array.isArray(supInvoices) ? supInvoices : []).filter(i => i.supplier_id === p.id && i.status !== 'cancelled');
                 const totPurchases = pInvs.reduce((s, i) => s + (Number(i.total_amount) || 0), 0);
-                const pPays = payments.filter(pm => pm.supplier_id === p.id && pm.status !== 'cancelled');
+                const pPays = (Array.isArray(payments) ? payments : []).filter(pm => pm.supplier_id === p.id && pm.status !== 'cancelled');
                 const totPaid = pPays.reduce((s, pm) => s + (Number(pm.amount) || 0), 0);
                 const supTypeDisplay = p.supplier_type === 'goods' ? 'توريد خامات' : p.supplier_type === 'service' ? 'خدمات وتشغيل' : (p.supplier_type || 'مورد عام');
                 return {
@@ -490,7 +490,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               });
             } catch {
               const parties = await partiesRepo.getAll();
-              reportRows = parties.filter(p => p.is_supplier === 1);
+              reportRows = (Array.isArray(parties) ? parties : []).filter(p => p.is_supplier === 1);
             }
           } else if (docId === 'purchase-orders') {
             reportTitle = 'تقرير فواتير وأوامر الشراء والتوريد';
@@ -517,11 +517,11 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           } else if (docId === 'dual-netting') {
             reportTitle = 'تقرير صافي المركز المالي والمقاصة للجهات المشتركة';
             const parties = await partiesRepo.getAll();
-            reportRows = parties.filter(p => p.is_supplier === 1 && p.is_customer === 1);
+            reportRows = (Array.isArray(parties) ? parties : []).filter(p => p.is_supplier === 1 && p.is_customer === 1);
           } else if (docId === 'invalid-phones') {
             reportTitle = 'تقرير أرقام الهواتف غير المطابقة لجهات التعامل';
             const parties = await db.parties.filter(p => p.is_active === 1).toArray().catch(() => []);
-            reportRows = parties.filter(p => !p.phone || !/^01[0125][0-9]{8}$/.test(String(p.phone).trim()));
+            reportRows = (Array.isArray(parties) ? parties : []).filter(p => !p.phone || !/^01[0125][0-9]{8}$/.test(String(p.phone).trim()));
           } else if (docId === 'production-orders') {
             reportTitle = 'تقرير أوامر التصنيع والقص والإنتاج التام';
             reportRows = await manufacturingRepo.getAll();
@@ -604,7 +604,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           } else if (docId === 'items' || docId === 'low-stock' || docId === 'inventory-valuation') {
             reportTitle = docId === 'low-stock' ? 'تقرير نواقص ومستويات إعادة الطلب' : 'تقرير المخزون وأرصدة المستودعات';
             const items = await itemsRepo.getAll();
-            reportRows = docId === 'low-stock' ? items.filter(i => (i.actual_balance ?? 0) <= (i.min_reorder_level ?? 0)) : items;
+            reportRows = docId === 'low-stock' ? (Array.isArray(items) ? items : []).filter(i => (i.actual_balance ?? 0) <= (i.min_reorder_level ?? 0)) : (Array.isArray(items) ? items : []);
           }
 
           setDocumentData({
@@ -753,9 +753,9 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         });
 
         if (res && res.success) {
-          setPrintStatus({ type: 'success', text: 'تم تصدير وحفظ ملف PDF بنجاح' });
+          setPrintStatus({ type: 'success', text: 'تم تصدير وحفظ الملف الإلكتروني بنجاح' });
         } else if (!res?.canceled) {
-          setPrintStatus({ type: 'error', text: res?.error || 'فشل حفظ ملف PDF' });
+          setPrintStatus({ type: 'error', text: res?.error || 'فشل حفظ الملف الإلكتروني' });
         }
       } else {
         // Browser fallback
@@ -763,7 +763,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       }
     } catch (err) {
       console.error('Save PDF failed:', err);
-      setPrintStatus({ type: 'error', text: 'حدث خطأ أثناء تصدير ملف PDF' });
+      setPrintStatus({ type: 'error', text: 'حدث خطأ أثناء تصدير الملف الإلكتروني' });
     } finally {
       setIsSavingPdf(false);
     }
@@ -892,13 +892,570 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             </div>
 
             <div className="text-center text-[9px] text-slate-400 pt-2">
-              code systems ERP • سند مالي معتمد
+              كود سيستمز المتكامل • سند مالي معتمد
             </div>
           </div>
         );
       }
 
       // A4 / A5 Voucher Layout
+      return (
+        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
+          {/* Header */}
+          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
+            <div className="flex items-center gap-4">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-16 w-auto max-w-[130px] object-contain rounded"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <div>
+                <h2 className="text-2xl font-bold text-[#1F3A5F]">{companyName}</h2>
+                <div className="text-xs font-bold text-slate-500">نظام إدارة المؤسسات - كود سيستمز المتكامل</div>
+                {settings?.address && <p className="text-xs text-slate-600 mt-1">{settings.address}</p>}
+                {settings?.phone && <p className="text-xs text-slate-600">هاتف: <span className="font-mono">{settings.phone}</span></p>}
+              </div>
+            </div>
+
+            <div className="text-left font-mono">
+              <span className={`inline-block px-3.5 py-1.5 text-white font-bold text-sm rounded shadow-xs mb-2 ${isCustomer ? 'bg-emerald-700' : 'bg-blue-800'}`}>
+                {docTitle}
+              </span>
+              <div className="text-xs text-slate-600 font-bold">
+                رقم السند: <span className="font-mono text-slate-900 text-sm">{docNumber}</span>
+              </div>
+              <div className="text-xs text-slate-600 font-bold mt-1">
+                التاريخ: <span className="font-mono">{formatDate(rec.payment_date || rec.created_at)}</span>
+              </div>
+              <div className="text-xs text-slate-600 font-bold mt-1">
+                طريقة الدفع: <span className="text-slate-900">{rec.payment_method || 'نقداً'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Details Box */}
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-2 gap-4 text-xs font-bold">
+            <div>
+              <span className="text-slate-500 block mb-1">
+                {isCustomer ? 'استلمنا من السيد / السادة:' : 'صرفنا إلى السيد / السادة:'}
+              </span>
+              <span className="text-base font-bold text-slate-900 block">
+                {partyName} {partyCode ? `[${partyCode}]` : ''}
+              </span>
+            </div>
+
+            <div className="text-left">
+              <span className="text-slate-500 block mb-1">
+                {isCustomer ? 'الخزينة المودع بها:' : 'الخزينة المنصرف منها:'}
+              </span>
+              <span className="text-sm font-bold text-slate-900 block">
+                {rec.account_name || 'الخزينة الرئيسية'}
+              </span>
+            </div>
+          </div>
+
+          {/* Amount Box */}
+          <div className="p-6 bg-blue-50/60 border border-blue-200 rounded-xl text-center space-y-1">
+            <span className="text-xs font-bold text-slate-600 block">
+              {isCustomer ? 'المبلغ المستلم وقدره:' : 'المبلغ المصروف وقدره:'}
+            </span>
+            <span className="text-3xl font-bold font-mono text-[#1F3A5F] block">
+              {formatCurrency(rec.amount || 0)}
+            </span>
+          </div>
+
+          {rec.notes && (
+            <div className="p-3 border border-slate-200 rounded-lg bg-slate-50 text-xs">
+              <span className="font-bold text-slate-500 block mb-0.5">البيان والملاحظات:</span>
+              <p className="text-slate-800 font-medium">{rec.notes}</p>
+            </div>
+          )}
+
+          {/* Signatures */}
+          <div className="grid grid-cols-3 gap-6 pt-12 text-center text-xs font-bold text-slate-700">
+            <div className="space-y-8">
+              <span className="block">
+                {isCustomer ? 'المسلِّم / العميل' : 'المستلم / المورد'}
+              </span>
+              <div className="border-b border-slate-400 w-32 mx-auto"></div>
+            </div>
+            <div className="space-y-8">
+              <span className="block">المحاسب المسؤول</span>
+              <div className="border-b border-slate-400 w-32 mx-auto"></div>
+            </div>
+            <div className="space-y-8">
+              <span className="block">أمين الخزينة</span>
+              <div className="border-b border-slate-400 w-32 mx-auto"></div>
+            </div>
+          </div>
+          <div className="text-center text-[9px] text-slate-400 pt-4 border-t border-slate-200 mt-4 break-inside-avoid">
+            سند مالي معتمد مستخرج من نظام كود سيستمز المتكامل
+          </div>
+        </div>
+      );
+    }
+
+    // 3. Production Cutting Order (`cut_order` / `production_order`)
+    if (isCutOrder) {
+      const order = documentData;
+      if (!order) {
+        return (
+          <div className="p-8 text-center text-slate-500 font-bold" dir="rtl">
+            لم يتم العثور على أمر القص والتشغيل المطلوب.
+          </div>
+        );
+      }
+      return (
+        <div
+          dangerouslySetInnerHTML={{
+            __html: generateCutOrderHtml(order, settings, paperSize, cutOrderPrintOptions)
+          }}
+        />
+      );
+    }
+
+    // 4. Statement of Account (`statement`)
+    if (docType === 'statement' && documentData) {
+      const party = documentData.party || {};
+      const stData = documentData.statementData || {};
+      const rawTransactions = Array.isArray(stData.transactions)
+        ? stData.transactions
+        : (Array.isArray(stData.statement)
+            ? stData.statement
+            : (Array.isArray(stData.movements) ? stData.movements : []));
+
+      // Calculate running balance robustly without undefined errors
+      let runningAcc = 0;
+      const transactions = rawTransactions.map((tr) => {
+        const d = Number(tr.debit || 0);
+        const c = Number(tr.credit || 0);
+        let rowBal = null;
+        if (tr.balance_after !== undefined && tr.balance_after !== null) {
+          rowBal = Number(tr.balance_after);
+          runningAcc = rowBal;
+        } else if (tr.running_balance !== undefined && tr.running_balance !== null) {
+          rowBal = Number(tr.running_balance);
+          runningAcc = rowBal;
+        } else if (tr.balance !== undefined && tr.balance !== null) {
+          rowBal = Number(tr.balance);
+          runningAcc = rowBal;
+        } else {
+          const isSup = party?.is_supplier && !party?.is_customer;
+          runningAcc = isSup ? (runningAcc + c - d) : (runningAcc + d - c);
+          rowBal = runningAcc;
+        }
+        return {
+          ...tr,
+          running_balance: rowBal
+        };
+      });
+
+      const printSummaryCards = calculateStatementSummaryCards({
+        party,
+        openingBalance: stData.summary?.opening_balance ?? party.opening_balance ?? 0,
+        openingType: stData.summary?.opening_balance_type ?? party.opening_balance_type,
+        filteredRows: transactions,
+        allMovements: transactions,
+        txTypeFilter: 'all'
+      });
+
+      const finalClosingBalance = stData.balance_due ??
+        stData.remaining_balance ??
+        printSummaryCards.finalBalance;
+
+      // 4.A) Thermal 80mm Layout for Account Statement
+      if (isThermal) {
+        return (
+          <div className="p-3 bg-white text-slate-900 font-mono text-xs w-[80mm] max-w-[80mm] mx-auto select-text" dir="rtl">
+            <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-10 w-auto max-w-[90px] object-contain mx-auto mb-1"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <h2 className="font-extrabold text-sm text-slate-900">{companyName}</h2>
+              <div className="text-[11px] font-bold text-[#1F3A5F]">كشف حساب مالي معتمد</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">تاريخ الكشف: {formatDate(new Date().toISOString())}</div>
+              <div className="mt-2 text-right pt-2 border-t border-dotted border-slate-300 text-[11px] space-y-0.5">
+                <div><strong>الطرف:</strong> {party.name || 'عميل / مورد'}</div>
+                <div><strong>كود الحساب:</strong> <span className="font-mono">{party.code || '-'}</span></div>
+              </div>
+            </div>
+
+            <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-center mb-3">
+              <span className="text-[10px] text-slate-500 block mb-0.5">الرصيد الختامي الحالي:</span>
+              <span className="text-base font-bold font-mono text-blue-800 block">
+                {formatCurrency(finalClosingBalance)}
+              </span>
+            </div>
+
+            <table className="w-full text-right text-[10px] border-collapse mb-3">
+              <thead>
+                <tr className="border-b border-slate-400 font-bold">
+                  <th className="py-1">الحركة / المستند</th>
+                  <th className="py-1 text-left font-mono">مدين</th>
+                  <th className="py-1 text-left font-mono">دائن</th>
+                  <th className="py-1 text-left font-mono">الرصيد</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-dotted divide-slate-300">
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-3 text-center text-slate-400">لا توجد حركات مسجلة.</td>
+                  </tr>
+                ) : (
+                  transactions.map((tr, idx) => (
+                    <tr key={idx}>
+                      <td className="py-1.5 leading-tight">
+                        <div className="font-mono text-[9px] text-slate-500">{formatDate(tr.date)}</div>
+                        <div className="font-semibold text-slate-800">{tr.description || tr.type}</div>
+                        {tr.reference && <div className="font-mono text-[9px] text-slate-400">{tr.reference}</div>}
+                      </td>
+                      <td className="py-1.5 text-left font-mono text-rose-700">{tr.debit > 0 ? formatCurrency(tr.debit) : '-'}</td>
+                      <td className="py-1.5 text-left font-mono text-emerald-700">{tr.credit > 0 ? formatCurrency(tr.credit) : '-'}</td>
+                      <td className="py-1.5 text-left font-mono font-bold text-slate-900">{formatCurrency(tr.running_balance)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+            <div className="flex justify-between text-[10px] font-bold pt-3 border-t border-dashed border-slate-400 text-center">
+              <div>توقيع المحاسب</div>
+              <div>اعتماد الطرف</div>
+            </div>
+            <div className="text-center text-[9px] text-slate-400 pt-2">
+              كود سيستمز المتكامل • كشف حساب معتمد
+            </div>
+          </div>
+        );
+      }
+
+      // 4.B) A4 Official Statement Layout
+      return (
+        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
+          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
+            <div className="flex items-center gap-4">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-16 w-auto max-w-[130px] object-contain rounded"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <div>
+                <h2 className="text-2xl font-bold text-[#1F3A5F]">{companyName}</h2>
+                <div className="text-xs font-bold text-slate-500">كشف حساب مالي تفصيلي معتمد</div>
+              </div>
+            </div>
+            <div className="text-left font-mono">
+              <span className="inline-block px-3.5 py-1.5 bg-[#1F3A5F] text-white font-bold text-sm rounded mb-2">
+                كشف حساب معتمد
+              </span>
+              <div className="text-xs text-slate-600 font-mono mt-1">تاريخ الكشف: {formatDate(new Date().toISOString())}</div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap justify-between items-center gap-4 text-xs font-bold">
+            <div>
+              <span className="text-slate-500 block mb-1">اسم الطرف التجاري:</span>
+              <span className="text-sm font-bold text-slate-900 block">{party.name || 'عميل / مورد'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 block mb-1">كود الحساب:</span>
+              <span className="text-sm font-mono text-slate-900 block">{party.code || '-'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 block mb-1">طبيعة الحساب:</span>
+              <span className="text-sm font-bold text-slate-800 block">
+                {party.is_customer && !party.is_supplier ? 'عميل توزيع' : 'مورد / ورشة تشغيل'}
+              </span>
+            </div>
+          </div>
+
+          {/* 4 Summary Cards */}
+          <div className="grid grid-cols-4 gap-3 text-right">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+              <span className="text-[10px] font-bold text-slate-500 block mb-0.5">رصيد أول المدة</span>
+              <span className="text-sm font-bold font-mono text-slate-900 block">
+                {formatCurrency(printSummaryCards.openingBalance)}
+              </span>
+              <span className="text-[9px] text-slate-500 block mt-0.5 font-semibold">
+                {printSummaryCards.openingNatureText}
+              </span>
+            </div>
+
+            <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg">
+              <span className="text-[10px] font-bold text-blue-700 block mb-0.5">إجمالي الفواتير والتوريدات</span>
+              <span className="text-sm font-bold font-mono text-blue-900 block">
+                {formatCurrency(printSummaryCards.periodInvoices)}
+              </span>
+              <span className="text-[9px] text-blue-600 block mt-0.5 font-semibold">
+                الفواتير وتكلفة المراحل للفترة
+              </span>
+            </div>
+
+            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg">
+              <span className="text-[10px] font-bold text-emerald-700 block mb-0.5">إجمالي المسدد</span>
+              <span className="text-sm font-bold font-mono text-emerald-900 block">
+                {formatCurrency(printSummaryCards.periodPaid)}
+              </span>
+              <span className="text-[9px] text-emerald-600 block mt-0.5 font-semibold">
+                سندات الصرف والدفعات المعتمدة
+              </span>
+            </div>
+
+            <div className="p-3 bg-slate-900 text-white rounded-lg">
+              <span className="text-[10px] font-bold text-slate-300 block mb-0.5">الرصيد المتبقي الحالي</span>
+              <span className={`text-base font-bold font-mono block ${printSummaryCards.valueClass}`}>
+                {formatCurrency(printSummaryCards.finalBalance)}
+              </span>
+              <span className={`text-[9px] block mt-0.5 font-semibold ${printSummaryCards.subtitleClass}`}>
+                {printSummaryCards.subtitle}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#1F3A5F] text-white font-bold">
+                  <th className="p-2.5 border border-slate-300">التاريخ</th>
+                  <th className="p-2.5 border border-slate-300">نوع الحركة / المستند</th>
+                  <th className="p-2.5 border border-slate-300">رقم المرجع</th>
+                  <th className="p-2.5 border border-slate-300 text-left font-mono">مدين (+)</th>
+                  <th className="p-2.5 border border-slate-300 text-left font-mono">دائن (-)</th>
+                  <th className="p-2.5 border border-slate-300 text-left font-mono">الرصيد التراكمي</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-4 text-center text-slate-500 font-semibold">
+                      لا توجد حركات مسجلة خلال الفترة المحددة.
+                    </td>
+                  </tr>
+                ) : (
+                  transactions.map((tr, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="p-2.5 border border-slate-200 font-mono">{formatDate(tr.date)}</td>
+                      <td className="p-2.5 border border-slate-200">{tr.description || tr.type}</td>
+                      <td className="p-2.5 border border-slate-200 font-mono">{tr.reference || '-'}</td>
+                      <td className="p-2.5 border border-slate-200 text-left font-mono text-rose-700">{tr.debit > 0 ? formatCurrency(tr.debit) : '-'}</td>
+                      <td className="p-2.5 border border-slate-200 text-left font-mono text-emerald-700">{tr.credit > 0 ? formatCurrency(tr.credit) : '-'}</td>
+                      <td className="p-2.5 border border-slate-200 text-left font-mono font-bold text-slate-900">{formatCurrency(tr.running_balance)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6 pt-12 text-center text-xs font-bold text-slate-700">
+            <div className="space-y-8">
+              <span>توقيع المحاسب المالي</span>
+              <div className="border-b border-slate-400 w-36 mx-auto"></div>
+            </div>
+            <div className="space-y-8">
+              <span>توقيع واعتماد الطرف التجاري</span>
+              <div className="border-b border-slate-400 w-36 mx-auto"></div>
+            </div>
+          </div>
+          <div className="text-center text-[9px] text-slate-400 pt-4 border-t border-slate-200 mt-4 break-inside-avoid">
+            كشف حساب رسمي مستخرج من نظام كود سيستمز المتكامل • مطابق دفترياً ومحاسبياً
+          </div>
+        </div>
+      );
+    }
+
+    // 5. Stock Card View
+    if (docType === 'stock_card' && documentData) {
+      const item = documentData.item || {};
+      const movements = Array.isArray(documentData.movements) ? documentData.movements : [];
+
+      return (
+        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
+          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-4">
+            <div className="flex items-center gap-3">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-14 w-auto max-w-[120px] object-contain rounded"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <div>
+                <h2 className="text-xl font-bold text-[#1F3A5F]">{companyName}</h2>
+                <p className="text-xs text-slate-500">{settings?.address || 'جمهورية مصر العربية'}</p>
+              </div>
+            </div>
+            <div className="text-left">
+              <span className="px-3 py-1 bg-[#1F3A5F] text-white font-bold text-xs rounded">
+                كارت حركة الصنف
+              </span>
+              <div className="text-xs text-slate-500 font-mono mt-1">{formatDate(new Date().toISOString())}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs font-bold">
+            <div>
+              <span className="text-slate-500 block">كود الصنف:</span>
+              <span className="font-mono text-sm text-slate-900">{item.code || '-'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 block">اسم الصنف:</span>
+              <span className="text-sm text-slate-900">{item.name || '-'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 block">الرصيد الفعلي الحالي:</span>
+              <span className="font-mono text-sm text-blue-700">{formatNumber(documentData.currentStock ?? 0)}</span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#1F3A5F] text-white border-b border-slate-300">
+                  <th className="p-2 border border-slate-200 font-bold">التاريخ</th>
+                  <th className="p-2 border border-slate-200 font-bold">نوع الحركة</th>
+                  <th className="p-2 border border-slate-200 font-bold">رقم المستند</th>
+                  <th className="p-2 border border-slate-200 font-bold text-center">الوارد</th>
+                  <th className="p-2 border border-slate-200 font-bold text-center">المنصرف</th>
+                  <th className="p-2 border border-slate-200 font-bold text-center">الرصيد التراكمي</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movements.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-6 text-center text-slate-500 font-semibold">
+                      لا توجد حركات مخزنية مسجلة لهذا الصنف خلال الفترة المحددة.
+                    </td>
+                  </tr>
+                ) : (
+                  movements.map((m, idx) => (
+                    <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
+                      <td className="p-2 border border-slate-200 font-mono">{formatDate(m.date)}</td>
+                      <td className="p-2 border border-slate-200">{m.movement_type_ar || m.type}</td>
+                      <td className="p-2 border border-slate-200 font-mono">{m.document_number || '-'}</td>
+                      <td className="p-2 border border-slate-200 text-center font-mono text-emerald-700">{m.quantity_in > 0 ? formatNumber(m.quantity_in) : '-'}</td>
+                      <td className="p-2 border border-slate-200 text-center font-mono text-rose-700">{m.quantity_out > 0 ? formatNumber(m.quantity_out) : '-'}</td>
+                      <td className="p-2 border border-slate-200 text-center font-mono font-bold text-slate-900">{formatNumber(m.running_balance)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="text-center text-[9px] text-slate-400 pt-4 border-t border-slate-200 mt-4 break-inside-avoid">
+            سجل حركة مخزنية مستخرج من نظام كود سيستمز المتكامل
+          </div>
+        </div>
+      );
+    }
+
+    // 6. Reports View (تقارير النظام والقوائم الإدارية والمالية)
+    if (docType === 'report' || documentData?.type === 'report') {
+      const reportTitle = documentData.reportTitle || documentData.title || 'تقرير النظام المالي والإداري';
+      const reportRows = Array.isArray(documentData.data) ? documentData.data : (Array.isArray(documentData.rows) ? documentData.rows : []);
+
+      // Derive columns dynamically from data rows if not predefined
+      let columnKeys = [];
+      if (Array.isArray(reportRows) && reportRows.length > 0 && typeof reportRows[0] === 'object' && reportRows[0] !== null) {
+        columnKeys = Object.keys(reportRows[0]).filter(k =>
+          !['id', '_id', 'uuid', 'created_by', 'updated_at', 'is_active', 'raw_date', 'password', 'salt'].includes(k) &&
+          typeof reportRows[0][k] !== 'object'
+        ).slice(0, 8);
+      }
+
+      const columnLabels = {
+        invoice_number: 'رقم الفاتورة',
+        po_number: 'رقم أمر الشراء',
+        customer_name: 'اسم العميل',
+        customer_code: 'كود العميل',
+        supplier_name: 'اسم المورد',
+        supplier_code: 'كود المورد',
+        party_name: 'اسم الطرف',
+        name: 'البيان / الاسم',
+        code: 'الكود',
+        date: 'التاريخ',
+        created_at: 'تاريخ الإنشاء',
+        due_date: 'تاريخ الاستحقاق',
+        payment_date: 'تاريخ السداد',
+        payment_terms: 'طريقة الدفع',
+        status: 'الحالة',
+        quantity: 'الكمية',
+        unit_price: 'سعر الوحدة',
+        total_amount: 'الإجمالي',
+        total_invoice_amount: 'إجمالي الفاتورة',
+        total_product_cost: 'إجمالي التكلفة',
+        paid_amount: 'المسدد',
+        remaining_amount: 'المتبقي',
+        balance: 'الرصيد',
+        balance_due: 'المستحق',
+        current_balance: 'الرصيد الحالي',
+        supplier_balance: 'رصيد المورد',
+        customer_balance: 'رصيد العميل',
+        net_balance: 'صافي الرصيد',
+        actual_balance: 'الرصيد الفعلي',
+        invoices_count: 'عدد الفواتير',
+        total_sales: 'إجمالي المبيعات'
+      };
+
+      // Summary sums
+      let totalAmountSum = 0;
+      let hasAmountSum = false;
+      for (const row of reportRows) {
+        const amt = row.total_amount ?? row.total_invoice_amount ?? row.balance_due ?? row.current_balance ?? row.total_sales;
+        if (amt !== undefined && amt !== null && !isNaN(Number(amt))) {
+          totalAmountSum += Number(amt);
+          hasAmountSum = true;
+        }
+      }
+
+      // 6.A) Thermal 80mm Layout for Report Summary
+      if (isThermal) {
+        return (
+          <div className="p-3 bg-white text-slate-900 font-mono text-xs w-[80mm] max-w-[80mm] mx-auto select-text" dir="rtl">
+            <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="h-10 w-auto max-w-[90px] object-contain mx-auto mb-1"
+                onError={(e) => {
+                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
+                }}
+              />
+              <h2 className="font-extrabold text-sm text-slate-900">{companyName}</h2>
+              <div className="text-[11px] font-bold text-[#1F3A5F]">{reportTitle}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">تاريخ الطباعة: {formatDate(new Date().toISOString())}</div>
+              <div className="text-[10px] font-bold text-slate-700 mt-1">عدد السجلات: {formatNumber(reportRows.length)}</div>
+            </div>
+
+            {hasAmountSum && (
+              <div className="p-2.5 bg-slate-50 border border-slate-300 rounded text-center mb-3">
+                <span className="text-[10px] text-slate-500 block mb-0.5">إجمالي المطابقات المحاسبية:</span>
+                <span className="text-base font-bold font-mono text-emerald-800 block">
+                  {formatCurrency(totalAmountSum)}
+                </span>
+              </div>
+            )}
+
+            <div className="text-center text-[9px] text-slate-400 pt-3 border-t border-dashed border-slate-400">
+              كود سيستمز المتكامل • ملخص تقرير معتمد
+            </div>
+          </div>
+        );
+      }
+
+      // 6.B) Standardized A4 / A5 Report Layout
       return (
         <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
           {/* Standardized Report Header: Logo top-right, Company top-left, Title centered in bordered box, Date/Time stamp */}
@@ -914,7 +1471,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 }}
               />
               <div className="text-right">
-                <div className="text-[11px] font-bold text-slate-500">نظام code systems ERP</div>
+                <div className="text-[11px] font-bold text-slate-500">نظام كود سيستمز المتكامل</div>
                 <div className="text-[10px] text-slate-400">قسم الحسابات والإدارة العامة</div>
               </div>
             </div>
@@ -1017,12 +1574,11 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             </div>
           </div>
           <div className="text-center text-[9px] text-slate-400 pt-4 border-t border-slate-200 mt-4 break-inside-avoid">
-            تقرير رسمي مستخرج من نظام code systems ERP • تم التحقق والمطابقة المحاسبية
+            تقرير رسمي مستخرج من نظام كود سيستمز المتكامل • تم التحقق والمطابقة المحاسبية
           </div>
         </div>
       );
     }
-
     // 7. Generic Fallback Document View
     if (!documentData) {
       return (
@@ -1380,7 +1936,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               </label>
               {printers.length === 0 ? (
                 <div className="p-3 bg-slate-800 rounded-lg text-[11px] text-amber-400 font-semibold border border-amber-500/30">
-                  لم يتم اكتشاف طابعة متصلة. يمكنك استخدام «حفظ كملف PDF» لتصدير الملف.
+                  لم يتم اكتشاف طابعة متصلة. يمكنك استخدام «حفظ كملف إلكتروني» لتصدير المستند.
                 </div>
               ) : (
                 <select
@@ -1407,9 +1963,9 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 onChange={(e) => setPaperSize(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:border-blue-500 cursor-pointer"
               >
-                <option value="A4">A4 (ورق قياسي كامل 210 × 297 مم)</option>
-                <option value="A5">A5 (نصف صفحة 148 × 210 مم)</option>
-                <option value="80mm">إيصال طباعة حرارية (80 مم Thermal)</option>
+                <option value="A4">ورق قياسي كامل (210 × 297 مم)</option>
+                <option value="A5">نصف صفحة قياسي (148 × 210 مم)</option>
+                <option value="80mm">إيصال طباعة حرارية (80 مم)</option>
               </select>
             </div>
 
@@ -1428,7 +1984,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                   }`}
                 >
-                  رأسي (Portrait)
+                  رأسي
                 </button>
                 <button
                   type="button"
@@ -1439,7 +1995,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                   }`}
                 >
-                  أفقي (Landscape)
+                  أفقي
                 </button>
               </div>
             </div>
@@ -1548,7 +2104,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Download className="w-4 h-4 text-emerald-400" />
-              <span>{isSavingPdf ? 'جاري تصدير PDF...' : 'حفظ كملف PDF'}</span>
+              <span>{isSavingPdf ? 'جاري تصدير الملف...' : 'حفظ كملف إلكتروني'}</span>
             </button>
 
             <button

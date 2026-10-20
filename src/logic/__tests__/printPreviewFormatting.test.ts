@@ -90,7 +90,7 @@ describe('Print Preview Formatting & Paper Sizing Verification', () => {
 
       expect(html).toContain('dir="rtl"');
       expect(html).toContain('PO-2026-7777');
-      expect(html).toContain('أمر تشغيل وقص ملابس (Cut Order)');
+      expect(html).toContain('أمر تشغيل وتفصيل وقص ملابس');
       expect(html).toContain('مصنع الأناقة والقص المتطور');
       expect(html).toContain('تيشيرت بولو رجالي فاخر');
       expect(html).toContain('TSH-POLO-01');
@@ -104,7 +104,7 @@ describe('Print Preview Formatting & Paper Sizing Verification', () => {
       expect(html).toContain('مراقب الجودة الفنية');
       expect(html).toContain('المحاسب المسؤول');
       expect(html).toContain('الاعتماد الإداري / إدارة الإنتاج');
-      expect(html).toContain('أمر تشغيل وقص رسمي صادر عن نظام code systems ERP');
+      expect(html).toContain('أمر تشغيل وقص رسمي صادر عن نظام كود سيستمز المتكامل');
     });
 
     it('generates compact 80mm thermal Cut Order print layout for production clipboards', () => {

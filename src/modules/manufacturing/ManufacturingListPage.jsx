@@ -145,7 +145,8 @@ export default function ManufacturingListPage({ onNotify }) {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ar'));
   }, [orders]);
 
-  const filteredOrders = orders.filter(o => {
+  const safeOrders = Array.isArray(orders) ? orders : [];
+  const filteredOrders = safeOrders.filter(o => {
     // 1. Search term
     const term = searchTerm.trim().toLowerCase();
     if (term) {

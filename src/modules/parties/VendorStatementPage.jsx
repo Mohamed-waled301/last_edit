@@ -157,7 +157,8 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
         try {
           const prodRes = await api.getProductionOrders().catch(() => ({ data: [] }));
           const pOrders = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.production_orders || []);
-          const existingCutKeys = new Set(statementMovements.filter(m => m.cut_order_id).map(m => `${m.cut_order_id}`));
+          const safeStmtMovements = Array.isArray(statementMovements) ? statementMovements : [];
+          const existingCutKeys = new Set(safeStmtMovements.filter(m => m && m.cut_order_id).map(m => `${m.cut_order_id}`));
 
           for (const order of pOrders) {
             if (existingCutKeys.has(String(order.id))) continue;
@@ -241,7 +242,8 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
     const startIso = parseToIso(startDate);
     const endIso = parseToIso(endDate);
 
-    return computedMovements.items.filter((row) => {
+    const items = Array.isArray(computedMovements?.items) ? computedMovements.items : [];
+    return items.filter((row) => {
       const rowIso = row.date ? String(row.date).slice(0, 10) : '';
       if (startIso && rowIso && rowIso < startIso) return false;
       if (endIso && rowIso && rowIso > endIso) return false;
@@ -387,7 +389,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
           >
             <Download className="w-4 h-4 text-emerald-600" />
-            <span>تصدير Excel</span>
+            <span>تصدير إكسيل</span>
           </button>
           <button
             type="button"

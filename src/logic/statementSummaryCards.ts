@@ -74,7 +74,8 @@ export function computeMovementsWithRunningBalance(
   let totDebit = 0;
   let totCredit = 0;
 
-  const items = rawMovements.map((m) => {
+  const safeMovements = Array.isArray(rawMovements) ? rawMovements : [];
+  const items = safeMovements.map((m) => {
     const d = Number(m.debit) || 0;
     const c = Number(m.credit) || 0;
     running = Number((running + d - c).toFixed(2));

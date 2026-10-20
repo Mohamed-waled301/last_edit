@@ -208,7 +208,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
         {
           key: 'cut-production-by-size-color',
           title: 'إنتاج القص حسب المقاس واللون',
-          desc: 'حصر كميات قطع القص مصنفة بالألوان والمقاسات (M إلى 8XL) لكل أمر قص مع الإجماليات والتصدير لإكسيل',
+          desc: 'حصر كميات قطع القص مصنفة بالألوان والمقاسات لكافة المقاسات التفصيلية لكل أمر قص مع الإجماليات والتصدير لإكسيل',
           icon: Scissors,
           color: 'emerald'
         }
@@ -333,7 +333,8 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
             ]);
             let filteredInvoices = salesInvoices;
             if (startDate || endDate) {
-              filteredInvoices = salesInvoices.filter(i => {
+              const safeInvs = Array.isArray(salesInvoices) ? salesInvoices : [];
+              filteredInvoices = safeInvs.filter(i => {
                 const d = i.invoice_date || i.date;
                 if (startDate && d && d < startDate) return false;
                 if (endDate && d && d > endDate) return false;
@@ -387,7 +388,8 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
           }
           case 'invalid-phones': {
             const parties = await db.parties.toArray();
-            const invalid = parties.filter((p) => p.phone && !isValidEgyptianMobile(p.phone));
+            const safeParties = Array.isArray(parties) ? parties : [];
+            const invalid = safeParties.filter((p) => p.phone && !isValidEgyptianMobile(p.phone));
             setReportData(invalid.map((p) => {
               const ph = String(p.phone || '');
               let reason = 'رقم غير صالح';
@@ -515,7 +517,8 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
 
   // Filtered dataset
   const filteredData = useMemo(() => {
-    return reportData.filter((row) => {
+    const safeList = Array.isArray(reportData) ? reportData : [];
+    return safeList.filter((row) => {
       const term = searchTerm.trim().toLowerCase();
       if (term) {
         const matchesTerm = Object.values(row).some((val) => {

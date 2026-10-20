@@ -77,7 +77,8 @@ function SearchableMaterialSelect({ items, value, onChange }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredItems = items.filter((item) => {
+  const safeItems = Array.isArray(items) ? items : [];
+  const filteredItems = safeItems.filter((item) => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.trim().toLowerCase();
     const codeMatch = String(item.code || '').toLowerCase().includes(query);
@@ -785,7 +786,8 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
     }
 
     // Payments for this stage
-    const stPayments = stagePayments.filter(p => (p.stage_type === key || (!p.stage_type && key === 'printing')) && p.status !== 'cancelled');
+    const safeStagePayments = Array.isArray(stagePayments) ? stagePayments : [];
+    const stPayments = safeStagePayments.filter(p => (p.stage_type === key || (!p.stage_type && key === 'printing')) && p.status !== 'cancelled');
     const paid = stPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const remaining = Math.max(0, Number((cost - paid).toFixed(2)));
 

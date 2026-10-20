@@ -70,7 +70,8 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
     loadParties();
   }, []);
 
-  const filteredParties = parties.filter(p => {
+  const safeParties = Array.isArray(parties) ? parties : [];
+  const filteredParties = safeParties.filter(p => {
     const matchesSearch = 
       (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -199,7 +200,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                 filterRole === 'suppliers' ? 'bg-white text-[#1F3A5F] shadow-xs' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              الموردين ({parties.filter(p => p.is_supplier).length})
+              الموردين ({(Array.isArray(parties) ? parties : []).filter(p => p.is_supplier).length})
             </button>
             <button
               onClick={() => setFilterRole('customers')}
@@ -207,7 +208,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                 filterRole === 'customers' ? 'bg-white text-[#1F3A5F] shadow-xs' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              العملاء ({parties.filter(p => p.is_customer).length})
+              العملاء ({(Array.isArray(parties) ? parties : []).filter(p => p.is_customer).length})
             </button>
             <button
               onClick={() => setFilterRole('both')}
@@ -215,7 +216,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                 filterRole === 'both' ? 'bg-white text-[#1F3A5F] shadow-xs' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              مورد وعميل معاً ({parties.filter(p => p.is_supplier && p.is_customer).length})
+              مورد وعميل معاً ({(Array.isArray(parties) ? parties : []).filter(p => p.is_supplier && p.is_customer).length})
             </button>
           </div>
         </div>

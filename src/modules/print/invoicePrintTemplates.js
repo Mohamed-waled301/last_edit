@@ -322,7 +322,7 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
           ${hasValidLogo ? `<img src="${companyLogo}" alt="Logo" style="height: 56px; max-width: 120px; object-fit: contain; border-radius: 4px;" />` : ''}
           <div>
             <h1 style="font-size: 20px; font-weight: 800; color: #1e3a8a; margin: 0 0 4px 0;">${escapeHtml(companyName)}</h1>
-            <div style="font-size: 11px; font-weight: bold; color: #64748b;">نظام تخطيط موارد المؤسسات - code systems ERP</div>
+            <div style="font-size: 11px; font-weight: bold; color: #64748b;">نظام تخطيط موارد المؤسسات - كود سيستمز المتكامل</div>
             ${settings?.address ? `<div style="font-size: 11px; color: #475569; margin-top: 2px;">${escapeHtml(settings.address)}</div>` : ''}
             ${settings?.phone ? `<div style="font-size: 11px; color: #475569;">هاتف: <span class="font-mono">${escapeHtml(settings.phone)}</span></div>` : ''}
           </div>
@@ -681,7 +681,7 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
           ${hasValidLogo ? `<img src="${companyLogo}" alt="Logo" style="height: 56px; max-width: 120px; object-fit: contain; border-radius: 4px;" />` : ''}
           <div>
             <h1 style="font-size: 20px; font-weight: 800; color: #1e3a8a; margin: 0 0 4px 0;">${escapeHtml(companyName)}</h1>
-            <div style="font-size: 11px; font-weight: bold; color: #64748b;">نظام تخطيط موارد المؤسسات - code systems ERP</div>
+            <div style="font-size: 11px; font-weight: bold; color: #64748b;">نظام تخطيط موارد المؤسسات - كود سيستمز المتكامل</div>
             ${settings?.address ? `<div style="font-size: 11px; color: #475569; margin-top: 2px;">${escapeHtml(settings.address)}</div>` : ''}
             ${settings?.phone ? `<div style="font-size: 11px; color: #475569;">هاتف: <span class="font-mono">${escapeHtml(settings.phone)}</span></div>` : ''}
             ${settings?.tax_number ? `<div style="font-size: 11px; color: #475569;">الرقم الضريبي: <span class="font-mono">${escapeHtml(settings.tax_number)}</span></div>` : ''}
@@ -1107,7 +1107,7 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
 
         <div style="text-align: left;">
           <div style="display: inline-block; background: #1e3a8a; color: #ffffff; font-weight: bold; font-size: 12px; padding: 4px 12px; border-radius: 6px; margin-bottom: 6px;">
-            أمر تشغيل وقص ملابس (Cut Order)
+            أمر تشغيل وتفصيل وقص ملابس
           </div>
           ${opts.show_story_info ? `
             <div style="font-size: 11px; color: #334155; font-weight: bold;">
@@ -1168,8 +1168,8 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
         <!-- Color by Size Matrix Table -->
         <div style="margin-bottom: 16px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;" class="break-inside-avoid">
           <div style="background: #1e3a8a; color: #ffffff; padding: 6px 12px; font-weight: bold; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
-            <span>جدول توزيع المقاسات والكميات للقصة (Matrix Breakdown)</span>
-            <span style="font-size: 10px; font-weight: normal;">10 مقاسات قياسية (M إلى 8XL)</span>
+            <span>جدول توزيع المقاسات والكميات التفصيلي للقصة</span>
+            <span style="font-size: 10px; font-weight: normal;">10 مقاسات قياسية تفصيلية</span>
           </div>
           <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
             <thead>
@@ -1375,7 +1375,7 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
 
       <!-- Bottom System Stamp -->
       <div style="margin-top: 20px; padding-top: 8px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 10px; color: #94a3b8;" class="break-inside-avoid">
-        أمر تشغيل وقص رسمي صادر عن نظام code systems ERP • تم توزيع التكاليف وحفظ البيانات آلياً
+        أمر تشغيل وقص رسمي صادر عن نظام كود سيستمز المتكامل • تم توزيع التكاليف وحفظ البيانات آلياً
       </div>
     </div>
   `;
