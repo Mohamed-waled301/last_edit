@@ -81,6 +81,7 @@ export const manufacturingRepo = {
 
   async getAll() {
     if (!db.production_orders) return [];
+    await this.syncLegacyStageInvoices().catch(() => {});
     let orders = [];
     try {
       orders = await db.production_orders.reverse().sortBy('created_at');
@@ -376,6 +377,73 @@ export const manufacturingRepo = {
     };
   },
 
+
+  /**
+   * Post or update payable obligations (مستحق له) to db.supplier_invoices for assigned stage workshops.
+   * On update, adjusting total_amount automatically adjusts the supplier's balance by the net delta only.
+   */
+  async _syncStageSupplierInvoices(orderId, cuttingNumber, stages, date, userId = 'usr-production', cuttingName = '') {
+    if (!db.supplier_invoices) return;
+    const stageKeys = ['printing', 'embroidery', 'sewing'];
+
+    for (const key of stageKeys) {
+      const stg = stages?.[key];
+      const sinvId = `sinv-cut-${orderId}-${key}`;
+      const existingInv = await db.supplier_invoices.get(sinvId).catch(() => null);
+
+      const vendorId = stg?.vendor_id;
+      const cost = Math.max(0, Number(stg?.total_cost) || 0);
+
+      if (vendorId && cost > 0) {
+        const stageTitle = STAGE_CONFIGS[key]?.title || (key === 'printing' ? 'طباعة' : key === 'embroidery' ? 'تطريز' : 'حياكة');
+        const invoiceData = {
+          id: sinvId,
+          invoice_number: `INV-CUT-${cuttingNumber}-${key}`,
+          supplier_id: vendorId,
+          reference_type: 'CUTTING_ORDER',
+          po_id: orderId,
+          cut_order_id: orderId,
+          stage_key: key,
+          invoice_date: date || getTodayDateString(),
+          due_date: date || getTodayDateString(),
+          payment_terms: 'credit',
+          subtotal: cost,
+          tax_amount: 0,
+          total_amount: cost,
+          paid_amount: existingInv?.paid_amount || 0,
+          status: existingInv?.status === 'paid' ? 'paid' : 'unpaid',
+          notes: `تشغيل مرحلة ${stageTitle} لأمر القص ${cuttingNumber}${cuttingName ? ` (${cuttingName})` : ''}`,
+          created_by: userId,
+          created_at: existingInv?.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        await db.supplier_invoices.put(invoiceData);
+      } else if (existingInv) {
+        await db.supplier_invoices.delete(sinvId);
+      }
+    }
+  },
+
+  /**
+   * Helper to ensure legacy cutting orders have their stage invoices populated
+   */
+  async syncLegacyStageInvoices() {
+    if (!db.production_orders || !db.supplier_invoices) return;
+    const orders = await db.production_orders.toArray().catch(() => []);
+    for (const o of orders) {
+      if (o.stages) {
+        await this._syncStageSupplierInvoices(
+          o.id,
+          o.cutting_number || o.order_number,
+          o.stages,
+          o.start_date || (o.created_at ? o.created_at.split('T')[0] : getTodayDateString()),
+          o.created_by,
+          o.cutting_name
+        ).catch(() => {});
+      }
+    }
+  },
+
   async createProductionOrder(data, userId = 'usr-production') {
     if (data.start_date) validateNotPastDate(data.start_date, 'تاريخ أمر الإنتاج');
     
@@ -493,7 +561,8 @@ export const manufacturingRepo = {
       db.materials,
       db.items,
       db.stock_movements,
-      db.products
+      db.products,
+      db.supplier_invoices
     ], async () => {
       // 1. Issue raw materials from stock (out movements)
       for (let idx = 0; idx < verifiedLines.length; idx++) {
@@ -713,6 +782,7 @@ export const manufacturingRepo = {
       };
 
       await db.production_orders.add(order);
+      await this._syncStageSupplierInvoices(id, cuttingNumber, stages, today, userId, cuttingName);
     });
 
     // 4. Save any initial stage payments through shared supplier payment ledger (Requirement 4.3)
@@ -884,7 +954,8 @@ export const manufacturingRepo = {
       db.materials,
       db.items,
       db.stock_movements,
-      db.products
+      db.products,
+      db.supplier_invoices
     ], async () => {
       // 1. Raw materials delta movements
       const newMatIds = new Set(verifiedLines.map(l => l.material_id));
@@ -1197,6 +1268,7 @@ export const manufacturingRepo = {
       }
 
       await db.production_orders.update(id, updatedRecord);
+      await this._syncStageSupplierInvoices(id, newCuttingNumber, stages, today, userId, updatedRecord.cutting_name);
     });
 
     // Save audit log with old and new values (Requirement 4.2)

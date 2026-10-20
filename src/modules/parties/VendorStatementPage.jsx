@@ -128,7 +128,8 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                 const isPay = m.type === 'سند صرف' || m.reference?.startsWith('PAY-');
                 const isSet = m.type === 'تسوية مقاصة' || m.reference?.startsWith('SET-');
                 const isRet = m.type === 'مرتجع خامات' || m.reference?.startsWith('RET-');
-                const isInv = m.type === 'فاتورة توريد' || m.reference?.startsWith('INV-');
+                const isCut = m.reference_type === 'CUTTING_ORDER' || m.reference?.startsWith('INV-CUT-') || String(m.type).includes('تشغيل');
+                const isInv = m.type === 'فاتورة توريد' || m.reference?.startsWith('INV-') || isCut;
 
                 const owedAmount = isInv ? Number(m.credit || m.amount || 0) : 0;
                 const paidAmount = (isPay || isSet || isRet) ? Number(m.debit || m.amount || 0) : 0;
@@ -137,9 +138,9 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                   id: m.id || `sup-${m.date}-${m.reference}`,
                   date: m.date,
                   doc_number: m.reference || m.doc_number || '---',
-                  stage: m.type || (isInv ? 'فاتورة توريد' : isPay ? 'سند صرف' : isSet ? 'تسوية مقاصة' : 'مرتجع خامات'),
-                  category: isInv ? 'purchases' : isPay ? 'payments' : isSet ? 'settlements' : isRet ? 'returns' : 'purchases',
-                  description: m.description || (isInv ? 'فاتورة توريد خامات' : isPay ? 'سداد دفعة نقدية' : isSet ? 'تسوية مقاصة' : 'رد خامات'),
+                  stage: isCut ? (m.type || 'تشغيل') : (m.type || (isInv ? 'فاتورة توريد' : isPay ? 'سند صرف' : isSet ? 'تسوية مقاصة' : 'مرتجع خامات')),
+                  category: isCut ? 'manufacturing' : (isInv ? 'purchases' : isPay ? 'payments' : isSet ? 'settlements' : isRet ? 'returns' : 'purchases'),
+                  description: m.description || (isCut ? 'تشغيل مرحلة أمر قص' : (isInv ? 'فاتورة توريد خامات' : isPay ? 'سداد دفعة نقدية' : isSet ? 'تسوية مقاصة' : 'رد خامات')),
                   debit: owedAmount,
                   credit: paidAmount,
                   cut_order_id: m.cut_order_id || null,
@@ -152,24 +153,32 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
           }
         }
 
-        // 3. Also check production order stage allocations for workshops
+        // 3. Also check production order stage allocations for workshops (fallback/deduplicated)
         try {
           const prodRes = await api.getProductionOrders().catch(() => ({ data: [] }));
           const pOrders = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.production_orders || []);
+          const existingCutKeys = new Set(statementMovements.filter(m => m.cut_order_id).map(m => `${m.cut_order_id}`));
+
           for (const order of pOrders) {
-            if (Array.isArray(order.stages)) {
-              for (const stg of order.stages) {
-                if (String(stg.workshop_id || stg.party_id) === String(vendorId)) {
-                  // Stage movement
-                  const stageName = stg.stage_name || (stg.stage_key === 'printing' ? 'طباعة' : stg.stage_key === 'embroidery' ? 'تطريز' : stg.stage_key === 'sewing' ? 'حياكة' : 'تشغيل');
+            if (existingCutKeys.has(String(order.id))) continue;
+            const stagesObj = order.stages || {};
+            const stageKeys = Object.keys(stagesObj);
+            for (const sKey of stageKeys) {
+              const stg = stagesObj[sKey];
+              if (!stg) continue;
+              const vId = stg.vendor_id || stg.workshop_id || stg.party_id;
+              if (String(vId) === String(vendorId)) {
+                const stageName = sKey === 'printing' ? 'طباعة' : sKey === 'embroidery' ? 'تطريز' : sKey === 'sewing' ? 'حياكة' : 'تشغيل';
+                const cost = Number(stg.stage_cost || stg.total_cost || 0);
+                if (cost > 0) {
                   statementMovements.push({
-                    id: `stg-${order.id}-${stg.stage_key}`,
-                    date: order.created_at || new Date().toISOString(),
+                    id: `stg-${order.id}-${sKey}`,
+                    date: order.created_at || order.start_date || new Date().toISOString(),
                     doc_number: order.cutting_number || order.order_number || `قصة #${order.id}`,
-                    stage: stageName,
+                    stage: `تشغيل ${stageName}`,
                     category: 'manufacturing',
                     description: `تشغيل مرحلة ${stageName} لأمر القص [${order.cutting_number || order.order_number}]`,
-                    debit: Number(stg.stage_cost || stg.total_cost || 0),
+                    debit: cost,
                     credit: 0,
                     cut_order_id: order.id
                   });

@@ -155,14 +155,19 @@ export const suppliersRepo = {
 
     for (const inv of invoices) {
       if (inv.status !== 'cancelled') {
+        const isCutOrder = inv.reference_type === 'CUTTING_ORDER' || String(inv.id).startsWith('sinv-cut-');
+        const stageTitle = inv.stage_key === 'printing' ? 'طباعة' : inv.stage_key === 'embroidery' ? 'تطريز' : inv.stage_key === 'sewing' ? 'حياكة' : 'تشغيل';
         transactions.push({
           date: inv.invoice_date,
-          type: 'فاتورة توريد',
+          type: isCutOrder ? `تشغيل ${stageTitle}` : (inv.type || 'فاتورة توريد'),
           reference: inv.invoice_number,
-          description: inv.notes || 'فاتورة استلام خامات',
+          description: inv.notes || (isCutOrder ? `تشغيل مرحلة ${stageTitle}` : 'فاتورة استلام خامات'),
           debit: 0,
           credit: Number(inv.total_amount) || 0,
           raw_date: inv.created_at || inv.invoice_date,
+          cut_order_id: inv.cut_order_id || inv.po_id,
+          reference_type: inv.reference_type,
+          stage_key: inv.stage_key
         });
       }
     }

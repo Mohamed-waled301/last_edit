@@ -398,8 +398,8 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         is_supplier: 1,
         supplier_type: 'service',
         service_stage: 'printing',
-        opening_balance: 1500,
-        supplier_opening_balance: 1500
+        opening_balance: 0,
+        supplier_opening_balance: 0
       });
 
       const embroideryShop = await partiesRepo.create({
@@ -476,9 +476,8 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
       // Total stages cost: 1500 + 2000 + 2500 = 6000 EGP
       expect(fetched.total_stages_cost).toBe(6000);
 
-      // 5. Record stage payment of 600 EGP to printing stage via addStagePayment
-      // First update printShop balance to acknowledge stage debt
-      await db.parties.update(printShop.id, { supplier_balance: 1500 });
+      // 5. Verify stage debt was posted automatically to printShop balance (1500 EGP)
+      expect((await partiesRepo.getById(printShop.id)).supplier_balance).toBe(1500);
 
       const payStageRes = await manufacturingRepo.addStagePayment(order.id, 'printing', {
         amount: 600,
