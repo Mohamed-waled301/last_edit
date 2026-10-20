@@ -1391,7 +1391,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       const ignoredKeys = new Set([
         'id', '_id', 'uuid', 'created_by', 'updated_at', 'is_active', 'raw_date', 'password', 'salt',
         'party_id', 'supplier_id', 'customer_id', 'item_id', 'outlet_id', 'user_id', 'account_id',
-        'po_id', 'order_id', 'category_id', 'version', 'hash', 'sync_status', 'items', 'matrix', 'stages'
+        'order_id', 'category_id', 'version', 'hash', 'sync_status', 'items', 'matrix', 'stages'
       ]);
 
       // Comprehensive 100% Arabic Table Column Translations Dictionary
@@ -1430,6 +1430,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         // Invoices, POs & Cutting Orders
         invoice_number: 'رقم الفاتورة',
         po_number: 'رقم أمر الشراء',
+        po_id: 'رقم أمر الشراء',
         receipt_number: 'رقم إذن الاستلام',
         order_number: 'رقم الطلب',
         cutting_number: 'رقم أمر القص',
@@ -1508,7 +1509,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         if (columnLabels[key]) return columnLabels[key];
         const k = String(key || '').toLowerCase().trim();
         if (k.includes('grn')) return 'رقم إذن الاستلام';
-        if (k.includes('po_') || k === 'po') return 'رقم أمر الشراء';
+        if (k.includes('po_') || k === 'po' || k === 'po_id') return 'رقم أمر الشراء';
         if (k.includes('supplier_type') || k.includes('activity')) return 'نوع المورد / النشاط';
         if (k.includes('phone') || k.includes('mobile')) return 'رقم الهاتف';
         if (k.includes('address')) return 'العنوان';
@@ -1536,11 +1537,11 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         return 'البيان';
       };
 
-      // Standard Schemas for known reports to prevent calculation dumps and duplicate columns
+      // Standard Schemas for known reports
       const REPORT_SCHEMAS = {
         'supplier-statements': ['code', 'name', 'supplier_type', 'phone', 'total_purchases', 'total_paid', 'balance_due'],
         'customer-statements': ['code', 'name', 'phone', 'total_sales', 'total_paid', 'balance_due'],
-        'goods-receipts': ['grn_number', 'po_id', 'supplier_name', 'receipt_date', 'receiver_name', 'notes'],
+        'goods-receipts': ['grn_number', 'po_number', 'po_id', 'supplier_name', 'receipt_date', 'receiver_name', 'notes'],
         'purchase-orders': ['po_number', 'supplier_name', 'order_date', 'payment_terms', 'subtotal', 'discount_value', 'total_amount'],
         'sales-invoices': ['invoice_number', 'customer_name', 'invoice_date', 'payment_terms', 'total_amount', 'status'],
         'stock-adjustments': ['id', 'item_name', 'adjustment_type', 'quantity', 'reason', 'date'],
@@ -1559,6 +1560,10 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             return val !== undefined && val !== null && String(val).trim() !== '';
           });
         });
+        // If both po_number and po_id exist, keep po_number only
+        if (columnKeys.includes('po_number') && columnKeys.includes('po_id')) {
+          columnKeys = columnKeys.filter(k => k !== 'po_id');
+        }
       }
 
       // Dynamic fallback for unlisted reports
@@ -1570,16 +1575,54 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         ).slice(0, 8);
       }
 
-      // Column widths helper
+      // Balanced Column Widths Map (Guarantees every column has ample horizontal room)
+      const COLUMN_WIDTH_MAP = {
+        grn_number: '18%',
+        po_number: '17%',
+        po_id: '17%',
+        supplier_name: '18%',
+        customer_name: '22%',
+        receipt_date: '14%',
+        order_date: '13%',
+        invoice_date: '13%',
+        receiver_name: '14%',
+        notes: '21%',
+        description: '21%',
+        reason: '20%',
+        code: '12%',
+        name: '24%',
+        phone: '14%',
+        supplier_type: '14%',
+        total_purchases: '14%',
+        total_sales: '14%',
+        total_paid: '13%',
+        balance_due: '14%',
+        total_amount: '14%',
+        subtotal: '12%',
+        discount_value: '10%',
+        payment_terms: '12%',
+        status: '12%',
+        actual_balance: '12%',
+        cost_price: '12%',
+        selling_price: '12%',
+        item_group: '14%',
+        item_type: '12%',
+        quantity: '12%',
+        due_date: '13%',
+        amount: '14%',
+        paid_amount: '13%',
+        remaining_amount: '14%',
+        return_number: '18%',
+        return_type: '18%',
+        stage_title: '14%',
+        vendor_name: '18%',
+        pricing_type: '13%',
+        total_cost: '14%'
+      };
+
       const getColWidth = (k, count) => {
-        if (k === 'code' || k.includes('code')) return count >= 8 ? '10%' : '12%';
-        if (k === 'name' || k.includes('name')) return count >= 8 ? '20%' : '26%';
-        if (k.includes('date')) return '13%';
-        if (k.includes('phone')) return '14%';
-        if (k.includes('terms') || k === 'status' || k.includes('type')) return '12%';
-        if (k.includes('total') || k.includes('amount') || k.includes('balance') || k.includes('price') || k.includes('cost') || k.includes('paid')) return count >= 8 ? '11%' : '14%';
-        if (k === 'notes' || k.includes('notes') || k === 'reason') return '22%';
-        return undefined;
+        if (COLUMN_WIDTH_MAP[k]) return COLUMN_WIDTH_MAP[k];
+        return `${Math.floor(100 / (count || 1))}%`;
       };
 
       // Summary sums
@@ -1598,8 +1641,8 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       const isUltraDense = colCount >= 9;
       const isDense = colCount >= 6 && !isUltraDense;
       const tableFontClass = isUltraDense ? 'text-[9.5px]' : isDense ? 'text-[11px]' : 'text-xs';
-      const thPadClass = isUltraDense ? 'py-1 px-1' : isDense ? 'py-1.5 px-1.5' : 'p-2';
-      const tdPadClass = isUltraDense ? 'py-1 px-1' : isDense ? 'py-1 px-1.5' : 'p-2';
+      const thPadClass = isUltraDense ? 'py-1 px-1' : isDense ? 'py-2 px-2' : 'py-2.5 px-3';
+      const tdPadClass = isUltraDense ? 'py-1 px-1' : isDense ? 'py-1.5 px-2' : 'py-2 px-3';
 
       // 6.A) Thermal 80mm Layout for Report Summary
       if (isThermal) {
@@ -1680,27 +1723,25 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           <div className="w-full max-w-full overflow-hidden">
             <table className={`w-full max-w-full text-right ${tableFontClass} border-collapse table-fixed`}>
               <colgroup>
-                <col style={{ width: '38px' }} />
+                <col style={{ width: '42px' }} />
                 {columnKeys.map(k => (
                   <col key={k} style={{ width: getColWidth(k, columnKeys.length) }} />
                 ))}
               </colgroup>
               <thead>
                 <tr className="bg-[#1F3A5F] text-white border-b border-slate-300">
-                  <th className={`${thPadClass} border border-slate-200 text-center font-bold overflow-hidden w-8 shrink-0`}>#</th>
+                  <th className={`${thPadClass} border border-slate-300 text-center font-bold whitespace-nowrap w-10 shrink-0`}>#</th>
                   {columnKeys.map(k => {
                     const isNum = k.includes('total') || k.includes('amount') || k.includes('balance') || k.includes('price') || k.includes('cost') || k.includes('limit');
-                    const isCode = k === 'code' || k.includes('code');
-                    const isPhone = k === 'phone' || k.includes('phone');
-                    const colWidth = isPhone ? 'w-24' : isCode ? 'w-16' : '';
                     return (
                       <th
                         key={k}
-                        className={`${thPadClass} ${colWidth} border border-slate-200 font-bold overflow-hidden ${isNum ? 'text-left' : 'text-right'} break-words whitespace-normal leading-tight`}
+                        style={{ width: getColWidth(k, columnKeys.length) }}
+                        className={`${thPadClass} border border-slate-300 font-bold whitespace-nowrap ${isNum ? 'text-left' : 'text-center'}`}
                       >
-                        <div className="w-full max-w-full overflow-hidden text-ellipsis break-words whitespace-normal leading-tight">
+                        <span className="whitespace-nowrap font-bold block">
                           {getArabicColumnTitle(k)}
-                        </div>
+                        </span>
                       </th>
                     );
                   })}
@@ -1709,85 +1750,83 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               <tbody>
                 {reportRows.length === 0 ? (
                   <tr>
-                    <td colSpan={columnKeys.length + 1} className="p-8 text-center text-slate-500 font-bold overflow-hidden">
+                    <td colSpan={columnKeys.length + 1} className="p-8 text-center text-slate-500 font-bold">
                       لا توجد بيانات مطابقة لمعايير هذا التقرير.
                     </td>
                   </tr>
                 ) : (
                   reportRows.map((row, idx) => (
                     <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className={`${tdPadClass} border border-slate-200 text-center font-mono text-slate-500 overflow-hidden`}>{idx + 1}</td>
+                      <td className={`${tdPadClass} border border-slate-200 text-center font-mono text-slate-500 whitespace-nowrap`}>{idx + 1}</td>
                       {columnKeys.map(k => {
                         const val = row[k];
                         const isNum = typeof val === 'number';
                         const isDate = typeof val === 'string' && (k.includes('date') || k.includes('created_at'));
                         const isMoney = k.includes('total') || k.includes('amount') || k.includes('balance') || k.includes('price') || k.includes('cost') || k.includes('paid');
-                        const isCenter = k === 'code' || k.includes('code') || isDate || k === 'status' || k.includes('phone') || k.includes('terms') || k === 'unit' || k === 'quantity';
+                        const isCenter = k === 'code' || k.includes('code') || isDate || k === 'status' || k.includes('phone') || k.includes('terms') || k === 'unit' || k === 'quantity' || k === 'po_number' || k === 'grn_number' || k === 'po_id';
                         return (
                           <td
                             key={k}
-                            className={`${tdPadClass} border border-slate-200 overflow-hidden ${
-                              isMoney ? 'text-left font-mono font-bold' : isCenter ? 'text-center' : 'text-right'
+                            className={`${tdPadClass} border border-slate-200 ${
+                              isMoney ? 'text-left font-mono font-bold whitespace-nowrap' : isCenter ? 'text-center whitespace-nowrap' : 'text-right'
                             }`}
                           >
-                            <div className="w-full max-w-full overflow-hidden text-ellipsis">
-                              {(() => {
-                                if (k === 'is_customer' || k === 'is_supplier') {
-                                  return Number(val) === 1 || val === true ? 'نعم' : 'لا';
-                                }
-                                if (k === 'supplier_type') {
-                                  return val === 'goods' ? 'توريد خامات' : val === 'service' ? 'خدمات وتشغيل' : String(val || '-');
-                                }
-                                if (k === 'status') {
-                                  const sMap = { paid: 'مسدد', unpaid: 'غير مسدد', partially_paid: 'مسدد جزئياً', cancelled: 'ملغي', completed: 'مكتمل', closed: 'مقفل', issued: 'صادر', draft: 'مسودة', in_progress: 'قيد التشغيل', pending: 'معلق', ordered: 'قيد التوريد', received: 'تم الاستلام' };
-                                  return sMap[val] || String(val || '-');
-                                }
-                                if (k === 'adjustment_type' || k === 'type') {
-                                  const aMap = { add: 'إضافة للمخزن', subtract: 'عجز / خصم', damage: 'تالف / هالك', increase: 'زيادة', decrease: 'عجز' };
-                                  if (aMap[val]) return aMap[val];
-                                }
-                                if (k === 'item_type') {
-                                  const iMap = { raw: 'خامة', finished: 'منتج تام', fabric: 'قماش', accessory: 'إكسسوار' };
-                                  if (iMap[val]) return iMap[val];
-                                }
-                                if (k === 'payment_terms') {
-                                  return val === 'credit' ? 'آجل' : 'نقدي';
-                                }
-                                if (isDate) {
-                                  return (
-                                    <span className="font-mono inline-block text-center whitespace-nowrap" dir="ltr">
-                                      {formatDate(val)}
-                                    </span>
-                                  );
-                                }
-                                if (isMoney || (isNum && (k.includes('price') || k.includes('cost')))) {
-                                  return (
-                                    <span className="font-mono font-bold whitespace-nowrap block text-left" dir="ltr">
-                                      {formatCurrency(Number(val) || 0)}
-                                    </span>
-                                  );
-                                }
-                                if (isNum) {
-                                  return (
-                                    <span className="font-mono font-bold whitespace-nowrap block text-center" dir="ltr">
-                                      {formatNumber(Number(val) || 0)}
-                                    </span>
-                                  );
-                                }
-                                if (k === 'code' || k.includes('code') || k.includes('number') || k === 'phone' || k.includes('phone')) {
-                                  return (
-                                    <span className="font-mono whitespace-nowrap block text-center" dir="ltr">
-                                      {String(val || '-')}
-                                    </span>
-                                  );
-                                }
+                            {(() => {
+                              if (k === 'is_customer' || k === 'is_supplier') {
+                                return Number(val) === 1 || val === true ? 'نعم' : 'لا';
+                              }
+                              if (k === 'supplier_type') {
+                                return val === 'goods' ? 'توريد خامات' : val === 'service' ? 'خدمات وتشغيل' : String(val || '-');
+                              }
+                              if (k === 'status') {
+                                const sMap = { paid: 'مسدد', unpaid: 'غير مسدد', partially_paid: 'مسدد جزئياً', cancelled: 'ملغي', completed: 'مكتمل', closed: 'مقفل', issued: 'صادر', draft: 'مسودة', in_progress: 'قيد التشغيل', pending: 'معلق', ordered: 'قيد التوريد', received: 'تم الاستلام' };
+                                return sMap[val] || String(val || '-');
+                              }
+                              if (k === 'adjustment_type' || k === 'type') {
+                                const aMap = { add: 'إضافة للمخزن', subtract: 'عجز / خصم', damage: 'تالف / هالك', increase: 'زيادة', decrease: 'عجز' };
+                                if (aMap[val]) return aMap[val];
+                              }
+                              if (k === 'item_type') {
+                                const iMap = { raw: 'خامة', finished: 'منتج تام', fabric: 'قماش', accessory: 'إكسسوار' };
+                                if (iMap[val]) return iMap[val];
+                              }
+                              if (k === 'payment_terms') {
+                                return val === 'credit' ? 'آجل' : 'نقدي';
+                              }
+                              if (isDate) {
                                 return (
-                                  <span className="break-words whitespace-normal leading-tight block">
-                                    {String(val ?? '-')}
+                                  <span className="font-mono inline-block text-center whitespace-nowrap" dir="ltr">
+                                    {formatDate(val)}
                                   </span>
                                 );
-                              })()}
-                            </div>
+                              }
+                              if (isMoney || (isNum && (k.includes('price') || k.includes('cost')))) {
+                                return (
+                                  <span className="font-mono font-bold whitespace-nowrap block text-left" dir="ltr">
+                                    {formatCurrency(Number(val) || 0)}
+                                  </span>
+                                );
+                              }
+                              if (isNum) {
+                                return (
+                                  <span className="font-mono font-bold whitespace-nowrap block text-center" dir="ltr">
+                                    {formatNumber(Number(val) || 0)}
+                                  </span>
+                                );
+                              }
+                              if (k === 'code' || k.includes('code') || k === 'po_number' || k === 'grn_number' || k === 'po_id' || k === 'phone' || k.includes('phone')) {
+                                return (
+                                  <span className="font-mono font-bold whitespace-nowrap block text-center" dir="ltr">
+                                    {String(val || '-')}
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="break-words whitespace-normal leading-tight block">
+                                  {String(val ?? '-')}
+                                </span>
+                              );
+                            })()}
                           </td>
                         );
                       })}
@@ -1798,8 +1837,8 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               {hasAmountSum && reportRows.length > 0 && (
                 <tfoot>
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-                    <td colSpan={columnKeys.length} className={`${tdPadClass} text-right font-bold overflow-hidden`}>الإجمالي الكلي للمطابقات:</td>
-                    <td className={`${tdPadClass} text-left font-mono text-emerald-700 ${isUltraDense ? 'text-xs' : 'text-sm'} whitespace-nowrap overflow-hidden`}>
+                    <td colSpan={columnKeys.length} className={`${tdPadClass} text-right font-bold`}>الإجمالي الكلي للمطابقات:</td>
+                    <td className={`${tdPadClass} text-left font-mono text-emerald-700 ${isUltraDense ? 'text-xs' : 'text-sm'} whitespace-nowrap`}>
                       {formatCurrency(totalAmountSum)}
                     </td>
                   </tr>

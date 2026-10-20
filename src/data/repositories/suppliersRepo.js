@@ -1133,6 +1133,8 @@ export const suppliersRepo = {
     const receipts = await db.goods_receipts.reverse().sortBy('created_at');
     const suppliers = await db.suppliers.toArray();
     const supMap = new Map(suppliers.map(s => [s.id, s.name]));
+    const orders = db.purchase_orders ? await db.purchase_orders.toArray().catch(() => []) : [];
+    const poMap = new Map(orders.map(o => [o.id, o.po_number || o.id]));
     const items = await db.goods_receipt_items.toArray();
     const materials = await db.materials.toArray();
     const matMap = new Map(materials.map(m => [m.id, m]));
@@ -1152,6 +1154,7 @@ export const suppliersRepo = {
 
       return {
         ...r,
+        po_number: poMap.get(r.po_id) || r.po_id || '-',
         supplier_name: supMap.get(r.supplier_id) || r.supplier_id,
         items: grnItems,
       };
