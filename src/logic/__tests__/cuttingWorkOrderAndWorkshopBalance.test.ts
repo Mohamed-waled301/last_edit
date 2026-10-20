@@ -58,7 +58,7 @@ describe('Cutting Work Order Checkboxes, Subcontractor Balance Integration, & Pr
       };
 
       // Generate with default options (costs OFF)
-      const htmlNoCosts = generateCutOrderHtml(order, 'A4', DEFAULT_CUT_ORDER_PRINT_OPTIONS);
+      const htmlNoCosts = generateCutOrderHtml(order, {}, 'A4', DEFAULT_CUT_ORDER_PRINT_OPTIONS);
 
       // Verify essential work order fields appear
       expect(htmlNoCosts).toContain('CUT-2026-001');
@@ -75,7 +75,7 @@ describe('Cutting Work Order Checkboxes, Subcontractor Balance Integration, & Pr
       expect(htmlNoCosts).not.toContain('سعر الاتفاق');
 
       // Generate with all costs toggled ON
-      const htmlWithCosts = generateCutOrderHtml(order, 'A4', {
+      const htmlWithCosts = generateCutOrderHtml(order, {}, 'A4', {
         ...DEFAULT_CUT_ORDER_PRINT_OPTIONS,
         showFabricCost: true,
         showStageCosts: true,
@@ -162,10 +162,10 @@ describe('Cutting Work Order Checkboxes, Subcontractor Balance Integration, & Pr
 
       const stageTx = stmt.statement.find(t => t.reference.includes('PO-2026-ISLAM-01') || t.cut_order_id === cuttingOrder.id);
       expect(stageTx).toBeDefined();
-      expect(stageTx.type).toBe('تشغيل طباعة');
-      expect(stageTx.credit).toBe(3000);
-      expect(stageTx.debit).toBe(0);
-      expect(stageTx.balance_after).toBe(3000);
+      expect(stageTx!.type).toBe('تشغيل طباعة');
+      expect(stageTx!.credit).toBe(3000);
+      expect(stageTx!.debit).toBe(0);
+      expect(stageTx!.balance_after).toBe(3000);
     });
 
     it('adjusts workshop ledger balance by the net delta difference only upon order edit', async () => {
