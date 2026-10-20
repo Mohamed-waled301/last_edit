@@ -360,7 +360,7 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
       </div>
 
       <!-- Items Table -->
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 18px;">
+      <table style="width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; margin-bottom: 18px;">
         <thead>
           <tr style="background: #1e3a8a; color: #ffffff; font-weight: bold;">
             <th style="padding: 8px; text-align: center; width: 35px;">#</th>
@@ -721,7 +721,7 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
       </div>
 
       <!-- Items Table -->
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 18px;">
+      <table style="width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; margin-bottom: 18px;">
         <thead>
           <tr style="background: #1e3a8a; color: #ffffff; font-weight: bold;">
             <th style="padding: 8px; text-align: center; width: 35px;">#</th>
@@ -1171,7 +1171,7 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
             <span>جدول توزيع المقاسات والكميات التفصيلي للقصة</span>
             <span style="font-size: 10px; font-weight: normal;">10 مقاسات قياسية تفصيلية</span>
           </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+          <table style="width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px;">
             <thead>
               <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1; color: #334155; font-weight: bold;">
                 <th style="padding: 6px 8px; text-align: right; width: 130px; border-left: 1px solid #e2e8f0;">اللون</th>
@@ -1224,7 +1224,7 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
             <span>مراحل التشغيل والورش المسند إليها العمل (المطابع والتطريز والحياكة)</span>
             ${!showFinancialRates ? `<span style="font-size: 10px; color: #64748b; font-weight: normal;">(نسخة أمر شغل بدون أسعار)</span>` : ''}
           </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+          <table style="width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px;">
             <thead>
               <tr style="background: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: bold;">
                 <th style="padding: 6px 8px; text-align: right; width: 140px;">المرحلة</th>
@@ -1272,7 +1272,7 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
             <span>الخامات ومستلزمات الإنتاج المنصرفة للقصة</span>
             ${!opts.show_fabric_cost ? `<span style="font-size: 10px; color: #64748b; font-weight: normal;">(تم إخفاء أسعار التكلفة)</span>` : ''}
           </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+          <table style="width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px;">
             <thead>
               <tr style="background: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: bold;">
                 <th style="padding: 6px 8px; text-align: center; width: 35px;">#</th>
