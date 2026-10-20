@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
-describe('Print Preview 100% Arabic Headers and Zero Side-Scroll Layout', () => {
+describe('Print Preview 100% Arabic Headers, Zero Side-Scroll, and Zero Text Overlap', () => {
   const printPreviewPath = path.resolve(__dirname, '../../modules/print/PrintPreviewPage.jsx');
   const invoiceTemplatesPath = path.resolve(__dirname, '../../modules/print/invoicePrintTemplates.js');
   const packageJsonPath = path.resolve(__dirname, '../../../package.json');
@@ -28,6 +28,11 @@ describe('Print Preview 100% Arabic Headers and Zero Side-Scroll Layout', () => 
       expect(code).toContain("balance_due: 'الرصيد المتبقي'");
       expect(code).toContain("total_sales: 'إجمالي المبيعات'");
       expect(code).toContain("credit_limit: 'الحد الائتماني'");
+      expect(code).toContain("subtotal: 'المجموع قبل الخصم'");
+      expect(code).toContain("discount_value: 'قيمة الخصم'");
+      expect(code).toContain("grn_number: 'رقم إذن الاستلام'");
+      expect(code).toContain("receipt_date: 'تاريخ الاستلام'");
+      expect(code).toContain("receiver_name: 'المستلم'");
     });
 
     it('contains getArabicColumnTitle fail-safe resolver preventing English keys fallback', () => {
@@ -48,9 +53,18 @@ describe('Print Preview 100% Arabic Headers and Zero Side-Scroll Layout', () => 
       expect(code).toContain("'outlet_id'");
       expect(code).toContain("'item_id'");
     });
+
+    it('defines REPORT_SCHEMAS to prevent column duplication and calculation field dumps', () => {
+      const code = fs.readFileSync(printPreviewPath, 'utf8');
+
+      expect(code).toContain('const REPORT_SCHEMAS = {');
+      expect(code).toContain("'supplier-statements':");
+      expect(code).toContain("'purchase-orders':");
+      expect(code).toContain("'goods-receipts':");
+    });
   });
 
-  describe('Bug 2: Elimination of Horizontal Side-Scroll in Print Preview & A4 Layout', () => {
+  describe('Bug 2: Elimination of Horizontal Side-Scroll & Zero Text Overlap', () => {
     it('verifies no overflow-x-auto exists inside any printable document preview container', () => {
       const code = fs.readFileSync(printPreviewPath, 'utf8');
 
@@ -86,6 +100,14 @@ describe('Print Preview 100% Arabic Headers and Zero Side-Scroll Layout', () => 
 
       expect(code).toContain("orientation === 'landscape' ? '297mm !important' : '210mm !important'");
       expect(code).toContain("orientation === 'landscape' ? 'w-[1123px] max-w-[1123px]' : 'w-[794px] max-w-[794px]'");
+    });
+
+    it('contains colgroup and cell overflow containment to eliminate text overlap', () => {
+      const code = fs.readFileSync(printPreviewPath, 'utf8');
+
+      expect(code).toContain('<colgroup>');
+      expect(code).toContain('.printable-sheet th,');
+      expect(code).toContain('overflow: hidden !important;');
     });
   });
 });

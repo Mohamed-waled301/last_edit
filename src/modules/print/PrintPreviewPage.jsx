@@ -476,17 +476,18 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 const pPays = (Array.isArray(payments) ? payments : []).filter(pm => pm.supplier_id === p.id && pm.status !== 'cancelled');
                 const totPaid = pPays.reduce((s, pm) => s + (Number(pm.amount) || 0), 0);
                 const supTypeDisplay = p.supplier_type === 'goods' ? 'توريد خامات' : p.supplier_type === 'service' ? 'خدمات وتشغيل' : (p.supplier_type || 'مورد عام');
-                return {
+                const rowObj = {
                   code: p.code || '---',
                   name: p.name || 'مورد',
                   supplier_type: supTypeDisplay,
                   phone: p.phone || '',
-                  address: p.address || '',
-                  tax_number: p.tax_number || '',
                   total_purchases: totPurchases,
                   total_paid: totPaid,
                   balance_due: p.supplier_balance ?? p.balance_due ?? (totPurchases - totPaid)
                 };
+                if (p.address && String(p.address).trim()) rowObj.address = p.address;
+                if (p.tax_number && String(p.tax_number).trim()) rowObj.tax_number = p.tax_number;
+                return rowObj;
               });
             } catch {
               const parties = await partiesRepo.getAll();
@@ -494,10 +495,28 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             }
           } else if (docId === 'purchase-orders') {
             reportTitle = 'تقرير فواتير وأوامر الشراء والتوريد';
-            reportRows = await suppliersRepo.getPurchaseOrders();
+            const orders = await suppliersRepo.getPurchaseOrders();
+            reportRows = (Array.isArray(orders) ? orders : []).map(o => ({
+              po_number: o.po_number || '---',
+              supplier_name: o.supplier_name || 'مورد عام',
+              order_date: o.order_date || o.created_at?.split('T')[0],
+              payment_terms: o.payment_terms === 'credit' ? 'آجل' : 'نقدي',
+              subtotal: Number(o.subtotal) || 0,
+              discount_value: Number(o.discount_value) || 0,
+              total_amount: Number(o.total_amount ?? o.grand_total) || 0,
+              status: o.status === 'ordered' ? 'قيد التوريد' : o.status === 'received' ? 'تم الاستلام' : o.status === 'cancelled' ? 'ملغي' : (o.status || 'معتمد')
+            }));
           } else if (docId === 'goods-receipts') {
             reportTitle = 'تقرير أذون الاستلام المخزني';
-            reportRows = await suppliersRepo.getGoodsReceipts();
+            const receipts = await suppliersRepo.getGoodsReceipts();
+            reportRows = (Array.isArray(receipts) ? receipts : []).map(r => ({
+              grn_number: r.grn_number || '---',
+              po_id: r.po_id || '---',
+              supplier_name: r.supplier_name || 'مورد عام',
+              receipt_date: r.receipt_date || r.created_at?.split('T')[0],
+              receiver_name: r.receiver_name || 'أمين المخزن',
+              notes: r.notes || 'استلام بضاعة'
+            }));
           } else if (docId === 'stock-adjustments') {
             reportTitle = 'تقرير التسويات الجردية المخزنية';
             reportRows = await db.stock_adjustments.toArray().catch(() => []);
@@ -1366,22 +1385,14 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     if (docType === 'report' || documentData?.type === 'report') {
       const reportTitle = documentData.reportTitle || documentData.title || 'تقرير النظام المالي والإداري';
       const reportRows = Array.isArray(documentData.data) ? documentData.data : (Array.isArray(documentData.rows) ? documentData.rows : []);
+      const activeReportKey = String(documentData.reportKey || documentData.id || docId || '').trim();
 
       // Filter out technical, primary key, and internal fields that should not appear on printed sheets
       const ignoredKeys = new Set([
         'id', '_id', 'uuid', 'created_by', 'updated_at', 'is_active', 'raw_date', 'password', 'salt',
         'party_id', 'supplier_id', 'customer_id', 'item_id', 'outlet_id', 'user_id', 'account_id',
-        'po_id', 'order_id', 'category_id', 'version', 'hash', 'sync_status'
+        'po_id', 'order_id', 'category_id', 'version', 'hash', 'sync_status', 'items', 'matrix', 'stages'
       ]);
-
-      // Derive columns dynamically from data rows if not predefined
-      let columnKeys = [];
-      if (Array.isArray(reportRows) && reportRows.length > 0 && typeof reportRows[0] === 'object' && reportRows[0] !== null) {
-        columnKeys = Object.keys(reportRows[0]).filter(k =>
-          !ignoredKeys.has(k) &&
-          typeof reportRows[0][k] !== 'object'
-        ).slice(0, 9);
-      }
 
       // Comprehensive 100% Arabic Table Column Translations Dictionary
       const columnLabels = {
@@ -1442,6 +1453,12 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         quantity: 'الكمية',
         unit_price: 'سعر الوحدة',
         price: 'السعر',
+        subtotal: 'المجموع قبل الخصم',
+        discount: 'قيمة الخصم',
+        discount_value: 'قيمة الخصم',
+        discount_amount: 'قيمة الخصم',
+        discount_percent: 'نسبة الخصم %',
+        additional_expenses: 'مصاريف إضافية',
         total_amount: 'إجمالي المبلغ',
         total_invoice_amount: 'إجمالي الفاتورة',
         total_product_cost: 'إجمالي التكلفة',
@@ -1480,13 +1497,18 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         return_type: 'نوع المرتجع',
         refund_amount: 'قيمة المرتجع',
         stage_name: 'مرحلة التشغيل',
-        stage: 'المرحلة'
+        stage: 'المرحلة',
+        grn_number: 'رقم إذن الاستلام',
+        receipt_date: 'تاريخ الاستلام',
+        receiver_name: 'المستلم'
       };
 
       // Fail-safe resolver to guarantee ZERO English database keys ever reach print headers
       const getArabicColumnTitle = (key) => {
         if (columnLabels[key]) return columnLabels[key];
         const k = String(key || '').toLowerCase().trim();
+        if (k.includes('grn')) return 'رقم إذن الاستلام';
+        if (k.includes('po_') || k === 'po') return 'رقم أمر الشراء';
         if (k.includes('supplier_type') || k.includes('activity')) return 'نوع المورد / النشاط';
         if (k.includes('phone') || k.includes('mobile')) return 'رقم الهاتف';
         if (k.includes('address')) return 'العنوان';
@@ -1495,8 +1517,11 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         if (k.includes('paid')) return 'إجمالي المسدد';
         if (k.includes('sales')) return 'إجمالي المبيعات';
         if (k.includes('balance') || k.includes('due') || k.includes('remaining')) return 'الرصيد المتبقي';
+        if (k.includes('subtotal')) return 'المجموع قبل الخصم';
+        if (k.includes('discount')) return 'قيمة الخصم';
+        if (k.includes('expense')) return 'مصاريف إضافية';
         if (k.includes('invoice')) return 'الفاتورة';
-        if (k.includes('receipt')) return 'الإيصال';
+        if (k.includes('receipt')) return 'إذن الاستلام';
         if (k.includes('order')) return 'الطلب';
         if (k.includes('item') || k.includes('product')) return 'الصنف / المنتج';
         if (k.includes('price') || k.includes('cost')) return 'السعر / التكلفة';
@@ -1506,8 +1531,55 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         if (k.includes('status')) return 'الحالة';
         if (k.includes('code')) return 'الكود';
         if (k.includes('name') || k.includes('title')) return 'البيان / الاسم';
-        if (k.includes('notes') || k.includes('desc')) return 'البيان والملاحظات';
+        if (k.includes('notes')) return 'ملاحظات';
+        if (k.includes('desc') || k.includes('reason')) return 'البيان';
         return 'البيان';
+      };
+
+      // Standard Schemas for known reports to prevent calculation dumps and duplicate columns
+      const REPORT_SCHEMAS = {
+        'supplier-statements': ['code', 'name', 'supplier_type', 'phone', 'total_purchases', 'total_paid', 'balance_due'],
+        'customer-statements': ['code', 'name', 'phone', 'total_sales', 'total_paid', 'balance_due'],
+        'goods-receipts': ['grn_number', 'po_id', 'supplier_name', 'receipt_date', 'receiver_name', 'notes'],
+        'purchase-orders': ['po_number', 'supplier_name', 'order_date', 'payment_terms', 'subtotal', 'discount_value', 'total_amount'],
+        'sales-invoices': ['invoice_number', 'customer_name', 'invoice_date', 'payment_terms', 'total_amount', 'status'],
+        'stock-adjustments': ['id', 'item_name', 'adjustment_type', 'quantity', 'reason', 'date'],
+        'installments-due': ['po_number', 'supplier_name', 'due_date', 'amount', 'paid_amount', 'remaining_amount'],
+        'returns': ['return_number', 'return_type', 'created_at', 'total_amount', 'reason'],
+        'items': ['code', 'name', 'item_group', 'item_type', 'actual_balance', 'cost_price', 'selling_price'],
+        'low-stock': ['code', 'name', 'item_group', 'actual_balance', 'min_reorder_level', 'cost_price']
+      };
+
+      // Determine active columns with deduplication and data-presence check
+      let columnKeys = [];
+      if (REPORT_SCHEMAS[activeReportKey] && Array.isArray(reportRows) && reportRows.length > 0) {
+        columnKeys = REPORT_SCHEMAS[activeReportKey].filter(k => {
+          return reportRows.some(row => {
+            const val = row[k];
+            return val !== undefined && val !== null && String(val).trim() !== '';
+          });
+        });
+      }
+
+      // Dynamic fallback for unlisted reports
+      if (columnKeys.length === 0 && Array.isArray(reportRows) && reportRows.length > 0 && typeof reportRows[0] === 'object' && reportRows[0] !== null) {
+        columnKeys = Object.keys(reportRows[0]).filter(k =>
+          !ignoredKeys.has(k) &&
+          typeof reportRows[0][k] !== 'object' &&
+          reportRows.some(row => row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '')
+        ).slice(0, 8);
+      }
+
+      // Column widths helper
+      const getColWidth = (k, count) => {
+        if (k === 'code' || k.includes('code')) return count >= 8 ? '10%' : '12%';
+        if (k === 'name' || k.includes('name')) return count >= 8 ? '20%' : '26%';
+        if (k.includes('date')) return '13%';
+        if (k.includes('phone')) return '14%';
+        if (k.includes('terms') || k === 'status' || k.includes('type')) return '12%';
+        if (k.includes('total') || k.includes('amount') || k.includes('balance') || k.includes('price') || k.includes('cost') || k.includes('paid')) return count >= 8 ? '11%' : '14%';
+        if (k === 'notes' || k.includes('notes') || k === 'reason') return '22%';
+        return undefined;
       };
 
       // Summary sums
@@ -1564,7 +1636,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         );
       }
 
-      // 6.B) Standardized A4 / A5 Report Layout (Zero Side-Scroll, 100% Arabic Headers)
+      // 6.B) Standardized A4 / A5 Report Layout (Zero Side-Scroll, 100% Arabic Headers, Zero Overlap)
       return (
         <div className="p-6 sm:p-8 space-y-6 text-slate-900 bg-white max-w-full overflow-hidden" dir="rtl">
           {/* Standardized Report Header: Logo top-right, Company top-left, Title centered in bordered box, Date/Time stamp */}
@@ -1604,12 +1676,18 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             </div>
           </div>
 
-          {/* Data Table with complete overflow-x elimination and fixed table layout */}
+          {/* Data Table with complete overflow-x elimination, colgroup widths, and cell containment */}
           <div className="w-full max-w-full overflow-hidden">
             <table className={`w-full max-w-full text-right ${tableFontClass} border-collapse table-fixed`}>
+              <colgroup>
+                <col style={{ width: '38px' }} />
+                {columnKeys.map(k => (
+                  <col key={k} style={{ width: getColWidth(k, columnKeys.length) }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr className="bg-[#1F3A5F] text-white border-b border-slate-300">
-                  <th className={`${thPadClass} border border-slate-200 text-center w-8 shrink-0 font-bold`}>#</th>
+                  <th className={`${thPadClass} border border-slate-200 text-center font-bold overflow-hidden w-8 shrink-0`}>#</th>
                   {columnKeys.map(k => {
                     const isNum = k.includes('total') || k.includes('amount') || k.includes('balance') || k.includes('price') || k.includes('cost') || k.includes('limit');
                     const isCode = k === 'code' || k.includes('code');
@@ -1618,9 +1696,11 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                     return (
                       <th
                         key={k}
-                        className={`${thPadClass} ${colWidth} border border-slate-200 font-bold ${isNum ? 'text-left' : 'text-right'} break-words whitespace-normal leading-tight`}
+                        className={`${thPadClass} ${colWidth} border border-slate-200 font-bold overflow-hidden ${isNum ? 'text-left' : 'text-right'} break-words whitespace-normal leading-tight`}
                       >
-                        {getArabicColumnTitle(k)}
+                        <div className="w-full max-w-full overflow-hidden text-ellipsis break-words whitespace-normal leading-tight">
+                          {getArabicColumnTitle(k)}
+                        </div>
                       </th>
                     );
                   })}
@@ -1629,48 +1709,85 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               <tbody>
                 {reportRows.length === 0 ? (
                   <tr>
-                    <td colSpan={columnKeys.length + 1} className="p-8 text-center text-slate-500 font-bold">
+                    <td colSpan={columnKeys.length + 1} className="p-8 text-center text-slate-500 font-bold overflow-hidden">
                       لا توجد بيانات مطابقة لمعايير هذا التقرير.
                     </td>
                   </tr>
                 ) : (
                   reportRows.map((row, idx) => (
                     <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className={`${tdPadClass} border border-slate-200 text-center font-mono text-slate-500`}>{idx + 1}</td>
+                      <td className={`${tdPadClass} border border-slate-200 text-center font-mono text-slate-500 overflow-hidden`}>{idx + 1}</td>
                       {columnKeys.map(k => {
                         const val = row[k];
                         const isNum = typeof val === 'number';
                         const isDate = typeof val === 'string' && (k.includes('date') || k.includes('created_at'));
+                        const isMoney = k.includes('total') || k.includes('amount') || k.includes('balance') || k.includes('price') || k.includes('cost') || k.includes('paid');
+                        const isCenter = k === 'code' || k.includes('code') || isDate || k === 'status' || k.includes('phone') || k.includes('terms') || k === 'unit' || k === 'quantity';
                         return (
                           <td
                             key={k}
-                            className={`${tdPadClass} border border-slate-200 ${
-                              isNum ? 'text-left font-mono font-bold whitespace-nowrap' : 'break-words whitespace-normal leading-tight'
+                            className={`${tdPadClass} border border-slate-200 overflow-hidden ${
+                              isMoney ? 'text-left font-mono font-bold' : isCenter ? 'text-center' : 'text-right'
                             }`}
                           >
-                            {(() => {
-                              if (k === 'is_customer' || k === 'is_supplier') {
-                                return Number(val) === 1 || val === true ? 'نعم' : 'لا';
-                              }
-                              if (k === 'supplier_type') {
-                                return val === 'goods' ? 'توريد خامات' : val === 'service' ? 'خدمات وتشغيل' : String(val || '-');
-                              }
-                              if (k === 'status') {
-                                const sMap = { paid: 'مسدد', unpaid: 'غير مسدد', partially_paid: 'مسدد جزئياً', cancelled: 'ملغي', completed: 'مكتمل', closed: 'مقفل', issued: 'صادر', draft: 'مسودة', in_progress: 'قيد التشغيل', pending: 'معلق' };
-                                return sMap[val] || String(val || '-');
-                              }
-                              if (k === 'adjustment_type') {
-                                const aMap = { add: 'إضافة للمخزن', subtract: 'عجز / خصم', damage: 'تالف / هالك' };
-                                return aMap[val] || String(val || '-');
-                              }
-                              if (k === 'item_type') {
-                                const iMap = { raw: 'خامة', finished: 'منتج تام', fabric: 'قماش', accessory: 'إكسسوار' };
-                                return iMap[val] || String(val || '-');
-                              }
-                              if (isDate) return formatDate(val);
-                              if (isNum) return formatNumber(val);
-                              return String(val ?? '-');
-                            })()}
+                            <div className="w-full max-w-full overflow-hidden text-ellipsis">
+                              {(() => {
+                                if (k === 'is_customer' || k === 'is_supplier') {
+                                  return Number(val) === 1 || val === true ? 'نعم' : 'لا';
+                                }
+                                if (k === 'supplier_type') {
+                                  return val === 'goods' ? 'توريد خامات' : val === 'service' ? 'خدمات وتشغيل' : String(val || '-');
+                                }
+                                if (k === 'status') {
+                                  const sMap = { paid: 'مسدد', unpaid: 'غير مسدد', partially_paid: 'مسدد جزئياً', cancelled: 'ملغي', completed: 'مكتمل', closed: 'مقفل', issued: 'صادر', draft: 'مسودة', in_progress: 'قيد التشغيل', pending: 'معلق', ordered: 'قيد التوريد', received: 'تم الاستلام' };
+                                  return sMap[val] || String(val || '-');
+                                }
+                                if (k === 'adjustment_type' || k === 'type') {
+                                  const aMap = { add: 'إضافة للمخزن', subtract: 'عجز / خصم', damage: 'تالف / هالك', increase: 'زيادة', decrease: 'عجز' };
+                                  if (aMap[val]) return aMap[val];
+                                }
+                                if (k === 'item_type') {
+                                  const iMap = { raw: 'خامة', finished: 'منتج تام', fabric: 'قماش', accessory: 'إكسسوار' };
+                                  if (iMap[val]) return iMap[val];
+                                }
+                                if (k === 'payment_terms') {
+                                  return val === 'credit' ? 'آجل' : 'نقدي';
+                                }
+                                if (isDate) {
+                                  return (
+                                    <span className="font-mono inline-block text-center whitespace-nowrap" dir="ltr">
+                                      {formatDate(val)}
+                                    </span>
+                                  );
+                                }
+                                if (isMoney || (isNum && (k.includes('price') || k.includes('cost')))) {
+                                  return (
+                                    <span className="font-mono font-bold whitespace-nowrap block text-left" dir="ltr">
+                                      {formatCurrency(Number(val) || 0)}
+                                    </span>
+                                  );
+                                }
+                                if (isNum) {
+                                  return (
+                                    <span className="font-mono font-bold whitespace-nowrap block text-center" dir="ltr">
+                                      {formatNumber(Number(val) || 0)}
+                                    </span>
+                                  );
+                                }
+                                if (k === 'code' || k.includes('code') || k.includes('number') || k === 'phone' || k.includes('phone')) {
+                                  return (
+                                    <span className="font-mono whitespace-nowrap block text-center" dir="ltr">
+                                      {String(val || '-')}
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="break-words whitespace-normal leading-tight block">
+                                    {String(val ?? '-')}
+                                  </span>
+                                );
+                              })()}
+                            </div>
                           </td>
                         );
                       })}
@@ -1681,8 +1798,8 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               {hasAmountSum && reportRows.length > 0 && (
                 <tfoot>
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-                    <td colSpan={columnKeys.length} className={`${tdPadClass} text-right font-bold`}>الإجمالي الكلي للمطابقات:</td>
-                    <td className={`${tdPadClass} text-left font-mono text-emerald-700 ${isUltraDense ? 'text-xs' : 'text-sm'} whitespace-nowrap`}>
+                    <td colSpan={columnKeys.length} className={`${tdPadClass} text-right font-bold overflow-hidden`}>الإجمالي الكلي للمطابقات:</td>
+                    <td className={`${tdPadClass} text-left font-mono text-emerald-700 ${isUltraDense ? 'text-xs' : 'text-sm'} whitespace-nowrap overflow-hidden`}>
                       {formatCurrency(totalAmountSum)}
                     </td>
                   </tr>
@@ -1691,7 +1808,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             </table>
           </div>
 
-          {/* Standardized Formal Signatures: المحاسب المسؤول / المدير المالي / اعتماد الإدارة */}
+                    {/* Standardized Formal Signatures: المحاسب المسؤول / المدير المالي / اعتماد الإدارة */}
           <div className="grid grid-cols-3 gap-6 pt-8 text-center text-xs font-bold text-slate-700 break-inside-avoid">
             <div className="space-y-6">
               <span>المحاسب المسؤول</span>
@@ -1797,6 +1914,19 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     <div className="min-h-screen bg-slate-800 text-slate-100 flex flex-col select-none print:bg-white print:text-black" dir="rtl">
       {/* Print-specific style tag for window.print() browser / electron fallback */}
       <style>{`
+        .printable-sheet table {
+          border-collapse: collapse !important;
+          table-layout: fixed !important;
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+        .printable-sheet th,
+        .printable-sheet td {
+          overflow: hidden !important;
+          box-sizing: border-box !important;
+          word-break: break-word !important;
+          overflow-wrap: break-word !important;
+        }
         @media print {
           header, aside, .no-print {
             display: none !important;
@@ -1832,6 +1962,8 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             page-break-inside: auto !important;
           }
           th, td {
+            overflow: hidden !important;
+            box-sizing: border-box !important;
             word-break: break-word !important;
             overflow-wrap: break-word !important;
           }
