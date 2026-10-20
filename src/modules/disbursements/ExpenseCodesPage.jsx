@@ -4,6 +4,7 @@ import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import { handleFormKeyDown } from '../../utils/formNavigation';
 
 export default function ExpenseCodesPage({ onNotify }) {
   const [codes, setCodes] = useState([]);
@@ -104,7 +105,7 @@ export default function ExpenseCodesPage({ onNotify }) {
             {editingId ? 'تعديل كود مصروف' : 'ضيف كود مصروف جديد'}
           </h2>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-3">
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 كود المصروف

@@ -7,6 +7,7 @@ import { api } from '../../services/api';
 import { formatCurrency, getTodayDateString, formatDate } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import { navigationGuard } from '../../utils/navigationGuard';
+import { handleFormKeyDown } from '../../utils/formNavigation';
 
 export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
   const today = getTodayDateString();
@@ -146,6 +147,7 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
       });
 
       isSavedRef.current = true;
+      navigationGuard.unregister();
       if (onNotify) {
         onNotify(`تم إصدار سند سداد دفعة المورد برقم (${res.paymentNumber}) بنجاح`);
       }
@@ -208,7 +210,7 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
         </div>
       }
     >
-      <form onSubmit={handleIssueClick} className="space-y-6">
+      <form onSubmit={handleIssueClick} onKeyDown={handleFormKeyDown} className="space-y-6">
         {/* Main Card */}
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-5">
           <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2.5 flex items-center gap-2">

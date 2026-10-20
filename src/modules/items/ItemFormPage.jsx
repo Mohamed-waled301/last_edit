@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Upload, 
   Plus, 
@@ -24,8 +24,10 @@ import { Validators, FieldError } from '../../utils/validation';
 import { calculateProfitMargin, calculateSellingPriceFromMargin } from '../../logic/costCalculator';
 import { handleFormKeyDown } from '../../utils/formNavigation';
 import { MoneyInput, NumberInput } from '../../components/MoneyInput';
+import { navigationGuard } from '../../utils/navigationGuard';
 
 export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotify, onBack }) {
+  const isSavedRef = useRef(false);
   const isEdit = Boolean(itemId);
 
   const [form, setForm] = useState({
@@ -89,6 +91,14 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
       window.location.hash = '#/items';
     }
   };
+
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      return Boolean(form.name?.trim() || form.code?.trim() || (form.cost_price && Number(form.cost_price) > 0) || form.notes?.trim());
+    });
+    return unregister;
+  }, [form]);
 
   useEffect(() => {
     async function loadData() {
@@ -523,9 +533,13 @@ export default function ItemFormPage({ itemId = null, onSaved, onCancel, onNotif
 
       if (isEdit) {
         await api.updateItem(itemId, payload);
+        isSavedRef.current = true;
+        navigationGuard.unregister();
         if (onNotify) onNotify('تم تحديث بيانات الصنف بنجاح');
       } else {
         await api.createItem(payload);
+        isSavedRef.current = true;
+        navigationGuard.unregister();
         if (onNotify) onNotify('تم إضافة الصنف الجديد بنجاح');
       }
 

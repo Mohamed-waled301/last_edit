@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FolderTree, ArrowRight, Save, AlertCircle } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
+import { handleFormKeyDown } from '../../utils/formNavigation';
+import { navigationGuard } from '../../utils/navigationGuard';
 
 export default function ItemSectionFormPage({ sectionId = null, onBack, onNotify }) {
   const isEdit = Boolean(sectionId);
+  const isSavedRef = useRef(false);
 
   const [form, setForm] = useState({
     code: '',
@@ -18,6 +21,15 @@ export default function ItemSectionFormPage({ sectionId = null, onBack, onNotify
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState('');
+
+  // Unsaved changes protection
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      return Boolean(form.name?.trim() || form.notes?.trim());
+    });
+    return unregister;
+  }, [form]);
 
   useEffect(() => {
     loadData();
@@ -76,6 +88,9 @@ export default function ItemSectionFormPage({ sectionId = null, onBack, onNotify
       setSaving(true);
       setServerError('');
 
+      isSavedRef.current = true;
+      navigationGuard.unregister();
+
       if (isEdit) {
         await api.updateItemSection(sectionId, form);
         if (onNotify) onNotify('تم تحديث قسم الصنف بنجاح');
@@ -86,6 +101,7 @@ export default function ItemSectionFormPage({ sectionId = null, onBack, onNotify
 
       if (onBack) onBack();
     } catch (err) {
+      isSavedRef.current = false;
       console.error('Save item section error:', err);
       setServerError(err.message || 'حدث خطأ أثناء حفظ قسم الصنف');
     } finally {
@@ -120,7 +136,7 @@ export default function ItemSectionFormPage({ sectionId = null, onBack, onNotify
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-6">
+      <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="max-w-3xl mx-auto space-y-6">
         {serverError && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />

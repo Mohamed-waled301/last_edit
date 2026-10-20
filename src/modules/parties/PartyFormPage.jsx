@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, 
   CreditCard, 
@@ -33,9 +33,10 @@ import {
   openWhatsAppChat,
 } from '../../utils/phone';
 import { handleFormKeyDown } from '../../utils/formNavigation';
-
+import { navigationGuard } from '../../utils/navigationGuard';
 
 export default function PartyFormPage({ partyId = null, initialRole = null, initialType = null, onSaved, onCancel, onBack, onNotify }) {
+  const isSavedRef = useRef(false);
   const isEdit = Boolean(partyId);
   const effectiveRole = initialRole || initialType;
 
@@ -104,6 +105,14 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
       window.location.hash = isCustomer && !isSupplier ? '#/customers' : '#/suppliers';
     }
   };
+
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      return Boolean(form.name?.trim() || form.code?.trim() || form.phone !== DEFAULT_PHONE_VALUE || form.address?.trim());
+    });
+    return unregister;
+  }, [form]);
 
   useEffect(() => {
     async function loadData() {
@@ -330,9 +339,13 @@ export default function PartyFormPage({ partyId = null, initialRole = null, init
       let res;
       if (isEdit) {
         res = await api.updateParty(partyId, payload);
+        isSavedRef.current = true;
+        navigationGuard.unregister();
         if (onNotify) onNotify('تم تحديث بيانات جهة التعامل بنجاح');
       } else {
         res = await api.createParty(payload);
+        isSavedRef.current = true;
+        navigationGuard.unregister();
         if (onNotify) onNotify('تم إضافة جهة التعامل بنجاح');
       }
 

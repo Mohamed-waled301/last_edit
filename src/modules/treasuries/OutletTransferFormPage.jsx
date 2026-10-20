@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRightLeft, Landmark, Store, CheckCircle2, AlertCircle } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import { MoneyInput } from '../../components/MoneyInput';
+import { handleFormKeyDown } from '../../utils/formNavigation';
+import { navigationGuard } from '../../utils/navigationGuard';
 
 export default function OutletTransferFormPage({ onSaved, onNotify }) {
+  const isSavedRef = useRef(false);
   const [outletTreasuries, setOutletTreasuries] = useState([]);
   const [mainTreasury, setMainTreasury] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -48,6 +51,15 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
     loadData();
   }, []);
 
+  // Unsaved changes protection
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      return Boolean((form.amount && Number(form.amount) > 0) || form.notes?.trim());
+    });
+    return unregister;
+  }, [form]);
+
   const selectedFromTreasury = outletTreasuries.find(t => String(t.id) === String(form.from_treasury_id));
   const availableBal = Number(selectedFromTreasury?.current_balance) || 0;
   const numAmount = Number(form.amount) || 0;
@@ -72,6 +84,9 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
 
     try {
       setSaving(true);
+      isSavedRef.current = true;
+      navigationGuard.unregister();
+
       await api.transferOutletToMain({
         from_treasury_id: form.from_treasury_id,
         amount: numAmount,
@@ -87,6 +102,7 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
         window.location.hash = '#/treasuries';
       }
     } catch (err) {
+      isSavedRef.current = false;
       alert(err.message || 'فشل في توريد النقدية');
     } finally {
       setSaving(false);
@@ -110,7 +126,7 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
       saveDisabled={!isFormValid || saving}
       saveText="تنفيذ التوريد النقدي"
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} onKeyDown={handleFormKeyDown} className="space-y-6">
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
             <ArrowRightLeft className="w-5 h-5 text-[#1F3A5F]" />

@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Factory, Plus, Truck, DollarSign, CheckCircle2, AlertCircle } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import { MoneyInput, NumberInput } from '../../components/MoneyInput';
+import { handleFormKeyDown } from '../../utils/formNavigation';
+import { navigationGuard } from '../../utils/navigationGuard';
 
 export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
+  const isSavedRef = useRef(false);
   const [productionOrders, setProductionOrders] = useState([]);
   const [serviceSuppliers, setServiceSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +52,15 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
     }
     loadData();
   }, []);
+
+  // Unsaved changes protection
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      return Boolean(form.production_order_id || form.external_factory_name?.trim() || form.notes?.trim());
+    });
+    return unregister;
+  }, [form]);
 
   const handlePOSelect = (poId) => {
     const po = productionOrders.find(p => String(p.id) === String(poId));
@@ -104,6 +116,9 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
 
     try {
       setSaving(true);
+      isSavedRef.current = true;
+      navigationGuard.unregister();
+
       await api.createFinishingOrder({
         finishing_number: form.finishing_number,
         production_order_id: form.production_order_id,
@@ -126,6 +141,7 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
         window.location.hash = '#/outsourced';
       }
     } catch (err) {
+      isSavedRef.current = false;
       alert(err.message || 'حدث خطأ أثناء إصدار أمر التشغيل لدى الغير');
     } finally {
       setSaving(false);
@@ -158,7 +174,7 @@ export default function OutsourcedOrderFormPage({ onSaved, onNotify }) {
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} onKeyDown={handleFormKeyDown} className="space-y-6">
         {/* Section 1: Order and Factory Selection (Requirement E2) */}
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
