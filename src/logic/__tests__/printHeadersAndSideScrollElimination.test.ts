@@ -7,9 +7,9 @@ describe('Print Preview 100% Arabic Headers, Zero Side-Scroll, and Zero Text Ove
   const invoiceTemplatesPath = path.resolve(__dirname, '../../modules/print/invoicePrintTemplates.js');
   const packageJsonPath = path.resolve(__dirname, '../../../package.json');
 
-  it('verifies package.json version is bumped to 1.1.6', () => {
+  it('verifies package.json version is bumped to 1.1.7', () => {
     const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    expect(pkg.version).toBe('1.1.6');
+    expect(pkg.version).toBe('1.1.7');
   });
 
   describe('Bug 1: 100% Arabic Localization of Print/PDF Table Headers (ZERO English)', () => {
@@ -81,12 +81,13 @@ describe('Print Preview 100% Arabic Headers, Zero Side-Scroll, and Zero Text Ove
       expect(code).toContain("style={{ maxWidth: '100%', overflowX: 'hidden' }}");
     });
 
-    it('verifies dynamic column sizing and cell word-wrapping for dense tables', () => {
+    it('verifies dynamic column sizing and single-line auto-fit font containment for dense tables', () => {
       const code = fs.readFileSync(printPreviewPath, 'utf8');
 
       expect(code).toContain('const isUltraDense = colCount >= 9;');
       expect(code).toContain('const isDense = colCount >= 6 && !isUltraDense;');
-      expect(code).toContain('break-words whitespace-normal leading-tight');
+      expect(code).toContain('cell-autofit font-semibold');
+      expect(code).toContain('getAutoFitStyle');
     });
 
     it('enforces table-layout fixed across invoicePrintTemplates.js tables', () => {

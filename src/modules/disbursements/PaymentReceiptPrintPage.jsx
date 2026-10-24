@@ -100,13 +100,14 @@ export default function PaymentReceiptPrintPage({ type = 'supplier_payment', id 
         {/* Header with Company Logo */}
         <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-6">
           <div className="flex items-center gap-4">
-            {settings?.company_logo && (
+            {settings?.company_logo && settings.company_logo !== '/logo.png' && (
               <img
                 src={settings.company_logo}
                 alt=""
+                style={{ maxHeight: '56px', maxWidth: '140px', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
                 className="h-16 w-auto max-w-[140px] object-contain rounded"
                 onError={(e) => {
-                  e.target.style.display = 'none';
+                  e.currentTarget.style.display = 'none';
                 }}
               />
             )}

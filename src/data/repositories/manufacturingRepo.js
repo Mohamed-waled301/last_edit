@@ -22,7 +22,8 @@ import {
 export const STAGE_CONFIGS = {
   printing: { key: 'printing', title: 'الطباعة', workshopType: 'print_shop' },
   embroidery: { key: 'embroidery', title: 'التطريز', workshopType: 'embroidery_workshop' },
-  sewing: { key: 'sewing', title: 'الحياكة', workshopType: 'sewing_workshop' }
+  sewing: { key: 'sewing', title: 'الحياكة', workshopType: 'sewing_workshop' },
+  operation: { key: 'operation', title: 'التشغيل', workshopType: 'operation_workshop' }
 };
 
 export const manufacturingRepo = {
@@ -54,9 +55,14 @@ export const manufacturingRepo = {
     const stageActivityMap = {
       printing: ['طباعة', 'الطباعة', 'printing', 'service_printing'],
       embroidery: ['تطريز', 'التطريز', 'embroidery', 'service_embroidery'],
-      sewing: ['حياكة', 'الحياكة', 'sewing', 'service_sewing']
+      sewing: ['حياكة', 'الحياكة', 'sewing', 'service_sewing'],
+      operation: ['تشغيل', 'التشغيل', 'operation', 'service_operation', 'processing', 'service_processing']
     };
-    const allWorkshopActivities = ['طباعة', 'الطباعة', 'تطريز', 'التطريز', 'حياكة', 'الحياكة', 'printing', 'embroidery', 'sewing', 'service_printing', 'service_embroidery', 'service_sewing'];
+    const allWorkshopActivities = [
+      'طباعة', 'الطباعة', 'تطريز', 'التطريز', 'حياكة', 'الحياكة', 'تشغيل', 'التشغيل',
+      'printing', 'embroidery', 'sewing', 'operation', 'processing',
+      'service_printing', 'service_embroidery', 'service_sewing', 'service_operation', 'service_processing'
+    ];
 
     const serviceSuppliers = parties.filter(p => 
       p.supplier_type === 'service' || 
@@ -115,7 +121,8 @@ export const manufacturingRepo = {
       const printingCost = Number(o.stages?.printing?.total_cost ?? o.total_printing_cost ?? 0);
       const embroideryCost = Number(o.stages?.embroidery?.total_cost ?? 0);
       const sewingCost = Number(o.stages?.sewing?.total_cost ?? 0);
-      const totalStagesCost = Number((printingCost + embroideryCost + sewingCost).toFixed(2));
+      const operationCost = Number(o.stages?.operation?.total_cost ?? 0);
+      const totalStagesCost = Number((printingCost + embroideryCost + sewingCost + operationCost).toFixed(2));
       const remainingStagesBalance = Math.max(0, Number((totalStagesCost - totalStagesPaid).toFixed(2)));
 
       return {
@@ -214,7 +221,7 @@ export const manufacturingRepo = {
 
     // Calculate paid and remaining per stage
     const enrichedStages = {};
-    for (const key of ['printing', 'embroidery', 'sewing']) {
+    for (const key of ['printing', 'embroidery', 'sewing', 'operation']) {
       const st = stages[key] || { pricing_type: 'fixed', total_cost: 0, batches: [] };
       const stPayments = combinedPayments.filter(p => (p.stage_type === key || (!p.stage_type && key === 'printing')) && p.status !== 'cancelled');
       const paidPiasters = stPayments.reduce((sum, p) => sum + toPiasters(p.amount), 0);
@@ -273,7 +280,7 @@ export const manufacturingRepo = {
     const result = {};
     let totalStagesCost = 0;
 
-    for (const key of ['printing', 'embroidery', 'sewing']) {
+    for (const key of ['printing', 'embroidery', 'sewing', 'operation']) {
       const src = stagesInput?.[key] || fallbackOrder.stages?.[key] || {};
       const pricingType = src.pricing_type || (src.batches?.length > 0 ? 'batches' : 'fixed');
       const vendorId = src.vendor_id || (key === 'printing' ? fallbackOrder.printing_vendor_id : key === 'embroidery' ? fallbackOrder.embroidery_vendor_id : fallbackOrder.processing_vendor_id) || '';
@@ -384,7 +391,7 @@ export const manufacturingRepo = {
    */
   async _syncStageSupplierInvoices(orderId, cuttingNumber, stages, date, userId = 'usr-production', cuttingName = '') {
     if (!db.supplier_invoices) return;
-    const stageKeys = ['printing', 'embroidery', 'sewing'];
+    const stageKeys = ['printing', 'embroidery', 'sewing', 'operation'];
 
     for (const key of stageKeys) {
       const stg = stages?.[key];

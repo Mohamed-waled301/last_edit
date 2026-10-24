@@ -199,7 +199,7 @@ export function computeSupplierDebts(
     for (const co of cutOrders) {
       if (co.status === 'cancelled') continue;
       const stages = co.stages || {};
-      for (const stKey of ['printing', 'embroidery', 'sewing']) {
+      for (const stKey of ['printing', 'embroidery', 'sewing', 'operation']) {
         const stage = stages[stKey];
         if (stage && stage.vendor_id && !map.has(stage.vendor_id)) {
           map.set(stage.vendor_id, {
@@ -249,7 +249,7 @@ export function computeSupplierDebts(
         if (co.status === 'cancelled') continue;
         const stages = co.stages;
         if (stages) {
-          for (const stKey of ['printing', 'embroidery', 'sewing']) {
+          for (const stKey of ['printing', 'embroidery', 'sewing', 'operation']) {
             const st = stages[stKey];
             if (st && (st.vendor_id === sup.id || (!st.vendor_id && st.vendor_name && st.vendor_name === sup.name))) {
               stageCostsPiasters += toPiasters(st.total_cost || 0);
@@ -519,7 +519,7 @@ export function computeLowStockAlerts(
     let totalStock = 0;
     if (itemMovements.length > 0) {
       if (variants.length > 0) {
-        totalStock = variants.reduce((sum, v) => {
+        totalStock = variants.reduce((sum: number, v: any) => {
           const vMovements = itemMovements.filter(m => m.variant_id === v.id);
           const vOpening = Number(v.opening_balance) || 0;
           return sum + calculateItemActualBalance(vOpening, vMovements, v.id);

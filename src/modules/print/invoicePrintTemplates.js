@@ -18,6 +18,39 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+/**
+ * Auto-Fit inline CSS for HTML printing templates (Invoices, POs, Cutting Orders)
+ * Guarantees long text stays strictly on a single line without wrapping or hiding behind border lines
+ */
+export function getAutoFitInlineStyle(text, maxChars = 24, baseFontSize = 11.5) {
+  const str = String(text ?? '').trim();
+  const len = str.length;
+  if (!len || len <= maxChars) {
+    return `font-size: ${baseFontSize}px; letter-spacing: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; width: 100%; max-width: 100%; box-sizing: border-box;`;
+  }
+  const excess = len - maxChars;
+  let size = baseFontSize;
+  let letterSpacing = 'normal';
+  let fontStretch = '';
+  if (excess <= 6) {
+    size = Math.max(9.5, Number((baseFontSize - 1.2).toFixed(1)));
+    letterSpacing = '-0.2px';
+  } else if (excess <= 14) {
+    size = Math.max(8.8, Number((baseFontSize - 2.2).toFixed(1)));
+    letterSpacing = '-0.35px';
+    fontStretch = 'font-stretch: condensed;';
+  } else if (excess <= 24) {
+    size = Math.max(8.2, Number((baseFontSize - 3.0).toFixed(1)));
+    letterSpacing = '-0.45px';
+    fontStretch = 'font-stretch: condensed;';
+  } else {
+    size = Math.max(7.8, Number((baseFontSize - 3.5).toFixed(1)));
+    letterSpacing = '-0.5px';
+    fontStretch = 'font-stretch: condensed;';
+  }
+  return `font-size: ${size}px; letter-spacing: ${letterSpacing}; ${fontStretch} white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; width: 100%; max-width: 100%; box-sizing: border-box;`;
+}
+
 // Build standard complete print document HTML wrapper
 export function wrapDocumentHtml({ title, content, paperSize = 'a4', orientation = 'portrait', colorMode = 'color' }) {
   const isThermal = paperSize === '80mm';
@@ -58,9 +91,13 @@ export function wrapDocumentHtml({ title, content, paperSize = 'a4', orientation
     ${pageCss}
     body {
       font-size: 12px;
-      line-height: 1.4;
+      line-height: 1.45;
       direction: rtl;
       text-align: right;
+      color: #0f172a;
+      background: #ffffff;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
     .font-mono {
       font-family: 'Consolas', 'Courier New', monospace;
@@ -83,9 +120,27 @@ export function wrapDocumentHtml({ title, content, paperSize = 'a4', orientation
     .text-left { text-align: left; }
     .text-right { text-align: right; }
     .font-bold { font-weight: bold; }
-    .break-inside-avoid {
+    .break-inside-avoid, tr, td, th {
       page-break-inside: avoid;
       break-inside: avoid;
+    }
+    .cell-autofit {
+      display: inline-block !important;
+      max-width: 100% !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      box-sizing: border-box !important;
+      vertical-align: middle !important;
+      line-height: 1.3 !important;
+    }
+    img {
+      max-height: 56px !important;
+      max-width: 140px !important;
+      height: auto !important;
+      width: auto !important;
+      object-fit: contain !important;
+      display: block !important;
     }
     ${colorMode === 'grayscale' ? 'html, body { filter: grayscale(100%) !important; }' : ''}
   </style>
@@ -106,7 +161,7 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
   const showAccountBalance = typeof options === 'boolean' ? options : Boolean(options?.showAccountBalance);
   const isThermal = paperSize === '80mm';
   const companyName = settings?.factory_name || 'code systems';
-  const hasValidLogo = Boolean(settings?.company_logo && typeof settings.company_logo === 'string' && settings.company_logo.trim() !== '');
+  const hasValidLogo = Boolean(settings?.company_logo && typeof settings.company_logo === 'string' && settings.company_logo.trim() !== '' && settings.company_logo !== '/logo.png');
   const companyLogo = hasValidLogo ? settings.company_logo : '';
 
   const poNumber = po.po_number || po.id || '';
@@ -165,7 +220,7 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
       <div style="padding: 4px; font-family: 'Cairo', Tahoma, sans-serif; font-size: 11px; color: #000;" dir="rtl">
         <!-- Header -->
         <div style="text-align: center; border-bottom: 1px dashed #64748b; padding-bottom: 8px; margin-bottom: 8px;">
-          ${hasValidLogo ? `<img src="${companyLogo}" alt="Logo" style="height: 40px; max-width: 90px; object-contain: contain; margin: 0 auto 4px;" />` : ''}
+          ${hasValidLogo ? `<img src="${companyLogo}" alt="" onerror="this.style.display='none';" style="height: 40px; max-width: 90px; object-fit: contain; margin: 0 auto 4px;" />` : ''}
           <div style="font-weight: 800; font-size: 14px;">${escapeHtml(companyName)}</div>
           <div style="font-size: 11px; font-weight: bold; color: #1e293b;">فاتورة مشتريات وتوريد بضاعة</div>
           ${settings?.phone ? `<div style="font-size: 10px; color: #475569;">هاتف: <span class="font-mono">${escapeHtml(settings.phone)}</span></div>` : ''}
@@ -272,16 +327,22 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
     const price = Number(it.unit_price ?? 0);
     const lineDiscount = Number(it.discount ?? 0);
     const lineTotal = Number(it.total_price ?? (qty * price - lineDiscount));
+    const matName = it.material_name || it.item_name || it.name || '';
+    const matCode = it.material_code || it.item_code || '-';
 
     return `
       <tr style="border-bottom: 1px solid #e2e8f0;">
-        <td style="padding: 8px; text-align: center;" class="font-mono">${idx + 1}</td>
-        <td style="padding: 8px; font-mono; font-size: 11px; color: #475569;">${escapeHtml(it.material_code || it.item_code || '-')}</td>
-        <td style="padding: 8px; font-weight: bold; color: #0f172a;">${escapeHtml(it.material_name || it.item_name || it.name || '')}</td>
-        <td style="padding: 8px; text-align: center; font-weight: bold;" class="font-mono">${formatNumber(qty)}</td>
-        <td style="padding: 8px; text-align: left;" class="font-mono">${formatCurrency(price)}</td>
-        <td style="padding: 8px; text-align: center;" class="font-mono">${lineDiscount > 0 ? formatCurrency(lineDiscount) : '-'}</td>
-        <td style="padding: 8px; text-align: left; font-weight: bold; color: #0f172a;" class="font-mono">${formatCurrency(lineTotal)}</td>
+        <td style="padding: 6px 8px; text-align: center;" class="font-mono">${idx + 1}</td>
+        <td style="padding: 6px 8px; font-mono; font-size: 11px; color: #475569; text-align: center;">
+          <span style="${getAutoFitInlineStyle(matCode, 14, 11)}" title="${escapeHtml(matCode)}">${escapeHtml(matCode)}</span>
+        </td>
+        <td style="padding: 6px 8px; font-weight: bold; color: #0f172a;">
+          <span style="${getAutoFitInlineStyle(matName, 32, 11.5)}" title="${escapeHtml(matName)}">${escapeHtml(matName)}</span>
+        </td>
+        <td style="padding: 6px 8px; text-align: center; font-weight: bold;" class="font-mono">${formatNumber(qty)}</td>
+        <td style="padding: 6px 8px; text-align: left;" class="font-mono">${formatCurrency(price)}</td>
+        <td style="padding: 6px 8px; text-align: center;" class="font-mono">${lineDiscount > 0 ? formatCurrency(lineDiscount) : '-'}</td>
+        <td style="padding: 6px 8px; text-align: left; font-weight: bold; color: #0f172a;" class="font-mono">${formatCurrency(lineTotal)}</td>
       </tr>
     `;
   }).join('');
@@ -319,7 +380,7 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
       <!-- Top Header -->
       <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1e3a8a; padding-bottom: 16px; margin-bottom: 20px;">
         <div style="display: flex; align-items: center; gap: 14px;">
-          ${hasValidLogo ? `<img src="${companyLogo}" alt="Logo" style="height: 56px; max-width: 120px; object-fit: contain; border-radius: 4px;" />` : ''}
+          ${hasValidLogo ? `<img src="${companyLogo}" alt="" onerror="this.style.display='none';" style="height: 56px; max-width: 120px; object-fit: contain; border-radius: 4px;" />` : ''}
           <div>
             <h1 style="font-size: 20px; font-weight: 800; color: #1e3a8a; margin: 0 0 4px 0;">${escapeHtml(companyName)}</h1>
             <div style="font-size: 11px; font-weight: bold; color: #64748b;">نظام تخطيط موارد المؤسسات - كود سيستمز المتكامل</div>
@@ -360,16 +421,25 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
       </div>
 
       <!-- Items Table -->
-      <table style="width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; margin-bottom: 18px;">
+      <table style="width: 100%; max-width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 18px; table-layout: auto;">
+        <colgroup>
+          <col style="width: 5%; min-width: 35px;" />
+          <col style="width: 13%; min-width: 85px;" />
+          <col style="width: 40%; min-width: 180px;" />
+          <col style="width: 10%; min-width: 65px;" />
+          <col style="width: 11%; min-width: 75px;" />
+          <col style="width: 9%; min-width: 60px;" />
+          <col style="width: 12%; min-width: 85px;" />
+        </colgroup>
         <thead>
           <tr style="background: #1e3a8a; color: #ffffff; font-weight: bold;">
-            <th style="padding: 8px; text-align: center; width: 35px;">#</th>
-            <th style="padding: 8px; text-align: right; width: 85px;">كود الصنف</th>
-            <th style="padding: 8px; text-align: right;">بيان الصنف والمواصفات</th>
-            <th style="padding: 8px; text-align: center; width: 75px;">الكمية</th>
-            <th style="padding: 8px; text-align: left; width: 95px;">سعر الوحدة</th>
-            <th style="padding: 8px; text-align: center; width: 75px;">الخصم</th>
-            <th style="padding: 8px; text-align: left; width: 105px;">الإجمالي</th>
+            <th style="padding: 8px 6px; text-align: center; width: 5%; min-width: 35px; white-space: nowrap;">#</th>
+            <th style="padding: 8px 8px; text-align: right; width: 13%; min-width: 85px; white-space: nowrap;">كود الصنف</th>
+            <th style="padding: 8px 12px; text-align: right; width: 40%; min-width: 180px;">بيان الصنف والمواصفات</th>
+            <th style="padding: 8px 6px; text-align: center; width: 10%; min-width: 65px; white-space: nowrap;">الكمية</th>
+            <th style="padding: 8px 6px; text-align: left; width: 11%; min-width: 75px; white-space: nowrap;">سعر الوحدة</th>
+            <th style="padding: 8px 6px; text-align: center; width: 9%; min-width: 60px; white-space: nowrap;">الخصم</th>
+            <th style="padding: 8px 8px; text-align: left; width: 12%; min-width: 85px; white-space: nowrap;">الإجمالي</th>
           </tr>
         </thead>
         <tbody>
@@ -477,7 +547,7 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
   const showAccountBalance = typeof options === 'boolean' ? options : Boolean(options?.showAccountBalance);
   const isThermal = paperSize === '80mm';
   const companyName = settings?.factory_name || 'code systems';
-  const hasValidLogo = Boolean(settings?.company_logo && typeof settings.company_logo === 'string' && settings.company_logo.trim() !== '');
+  const hasValidLogo = Boolean(settings?.company_logo && typeof settings.company_logo === 'string' && settings.company_logo.trim() !== '' && settings.company_logo !== '/logo.png');
   const companyLogo = hasValidLogo ? settings.company_logo : '';
 
   const invoiceNumber = invoice.invoice_number || invoice.id || '';
@@ -541,7 +611,7 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
       <div style="padding: 4px; font-family: 'Cairo', Tahoma, sans-serif; font-size: 11px; color: #000;" dir="rtl">
         <!-- Header -->
         <div style="text-align: center; border-bottom: 1px dashed #64748b; padding-bottom: 8px; margin-bottom: 8px;">
-          ${hasValidLogo ? `<img src="${companyLogo}" alt="Logo" style="height: 40px; max-width: 90px; object-fit: contain; margin: 0 auto 4px;" />` : ''}
+          ${hasValidLogo ? `<img src="${companyLogo}" alt="" onerror="this.style.display='none';" style="height: 40px; max-width: 90px; object-fit: contain; margin: 0 auto 4px;" />` : ''}
           <div style="font-weight: 800; font-size: 14px;">${escapeHtml(companyName)}</div>
           <div style="font-size: 11px; font-weight: bold; color: #1e293b;">فاتورة مبيعات نقدية وآجلة</div>
           ${settings?.phone ? `<div style="font-size: 10px; color: #475569;">هاتف: <span class="font-mono">${escapeHtml(settings.phone)}</span></div>` : ''}
@@ -655,20 +725,27 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
     const disc = Number(it.discount_value ?? 0);
     const netPrice = Number(it.unit_selling_price ?? (priceBefore - disc));
     const lineTotal = Number(it.line_total ?? it.total_price ?? (qty * netPrice));
+    const prodName = it.product_name || it.name || '';
+    const fullProdText = prodName + (it.variant_label ? ` (${it.variant_label})` : '');
+    const prodCode = it.product_code || '-';
 
     return `
       <tr style="border-bottom: 1px solid #e2e8f0;">
-        <td style="padding: 8px; text-align: center;" class="font-mono">${idx + 1}</td>
-        <td style="padding: 8px; font-mono; font-size: 11px; color: #475569;">${escapeHtml(it.product_code || '-')}</td>
-        <td style="padding: 8px; font-weight: bold; color: #0f172a;">
-          ${escapeHtml(it.product_name || it.name || '')}
-          ${it.variant_label ? `<span style="font-weight: normal; color: #64748b; font-size: 10px;"> (${escapeHtml(it.variant_label)})</span>` : ''}
+        <td style="padding: 6px 8px; text-align: center;" class="font-mono">${idx + 1}</td>
+        <td style="padding: 6px 8px; font-mono; font-size: 11px; color: #475569; text-align: center;">
+          <span style="${getAutoFitInlineStyle(prodCode, 14, 11)}" title="${escapeHtml(prodCode)}">${escapeHtml(prodCode)}</span>
         </td>
-        <td style="padding: 8px; text-align: center; font-weight: bold;" class="font-mono">${formatNumber(qty)}</td>
-        <td style="padding: 8px; text-align: left;" class="font-mono">${formatCurrency(priceBefore)}</td>
-        <td style="padding: 8px; text-align: center;" class="font-mono">${disc > 0 ? formatCurrency(disc) : '-'}</td>
-        <td style="padding: 8px; text-align: left;" class="font-mono">${formatCurrency(netPrice)}</td>
-        <td style="padding: 8px; text-align: left; font-weight: bold; color: #0f172a;" class="font-mono">${formatCurrency(lineTotal)}</td>
+        <td style="padding: 6px 8px; font-weight: bold; color: #0f172a;">
+          <span style="${getAutoFitInlineStyle(fullProdText, 32, 11.5)}" title="${escapeHtml(fullProdText)}">
+            ${escapeHtml(prodName)}
+            ${it.variant_label ? `<span style="font-weight: normal; color: #64748b; font-size: 10px;"> (${escapeHtml(it.variant_label)})</span>` : ''}
+          </span>
+        </td>
+        <td style="padding: 6px 8px; text-align: center; font-weight: bold;" class="font-mono">${formatNumber(qty)}</td>
+        <td style="padding: 6px 8px; text-align: left;" class="font-mono">${formatCurrency(priceBefore)}</td>
+        <td style="padding: 6px 8px; text-align: center;" class="font-mono">${disc > 0 ? formatCurrency(disc) : '-'}</td>
+        <td style="padding: 6px 8px; text-align: left;" class="font-mono">${formatCurrency(netPrice)}</td>
+        <td style="padding: 6px 8px; text-align: left; font-weight: bold; color: #0f172a;" class="font-mono">${formatCurrency(lineTotal)}</td>
       </tr>
     `;
   }).join('');
@@ -678,7 +755,7 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
       <!-- Top Header -->
       <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1e3a8a; padding-bottom: 16px; margin-bottom: 20px;">
         <div style="display: flex; align-items: center; gap: 14px;">
-          ${hasValidLogo ? `<img src="${companyLogo}" alt="Logo" style="height: 56px; max-width: 120px; object-fit: contain; border-radius: 4px;" />` : ''}
+          ${hasValidLogo ? `<img src="${companyLogo}" alt="" onerror="this.style.display='none';" style="height: 56px; max-width: 120px; object-fit: contain; border-radius: 4px;" />` : ''}
           <div>
             <h1 style="font-size: 20px; font-weight: 800; color: #1e3a8a; margin: 0 0 4px 0;">${escapeHtml(companyName)}</h1>
             <div style="font-size: 11px; font-weight: bold; color: #64748b;">نظام تخطيط موارد المؤسسات - كود سيستمز المتكامل</div>
@@ -721,17 +798,27 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
       </div>
 
       <!-- Items Table -->
-      <table style="width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; margin-bottom: 18px;">
+      <table style="width: 100%; max-width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 18px; table-layout: auto;">
+        <colgroup>
+          <col style="width: 5%; min-width: 35px;" />
+          <col style="width: 13%; min-width: 80px;" />
+          <col style="width: 34%; min-width: 160px;" />
+          <col style="width: 9%; min-width: 60px;" />
+          <col style="width: 10%; min-width: 70px;" />
+          <col style="width: 8%; min-width: 55px;" />
+          <col style="width: 10%; min-width: 70px;" />
+          <col style="width: 11%; min-width: 75px;" />
+        </colgroup>
         <thead>
           <tr style="background: #1e3a8a; color: #ffffff; font-weight: bold;">
-            <th style="padding: 8px; text-align: center; width: 35px;">#</th>
-            <th style="padding: 8px; text-align: right; width: 85px;">كود الصنف</th>
-            <th style="padding: 8px; text-align: right;">بيان الصنف والمقاس واللون</th>
-            <th style="padding: 8px; text-align: center; width: 65px;">الكمية</th>
-            <th style="padding: 8px; text-align: left; width: 90px;">السعر قبل</th>
-            <th style="padding: 8px; text-align: center; width: 65px;">الخصم</th>
-            <th style="padding: 8px; text-align: left; width: 90px;">السعر بعد</th>
-            <th style="padding: 8px; text-align: left; width: 105px;">الإجمالي</th>
+            <th style="padding: 8px 6px; text-align: center; width: 5%; min-width: 35px; white-space: nowrap;">#</th>
+            <th style="padding: 8px 8px; text-align: right; width: 13%; min-width: 80px; white-space: nowrap;">كود الصنف</th>
+            <th style="padding: 8px 12px; text-align: right; width: 34%; min-width: 160px;">بيان الصنف والمقاس واللون</th>
+            <th style="padding: 8px 6px; text-align: center; width: 9%; min-width: 60px; white-space: nowrap;">الكمية</th>
+            <th style="padding: 8px 6px; text-align: left; width: 10%; min-width: 70px; white-space: nowrap;">السعر قبل</th>
+            <th style="padding: 8px 6px; text-align: center; width: 8%; min-width: 55px; white-space: nowrap;">الخصم</th>
+            <th style="padding: 8px 6px; text-align: left; width: 10%; min-width: 70px; white-space: nowrap;">السعر بعد</th>
+            <th style="padding: 8px 8px; text-align: left; width: 11%; min-width: 75px; white-space: nowrap;">الإجمالي</th>
           </tr>
         </thead>
         <tbody>
@@ -875,15 +962,40 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
 
   const isThermal = String(actualPaperSize).toLowerCase() === '80mm';
   const companyName = actualSettings?.factory_name || 'code systems';
-  const hasValidLogo = Boolean(actualSettings?.company_logo && typeof actualSettings.company_logo === 'string' && actualSettings.company_logo.trim() !== '');
+  const hasValidLogo = Boolean(actualSettings?.company_logo && typeof actualSettings.company_logo === 'string' && actualSettings.company_logo.trim() !== '' && actualSettings.company_logo !== '/logo.png');
   const companyLogo = hasValidLogo ? actualSettings.company_logo : '';
+
+  const masterStageCosts = Boolean(actualPrintOptions?.show_stage_costs || actualPrintOptions?.showStageCosts);
+
+  // If sub-keys are provided explicitly, respect them. If not provided, inherit from masterStageCosts
+  const showStageCostPrinting = actualPrintOptions?.show_stage_cost_printing !== undefined
+    ? Boolean(actualPrintOptions.show_stage_cost_printing)
+    : (actualPrintOptions?.showStageCostPrinting !== undefined ? Boolean(actualPrintOptions.showStageCostPrinting) : masterStageCosts);
+
+  const showStageCostEmbroidery = actualPrintOptions?.show_stage_cost_embroidery !== undefined
+    ? Boolean(actualPrintOptions.show_stage_cost_embroidery)
+    : (actualPrintOptions?.showStageCostEmbroidery !== undefined ? Boolean(actualPrintOptions.showStageCostEmbroidery) : masterStageCosts);
+
+  const showStageCostSewing = actualPrintOptions?.show_stage_cost_sewing !== undefined
+    ? Boolean(actualPrintOptions.show_stage_cost_sewing)
+    : (actualPrintOptions?.showStageCostSewing !== undefined ? Boolean(actualPrintOptions.showStageCostSewing) : masterStageCosts);
+
+  const showStageCostOperation = actualPrintOptions?.show_stage_cost_operation !== undefined
+    ? Boolean(actualPrintOptions.show_stage_cost_operation)
+    : (actualPrintOptions?.showStageCostOperation !== undefined ? Boolean(actualPrintOptions.showStageCostOperation) : masterStageCosts);
+
+  const hasAnyStageCost = showStageCostPrinting || showStageCostEmbroidery || showStageCostSewing || showStageCostOperation;
 
   const opts = {
     show_story_info: actualPrintOptions?.show_story_info !== undefined ? Boolean(actualPrintOptions.show_story_info) : (actualPrintOptions?.showStoryDetails !== undefined ? Boolean(actualPrintOptions.showStoryDetails) : true),
     show_matrix: actualPrintOptions?.show_matrix !== undefined ? Boolean(actualPrintOptions.show_matrix) : (actualPrintOptions?.showColorSizeMatrix !== undefined ? Boolean(actualPrintOptions.showColorSizeMatrix) : true),
     show_stages_names: actualPrintOptions?.show_stages_names !== undefined ? Boolean(actualPrintOptions.show_stages_names) : (actualPrintOptions?.showStageWorkshop !== undefined ? Boolean(actualPrintOptions.showStageWorkshop) : true),
     show_fabric_cost: Boolean(actualPrintOptions?.show_fabric_cost || actualPrintOptions?.showFabricCost),
-    show_stage_costs: Boolean(actualPrintOptions?.show_stage_costs || actualPrintOptions?.showStageCosts),
+    show_stage_costs: hasAnyStageCost,
+    show_stage_cost_printing: showStageCostPrinting,
+    show_stage_cost_embroidery: showStageCostEmbroidery,
+    show_stage_cost_sewing: showStageCostSewing,
+    show_stage_cost_operation: showStageCostOperation,
     show_total_cost: Boolean(actualPrintOptions?.show_total_cost || actualPrintOptions?.showTotalCutCost),
     show_agreed_rates: Boolean(actualPrintOptions?.show_agreed_rates || actualPrintOptions?.showAgreedRates),
     show_specifications: actualPrintOptions?.show_specifications !== undefined ? Boolean(actualPrintOptions.show_specifications) : (actualPrintOptions?.showSpecifications !== undefined ? Boolean(actualPrintOptions.showSpecifications) : true)
@@ -957,9 +1069,25 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
   const stageConfigs = [
     { key: 'printing', title: 'مرحلة الطباعة', data: stages.printing },
     { key: 'embroidery', title: 'مرحلة التطريز', data: stages.embroidery },
-    { key: 'sewing', title: 'مرحلة الحياكة والتجميع', data: stages.sewing }
+    { key: 'sewing', title: 'مرحلة الحياكة والتجميع', data: stages.sewing },
+    { key: 'operation', title: 'مرحلة التشغيل', data: stages.operation }
   ];
   const activeStages = stageConfigs.filter(st => Boolean(st.data && (st.data.vendor_name || st.data.total_cost || st.data.fixed_total || st.data.price_per_piece)));
+
+  const isStageCostVisible = (stageKey) => {
+    if (stageKey === 'printing') return Boolean(opts.show_stage_cost_printing);
+    if (stageKey === 'embroidery') return Boolean(opts.show_stage_cost_embroidery);
+    if (stageKey === 'sewing') return Boolean(opts.show_stage_cost_sewing);
+    if (stageKey === 'operation') return Boolean(opts.show_stage_cost_operation);
+    return Boolean(opts.show_stage_costs);
+  };
+
+  const visibleStagesCost = activeStages.reduce((sum, st) => {
+    if (isStageCostVisible(st.key)) {
+      return sum + Number(st.data.total_cost || st.data.fixed_total || 0);
+    }
+    return sum;
+  }, 0);
 
   const showFinancialRates = Boolean(opts.show_stage_costs || opts.show_agreed_rates);
 
@@ -969,7 +1097,7 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
       <div style="padding: 4px; font-family: 'Cairo', Tahoma, sans-serif; font-size: 11px; color: #000; width: 100%; max-width: 76mm; margin: 0 auto;" dir="rtl">
         <!-- Thermal Header -->
         <div style="text-align: center; border-bottom: 1px dashed #64748b; padding-bottom: 8px; margin-bottom: 8px;">
-          ${hasValidLogo ? `<img src="${companyLogo}" alt="Logo" style="height: 40px; max-width: 90px; object-fit: contain; margin: 0 auto 4px;" />` : ''}
+          ${hasValidLogo ? `<img src="${companyLogo}" alt="" onerror="this.style.display='none';" style="height: 40px; max-width: 90px; object-fit: contain; margin: 0 auto 4px;" />` : ''}
           <div style="font-weight: 800; font-size: 14px;">${escapeHtml(companyName)}</div>
           <div style="font-size: 11px; font-weight: bold; color: #1e293b;">أمر تشغيل وقص ملابس (امر شغل)</div>
           ${settings?.phone ? `<div style="font-size: 10px; color: #475569;">هاتف: <span class="font-mono">${escapeHtml(settings.phone)}</span></div>` : ''}
@@ -1027,10 +1155,11 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
             <div style="font-weight: bold; font-size: 10px; margin-bottom: 3px;">مراحل التشغيل والورش:</div>
             ${activeStages.map(st => {
               const cost = Number(st.data.total_cost || st.data.fixed_total || 0);
+              const stageCostVisible = isStageCostVisible(st.key);
               return `
                 <div style="font-size: 10px; margin-bottom: 3px; display: flex; justify-content: space-between;">
                   <span><strong>${escapeHtml(st.title)}:</strong> ${escapeHtml(st.data.vendor_name || 'غير محدد')}</span>
-                  ${showFinancialRates ? `<span class="font-mono font-bold">${formatCurrency(cost)}</span>` : ''}
+                  ${showFinancialRates && stageCostVisible ? `<span class="font-mono font-bold">${formatCurrency(cost)}</span>` : ''}
                 </div>
               `;
             }).join('')}
@@ -1046,10 +1175,10 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
                 <span class="font-mono">${formatCurrency(totalMaterialCost)}</span>
               </div>
             ` : ''}
-            ${opts.show_stage_costs && totalStagesCost > 0 ? `
+            ${opts.show_stage_costs && visibleStagesCost > 0 ? `
               <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
                 <span>تكلفة المراحل:</span>
-                <span class="font-mono">${formatCurrency(totalStagesCost)}</span>
+                <span class="font-mono">${formatCurrency(visibleStagesCost)}</span>
               </div>
             ` : ''}
             <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px;">
@@ -1096,7 +1225,7 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
       <!-- Top Header -->
       <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1e3a8a; padding-bottom: 14px; margin-bottom: 16px;">
         <div style="display: flex; align-items: center; gap: 14px;">
-          ${hasValidLogo ? `<img src="${companyLogo}" alt="Logo" style="height: 54px; max-width: 120px; object-fit: contain; border-radius: 4px;" />` : ''}
+          ${hasValidLogo ? `<img src="${companyLogo}" alt="" onerror="this.style.display='none';" style="height: 54px; max-width: 120px; object-fit: contain; border-radius: 4px;" />` : ''}
           <div>
             <h1 style="font-size: 18px; font-weight: 800; color: #1e3a8a; margin: 0 0 3px 0;">${escapeHtml(companyName)}</h1>
             <div style="font-size: 11px; font-weight: bold; color: #64748b;">قسم الإنتاج والتشغيل - أمر تشغيل وقص ملابس رسمي (أمر شغل)</div>
@@ -1224,18 +1353,18 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
             <span>مراحل التشغيل والورش المسند إليها العمل (المطابع والتطريز والحياكة)</span>
             ${!showFinancialRates ? `<span style="font-size: 10px; color: #64748b; font-weight: normal;">(نسخة أمر شغل بدون أسعار)</span>` : ''}
           </div>
-          <table style="width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px;">
+          <table style="width: 100%; max-width: 100%; border-collapse: collapse; font-size: 11px; table-layout: auto;">
             <thead>
               <tr style="background: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: bold;">
-                <th style="padding: 6px 8px; text-align: right; width: 140px;">المرحلة</th>
-                <th style="padding: 6px 8px; text-align: right;">الورشة / المطبعة / مقاول الخدمة</th>
+                <th style="padding: 6px 10px; text-align: right; width: ${showFinancialRates ? '18%' : '25%'}; min-width: ${showFinancialRates ? '90px' : '110px'}; white-space: nowrap;">المرحلة</th>
+                <th style="padding: 6px 12px; text-align: right; width: ${showFinancialRates ? '34%' : '40%'}; min-width: ${showFinancialRates ? '150px' : '160px'};">الورشة / المطبعة / مقاول الخدمة</th>
                 ${showFinancialRates ? `
-                  <th style="padding: 6px 8px; text-align: center; width: 90px;">طريقة المحاسبة</th>
-                  <th style="padding: 6px 8px; text-align: left; width: 90px;">التكلفة الإجمالية</th>
-                  <th style="padding: 6px 8px; text-align: left; width: 85px;">المسدد</th>
-                  <th style="padding: 6px 8px; text-align: left; width: 85px;">المتبقي</th>
+                  <th style="padding: 6px 8px; text-align: center; width: 12%; min-width: 75px; white-space: nowrap;">طريقة المحاسبة</th>
+                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 80px; white-space: nowrap;">التكلفة الإجمالية</th>
+                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 75px; white-space: nowrap;">المسدد</th>
+                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 75px; white-space: nowrap;">المتبقي</th>
                 ` : `
-                  <th style="padding: 6px 8px; text-align: right;">تعليمات وملاحظات المرحلة</th>
+                  <th style="padding: 6px 12px; text-align: right; width: 35%; min-width: 150px;">تعليمات وملاحظات المرحلة</th>
                 `}
               </tr>
             </thead>
@@ -1245,17 +1374,24 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
                 const paid = Number(st.data.paid || 0);
                 const rem = Math.max(0, cost - paid);
                 const pricingType = st.data.pricing_type === 'per_piece' ? 'بالقطعة' : 'مبلغ مقطوع';
+                const stageCostVisible = isStageCostVisible(st.key);
+                const vendorText = st.data.vendor_name || 'غير محدد';
+                const notesText = st.data.notes || 'تسليم واستلام مطابق للمواصفات';
                 return `
                   <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 6px 8px; font-weight: bold; color: #1e3a8a;">${escapeHtml(st.title)}</td>
-                    <td style="padding: 6px 8px; font-weight: bold; color: #0f172a;">${escapeHtml(st.data.vendor_name || 'غير محدد')}</td>
+                    <td style="padding: 6px 10px; font-weight: bold; color: #1e3a8a; white-space: nowrap;">${escapeHtml(st.title)}</td>
+                    <td style="padding: 6px 12px; font-weight: bold; color: #0f172a;">
+                      <span style="${getAutoFitInlineStyle(vendorText, 26, 11)}" title="${escapeHtml(vendorText)}">${escapeHtml(vendorText)}</span>
+                    </td>
                     ${showFinancialRates ? `
-                      <td style="padding: 6px 8px; text-align: center; font-size: 10px;">${escapeHtml(pricingType)}</td>
-                      <td style="padding: 6px 8px; text-align: left; font-weight: bold;" class="font-mono">${formatCurrency(cost)}</td>
-                      <td style="padding: 6px 8px; text-align: left; color: #047857;" class="font-mono">${formatCurrency(paid)}</td>
-                      <td style="padding: 6px 8px; text-align: left; color: ${rem > 0 ? '#b91c1c' : '#475569'};" class="font-mono">${formatCurrency(rem)}</td>
+                      <td style="padding: 6px 8px; text-align: center; font-size: 10px; white-space: nowrap;">${stageCostVisible ? escapeHtml(pricingType) : '<span style="color:#94a3b8;">-</span>'}</td>
+                      <td style="padding: 6px 8px; text-align: left; font-weight: bold; white-space: nowrap;" class="font-mono">${stageCostVisible ? formatCurrency(cost) : '<span style="color:#94a3b8; font-weight: normal;">-</span>'}</td>
+                      <td style="padding: 6px 8px; text-align: left; color: #047857; white-space: nowrap;" class="font-mono">${stageCostVisible ? formatCurrency(paid) : '<span style="color:#94a3b8;">-</span>'}</td>
+                      <td style="padding: 6px 8px; text-align: left; color: ${rem > 0 ? '#b91c1c' : '#475569'}; white-space: nowrap;" class="font-mono">${stageCostVisible ? formatCurrency(rem) : '<span style="color:#94a3b8;">-</span>'}</td>
                     ` : `
-                      <td style="padding: 6px 8px; color: #475569; font-size: 10px;">${escapeHtml(st.data.notes || 'تسليم واستلام مطابق للمواصفات')}</td>
+                      <td style="padding: 6px 12px; color: #475569; font-size: 10px;">
+                        <span style="${getAutoFitInlineStyle(notesText, 34, 10.5)}" title="${escapeHtml(notesText)}">${escapeHtml(notesText)}</span>
+                      </td>
                     `}
                   </tr>
                 `;
@@ -1272,16 +1408,16 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
             <span>الخامات ومستلزمات الإنتاج المنصرفة للقصة</span>
             ${!opts.show_fabric_cost ? `<span style="font-size: 10px; color: #64748b; font-weight: normal;">(تم إخفاء أسعار التكلفة)</span>` : ''}
           </div>
-          <table style="width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px;">
+          <table style="width: 100%; max-width: 100%; border-collapse: collapse; font-size: 11px; table-layout: auto;">
             <thead>
               <tr style="background: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: bold;">
-                <th style="padding: 6px 8px; text-align: center; width: 35px;">#</th>
-                <th style="padding: 6px 8px; text-align: right;">اسم الخامة والمواصفات</th>
-                <th style="padding: 6px 8px; text-align: center; width: 90px;">الكمية المنصرفة</th>
-                <th style="padding: 6px 8px; text-align: center; width: 70px;">الوحدة</th>
+                <th style="padding: 6px 8px; text-align: center; width: ${opts.show_fabric_cost ? '6%' : '8%'}; min-width: 35px; white-space: nowrap;">#</th>
+                <th style="padding: 6px 12px; text-align: right; width: ${opts.show_fabric_cost ? '46%' : '56%'}; min-width: ${opts.show_fabric_cost ? '180px' : '200px'};">اسم الخامة والمواصفات</th>
+                <th style="padding: 6px 8px; text-align: center; width: ${opts.show_fabric_cost ? '14%' : '20%'}; min-width: 85px; white-space: nowrap;">الكمية المنصرفة</th>
+                <th style="padding: 6px 8px; text-align: center; width: ${opts.show_fabric_cost ? '10%' : '16%'}; min-width: 60px; white-space: nowrap;">الوحدة</th>
                 ${opts.show_fabric_cost ? `
-                  <th style="padding: 6px 8px; text-align: left; width: 95px;">سعر الوحدة</th>
-                  <th style="padding: 6px 8px; text-align: left; width: 105px;">إجمالي التكلفة</th>
+                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 75px; white-space: nowrap;">سعر الوحدة</th>
+                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 80px; white-space: nowrap;">إجمالي التكلفة</th>
                 ` : ''}
               </tr>
             </thead>
@@ -1290,10 +1426,13 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
                 const qty = Number(m.quantity ?? m.actual_quantity ?? m.standard_quantity ?? 0);
                 const price = Number(m.unit_price ?? m.unit_cost ?? 0);
                 const lineTotal = Number(m.line_cost ?? m.total_cost ?? (qty * price));
+                const matText = m.material_name || m.name || m.raw_material_id || '';
                 return `
                   <tr style="border-bottom: 1px solid #f1f5f9;">
                     <td style="padding: 6px 8px; text-align: center;" class="font-mono">${idx + 1}</td>
-                    <td style="padding: 6px 8px; font-weight: bold; color: #0f172a;">${escapeHtml(m.material_name || m.name || m.raw_material_id || '')}</td>
+                    <td style="padding: 6px 8px; font-weight: bold; color: #0f172a;">
+                      <span style="${getAutoFitInlineStyle(matText, 34, 11)}" title="${escapeHtml(matText)}">${escapeHtml(matText)}</span>
+                    </td>
                     <td style="padding: 6px 8px; text-align: center; font-weight: bold;" class="font-mono">${formatNumber(qty)}</td>
                     <td style="padding: 6px 8px; text-align: center;">${escapeHtml(m.material_unit || m.unit || 'وحدة')}</td>
                     ${opts.show_fabric_cost ? `
@@ -1329,10 +1468,10 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
                 <span class="font-mono font-bold">${formatCurrency(totalMaterialCost)}</span>
               </div>
             ` : ''}
-            ${opts.show_stage_costs ? `
+            ${opts.show_stage_costs && visibleStagesCost > 0 ? `
               <div style="display: flex; justify-content: space-between; padding: 5px 10px; border-bottom: 1px solid #e2e8f0; color: #475569;">
                 <span>تكاليف مراحل التشغيل:</span>
-                <span class="font-mono font-bold">${formatCurrency(totalStagesCost)}</span>
+                <span class="font-mono font-bold">${formatCurrency(visibleStagesCost)}</span>
               </div>
             ` : ''}
             ${totalAdditionalCost > 0 ? `

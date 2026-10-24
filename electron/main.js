@@ -294,8 +294,11 @@ ipcMain.handle('print:print-html', async (_event, params = {}) => {
       },
     });
 
+    const baseAppUrl = (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents)
+      ? mainWindow.webContents.getURL()
+      : undefined;
     const encoded = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-    await hiddenWin.loadURL(encoded);
+    await hiddenWin.loadURL(encoded, baseAppUrl ? { baseURLForDataURL: baseAppUrl } : undefined);
 
     // Wait for fonts to finish rendering
     try {
@@ -369,8 +372,11 @@ ipcMain.handle('print:save-pdf', async (_event, params = {}) => {
       },
     });
 
+    const baseAppUrl = (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents)
+      ? mainWindow.webContents.getURL()
+      : undefined;
     const encoded = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-    await hiddenWin.loadURL(encoded);
+    await hiddenWin.loadURL(encoded, baseAppUrl ? { baseURLForDataURL: baseAppUrl } : undefined);
 
     try {
       await hiddenWin.webContents.executeJavaScript('document.fonts ? document.fonts.ready : Promise.resolve()');
@@ -674,7 +680,9 @@ app.whenReady().then(async () => {
   if (!integrity.ok && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.once('did-finish-load', () => {
       const recheck = localDatabaseManager.checkIntegrity();
-      if (!recheck.ok) {
+      const hasRealCorruption = recheck && !recheck.ok && Array.isArray(recheck.details) &&
+        recheck.details.some((d) => typeof d === 'string' && !/ok|binding|module|cannot find/i.test(d));
+      if (hasRealCorruption) {
         mainWindow.webContents.send('db:integrity-warning', recheck);
       }
     });

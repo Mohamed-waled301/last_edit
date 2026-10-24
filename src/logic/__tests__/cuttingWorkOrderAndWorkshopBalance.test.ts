@@ -86,6 +86,60 @@ describe('Cutting Work Order Checkboxes, Subcontractor Balance Integration, & Pr
       expect(htmlWithCosts).toContain('إجمالي تكلفة أمر القص');
       expect(htmlWithCosts).toContain('تكاليف مراحل التشغيل');
     });
+
+    it('supports individual stage checkpoints for printing, embroidery, sewing, and operation', () => {
+      const multiStageOrder = {
+        order_number: 'CUT-STAGES-01',
+        cutting_number: 'CUT-STAGES-01',
+        cutting_name: 'ترنج رجالي',
+        start_date: '2026-10-22',
+        fabric_type: 'ميلتون',
+        batch_quantity: 100,
+        stages: {
+          printing: { vendor_name: 'مطبعة الأهرام', total_cost: 50, pricing_type: 'fixed' },
+          embroidery: { vendor_name: 'تطريز النيل', total_cost: 60, pricing_type: 'fixed' },
+          sewing: { vendor_name: 'ورشة السلام', total_cost: 80, pricing_type: 'fixed' },
+          operation: { vendor_name: 'ورشة التشغيل الحديثة', total_cost: 70, pricing_type: 'fixed' }
+        }
+      };
+
+      // Case A: Only printing cost is toggled ON
+      const htmlOnlyPrinting = generateCutOrderHtml(multiStageOrder, {}, 'A4', {
+        show_stage_costs: true,
+        show_stage_cost_printing: true,
+        show_stage_cost_embroidery: false,
+        show_stage_cost_sewing: false,
+        show_stage_cost_operation: false,
+        show_total_cost: true
+      });
+
+      // Printing cost appears
+      expect(htmlOnlyPrinting).toContain('50.00 ج.م');
+      // Embroidery, sewing, and operation costs are hidden with '-'
+      expect(htmlOnlyPrinting).not.toContain('60.00 ج.م');
+      expect(htmlOnlyPrinting).not.toContain('80.00 ج.م');
+      expect(htmlOnlyPrinting).not.toContain('70.00 ج.م');
+      // All 4 stage rows are listed
+      expect(htmlOnlyPrinting).toContain('مرحلة الطباعة');
+      expect(htmlOnlyPrinting).toContain('مرحلة التطريز');
+      expect(htmlOnlyPrinting).toContain('مرحلة الحياكة والتجميع');
+      expect(htmlOnlyPrinting).toContain('مرحلة التشغيل');
+      expect(htmlOnlyPrinting).toContain('ورشة التشغيل الحديثة');
+
+      // Case B: Only operation is toggled ON
+      const htmlOnlyOperation = generateCutOrderHtml(multiStageOrder, {}, 'A4', {
+        show_stage_costs: true,
+        show_stage_cost_printing: false,
+        show_stage_cost_embroidery: false,
+        show_stage_cost_sewing: false,
+        show_stage_cost_operation: true,
+        show_total_cost: true
+      });
+      expect(htmlOnlyOperation).not.toContain('50.00 ج.م');
+      expect(htmlOnlyOperation).not.toContain('60.00 ج.م');
+      expect(htmlOnlyOperation).not.toContain('80.00 ج.م');
+      expect(htmlOnlyOperation).toContain('70.00 ج.م');
+    });
   });
 
   describe('2. Automatic Balance Posting for Subcontractors / Workshops', () => {

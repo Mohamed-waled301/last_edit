@@ -26,6 +26,63 @@ import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters
 import { generatePurchaseInvoiceHtml, generateSalesInvoiceHtml, generateCutOrderHtml, DEFAULT_CUT_ORDER_PRINT_OPTIONS } from './invoicePrintTemplates';
 import { calculateStatementSummaryCards } from '../../logic/statementSummaryCards';
 
+/**
+ * Auto-Fit Font Scaling & Condensed Spacing for single-line table cells
+ * Guarantees long Arabic text fits on a single line without wrapping or hiding behind border lines
+ */
+export function getAutoFitStyle(text, maxChars = 24, baseFontSize = 11.5) {
+  const str = String(text ?? '').trim();
+  const len = str.length;
+  if (!len || len <= maxChars) {
+    return {
+      fontSize: `${baseFontSize}px`,
+      letterSpacing: 'normal',
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      display: 'block',
+      width: '100%',
+      maxWidth: '100%',
+      boxSizing: 'border-box'
+    };
+  }
+
+  const excess = len - maxChars;
+  let size = baseFontSize;
+  let letterSpacing = 'normal';
+  let fontStretch = 'normal';
+
+  if (excess <= 6) {
+    size = Math.max(9.5, Number((baseFontSize - 1.2).toFixed(1)));
+    letterSpacing = '-0.2px';
+  } else if (excess <= 14) {
+    size = Math.max(8.8, Number((baseFontSize - 2.2).toFixed(1)));
+    letterSpacing = '-0.35px';
+    fontStretch = 'condensed';
+  } else if (excess <= 24) {
+    size = Math.max(8.2, Number((baseFontSize - 3.0).toFixed(1)));
+    letterSpacing = '-0.45px';
+    fontStretch = 'condensed';
+  } else {
+    size = Math.max(7.8, Number((baseFontSize - 3.5).toFixed(1)));
+    letterSpacing = '-0.5px';
+    fontStretch = 'condensed';
+  }
+
+  return {
+    fontSize: `${size}px`,
+    letterSpacing,
+    fontStretch,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: 'block',
+    width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box'
+  };
+}
+
 export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   const params = useMemo(() => {
     if (searchParams instanceof URLSearchParams) return searchParams;
@@ -65,7 +122,17 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   const [cutOrderPrintOptions, setCutOrderPrintOptions] = useState(() => {
     try {
       const saved = localStorage.getItem('erp_cut_order_print_options');
-      if (saved) return { ...DEFAULT_CUT_ORDER_PRINT_OPTIONS, ...JSON.parse(saved) };
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const merged = { ...DEFAULT_CUT_ORDER_PRINT_OPTIONS, ...parsed };
+        if (merged.show_stage_costs) {
+          if (parsed.show_stage_cost_printing === undefined) merged.show_stage_cost_printing = true;
+          if (parsed.show_stage_cost_embroidery === undefined) merged.show_stage_cost_embroidery = true;
+          if (parsed.show_stage_cost_sewing === undefined) merged.show_stage_cost_sewing = true;
+          if (parsed.show_stage_cost_operation === undefined) merged.show_stage_cost_operation = true;
+        }
+        return merged;
+      }
     } catch {}
     return { ...DEFAULT_CUT_ORDER_PRINT_OPTIONS };
   });
@@ -73,6 +140,56 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   const handleToggleCutOrderOption = (key, checked) => {
     setCutOrderPrintOptions(prev => {
       const updated = { ...prev, [key]: checked };
+      try {
+        localStorage.setItem('erp_cut_order_print_options', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const handleToggleMasterStageCosts = (checked) => {
+    setCutOrderPrintOptions(prev => {
+      const updated = {
+        ...prev,
+        show_stage_costs: checked,
+        show_stage_cost_printing: checked,
+        show_stage_cost_embroidery: checked,
+        show_stage_cost_sewing: checked,
+        show_stage_cost_operation: checked,
+        showStageCosts: checked,
+        showStageCostPrinting: checked,
+        showStageCostEmbroidery: checked,
+        showStageCostSewing: checked,
+        showStageCostOperation: checked
+      };
+      try {
+        localStorage.setItem('erp_cut_order_print_options', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const handleToggleSubStageCost = (key, checked) => {
+    setCutOrderPrintOptions(prev => {
+      const nextPrinting = key === 'show_stage_cost_printing' ? checked : (prev.show_stage_cost_printing !== undefined ? Boolean(prev.show_stage_cost_printing) : Boolean(prev.show_stage_costs));
+      const nextEmbroidery = key === 'show_stage_cost_embroidery' ? checked : (prev.show_stage_cost_embroidery !== undefined ? Boolean(prev.show_stage_cost_embroidery) : Boolean(prev.show_stage_costs));
+      const nextSewing = key === 'show_stage_cost_sewing' ? checked : (prev.show_stage_cost_sewing !== undefined ? Boolean(prev.show_stage_cost_sewing) : Boolean(prev.show_stage_costs));
+      const nextOperation = key === 'show_stage_cost_operation' ? checked : (prev.show_stage_cost_operation !== undefined ? Boolean(prev.show_stage_cost_operation) : Boolean(prev.show_stage_costs));
+      const anyActive = nextPrinting || nextEmbroidery || nextSewing || nextOperation;
+
+      const updated = {
+        ...prev,
+        show_stage_costs: anyActive,
+        show_stage_cost_printing: nextPrinting,
+        show_stage_cost_embroidery: nextEmbroidery,
+        show_stage_cost_sewing: nextSewing,
+        show_stage_cost_operation: nextOperation,
+        showStageCosts: anyActive,
+        showStageCostPrinting: nextPrinting,
+        showStageCostEmbroidery: nextEmbroidery,
+        showStageCostSewing: nextSewing,
+        showStageCostOperation: nextOperation
+      };
       try {
         localStorage.setItem('erp_cut_order_print_options', JSON.stringify(updated));
       } catch {}
@@ -552,7 +669,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
               const stages = o.stages || {};
               for (const [stKey, st] of Object.entries(stages)) {
                 if (st && (st.vendor_name || st.total_cost || st.fixed_total)) {
-                  const title = stKey === 'printing' ? 'الطباعة' : stKey === 'embroidery' ? 'التطريز' : 'الحياكة والتجميع';
+                  const title = stKey === 'printing' ? 'الطباعة' : stKey === 'embroidery' ? 'التطريز' : stKey === 'sewing' ? 'الحياكة والتجميع' : 'التشغيل';
                   stageRows.push({
                     cutting_number: o.cutting_number || o.order_number,
                     cutting_name: o.cutting_name || o.product_name,
@@ -667,44 +784,258 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
            max-width: 80mm !important;
            margin: 0 auto !important;
            padding: 2mm 3mm !important;
-           font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
-           direction: rtl;
+           font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif !important;
+           direction: rtl !important;
            background: #ffffff !important;
            color: #000000 !important;
-           -webkit-print-color-adjust: exact;
-           print-color-adjust: exact;
+           -webkit-print-color-adjust: exact !important;
+           print-color-adjust: exact !important;
          }`
       : `@page { size: ${paperSize} ${orientation}; margin: ${margins === 'none' ? '0' : margins === 'minimal' ? '5mm' : '10mm'}; }
          html, body {
            margin: 0 !important;
            padding: 0 !important;
-           font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
-           direction: rtl;
+           font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif !important;
+           direction: rtl !important;
            background: #ffffff !important;
            color: #111827 !important;
-           -webkit-print-color-adjust: exact;
-           print-color-adjust: exact;
+           -webkit-print-color-adjust: exact !important;
+           print-color-adjust: exact !important;
          }`;
 
-    // Extract all stylesheets and style tags currently in document so Tailwind classes render
+    // 1. Extract active CSS rules directly from document.styleSheets
+    let inlinedCss = '';
+    if (typeof document !== 'undefined') {
+      try {
+        for (const sheet of Array.from(document.styleSheets)) {
+          try {
+            if (sheet.cssRules) {
+              for (const rule of Array.from(sheet.cssRules)) {
+                inlinedCss += rule.cssText + '\n';
+              }
+            }
+          } catch (e) {
+            // Ignore restricted or cross-origin stylesheets
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. Extract stylesheet link and style elements
     const collectedStyles = typeof document !== 'undefined'
       ? Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
           .map(node => node.outerHTML)
           .join('\n')
       : '';
 
+    const baseHref = typeof window !== 'undefined' && window.location ? (window.location.origin || window.location.href) : '';
+
     return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <title>كود سيستمز - طباعة مستند</title>
+  ${baseHref ? `<base href="${baseHref}/">` : ''}
+  <style id="inlined-extracted-styles">
+    ${inlinedCss}
+  </style>
   ${collectedStyles}
-  <style>
+  <style id="standalone-print-system-styles">
     * { box-sizing: border-box; }
     ${pageCss}
-    .font-mono { font-family: 'Consolas', 'Courier New', monospace; font-variant-numeric: tabular-nums; }
-    table { width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; word-break: break-word; }
-    th, td { word-break: break-word; overflow-wrap: break-word; }
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      direction: rtl;
+      text-align: right;
+      color: #0f172a;
+      background: #ffffff;
+    }
+    .font-mono { font-family: 'Consolas', 'Courier New', monospace !important; font-variant-numeric: tabular-nums !important; }
+    
+    /* Layout & Alignment */
+    .flex { display: flex !important; }
+    .inline-flex { display: inline-flex !important; }
+    .flex-col { flex-direction: column !important; }
+    .flex-wrap { flex-wrap: wrap !important; }
+    .justify-between { justify-content: space-between !important; }
+    .justify-center { justify-content: center !important; }
+    .justify-end { justify-content: flex-end !important; }
+    .items-center { align-items: center !important; }
+    .items-start { align-items: flex-start !important; }
+    .items-end { align-items: flex-end !important; }
+    .gap-1 { gap: 4px !important; }
+    .gap-1\\.5 { gap: 6px !important; }
+    .gap-2 { gap: 8px !important; }
+    .gap-3 { gap: 12px !important; }
+    .gap-4 { gap: 16px !important; }
+    .gap-6 { gap: 24px !important; }
+    .grid { display: grid !important; }
+    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+    .w-full { width: 100% !important; }
+    .max-w-full { max-width: 100% !important; }
+    .mx-auto { margin-left: auto !important; margin-right: auto !important; }
+    .block { display: block !important; }
+    .inline-block { display: inline-block !important; }
+
+    /* Spacing */
+    .p-2 { padding: 8px !important; }
+    .p-2\\.5 { padding: 10px !important; }
+    .p-3 { padding: 12px !important; }
+    .p-4 { padding: 16px !important; }
+    .p-6 { padding: 24px !important; }
+    .p-8 { padding: 28px !important; }
+    .py-1 { padding-top: 4px !important; padding-bottom: 4px !important; }
+    .py-1\\.5 { padding-top: 6px !important; padding-bottom: 6px !important; }
+    .py-2 { padding-top: 8px !important; padding-bottom: 8px !important; }
+    .py-2\\.5 { padding-top: 10px !important; padding-bottom: 10px !important; }
+    .px-1 { padding-left: 4px !important; padding-right: 4px !important; }
+    .px-2 { padding-left: 8px !important; padding-right: 8px !important; }
+    .px-3 { padding-left: 12px !important; padding-right: 12px !important; }
+    .px-3\\.5 { padding-left: 14px !important; padding-right: 14px !important; }
+    .px-4 { padding-left: 16px !important; padding-right: 16px !important; }
+    .pb-2 { padding-bottom: 8px !important; }
+    .pb-3 { padding-bottom: 12px !important; }
+    .pb-4 { padding-bottom: 16px !important; }
+    .pb-5 { padding-bottom: 20px !important; }
+    .pb-6 { padding-bottom: 24px !important; }
+    .pt-2 { padding-top: 8px !important; }
+    .pt-3 { padding-top: 12px !important; }
+    .pt-4 { padding-top: 16px !important; }
+    .pt-6 { padding-top: 24px !important; }
+    .pt-12 { padding-top: 40px !important; }
+    .mb-1 { margin-bottom: 4px !important; }
+    .mb-1\\.5 { margin-bottom: 6px !important; }
+    .mb-2 { margin-bottom: 8px !important; }
+    .mb-3 { margin-bottom: 12px !important; }
+    .mb-4 { margin-bottom: 16px !important; }
+    .mt-0\\.5 { margin-top: 2px !important; }
+    .mt-1 { margin-top: 4px !important; }
+    .mt-2 { margin-top: 8px !important; }
+    .mt-4 { margin-top: 16px !important; }
+    .mt-6 { margin-top: 24px !important; }
+    .space-y-6 > * + * { margin-top: 20px !important; }
+    .space-y-8 > * + * { margin-top: 28px !important; }
+
+    /* Borders */
+    .border { border: 1px solid #cbd5e1 !important; }
+    .border-2 { border: 2px solid #1F3A5F !important; }
+    .border-t { border-top: 1px solid #cbd5e1 !important; }
+    .border-b { border-bottom: 1px solid #cbd5e1 !important; }
+    .border-b-2 { border-bottom: 2px solid #1F3A5F !important; }
+    .border-dashed { border-style: dashed !important; }
+    .border-dotted { border-style: dotted !important; }
+    .border-slate-200 { border-color: #e2e8f0 !important; }
+    .border-slate-300 { border-color: #cbd5e1 !important; }
+    .border-slate-400 { border-color: #94a3b8 !important; }
+    .border-blue-200 { border-color: #bfdbfe !important; }
+    .border-emerald-200 { border-color: #a7f3d0 !important; }
+    .rounded { border-radius: 4px !important; }
+    .rounded-lg { border-radius: 8px !important; }
+    .rounded-xl { border-radius: 12px !important; }
+
+    /* Colors */
+    .bg-white { background-color: #ffffff !important; }
+    .bg-slate-50 { background-color: #f8fafc !important; }
+    .bg-slate-900 { background-color: #0f172a !important; color: #ffffff !important; }
+    .bg-blue-50\\/70, .bg-blue-50 { background-color: #eff6ff !important; }
+    .bg-emerald-50\\/70, .bg-emerald-50 { background-color: #ecfdf5 !important; }
+    .bg-\\[\\#1F3A5F\\] { background-color: #1F3A5F !important; color: #ffffff !important; }
+    .bg-emerald-700 { background-color: #047857 !important; color: #ffffff !important; }
+    .bg-blue-800 { background-color: #1e40af !important; color: #ffffff !important; }
+    .text-white { color: #ffffff !important; }
+    .text-slate-900 { color: #0f172a !important; }
+    .text-slate-800 { color: #1e293b !important; }
+    .text-slate-700 { color: #334155 !important; }
+    .text-slate-600 { color: #475569 !important; }
+    .text-slate-500 { color: #64748b !important; }
+    .text-slate-400 { color: #94a3b8 !important; }
+    .text-slate-300 { color: #cbd5e1 !important; }
+    .text-blue-900 { color: #1e3a8a !important; }
+    .text-blue-700 { color: #1d4ed8 !important; }
+    .text-blue-600 { color: #2563eb !important; }
+    .text-emerald-900 { color: #064e3b !important; }
+    .text-emerald-700 { color: #047857 !important; }
+    .text-emerald-600 { color: #059669 !important; }
+    .text-rose-700 { color: #be123c !important; }
+    .text-\\[\\#1F3A5F\\] { color: #1F3A5F !important; }
+
+    /* Typography */
+    .font-bold { font-weight: 700 !important; }
+    .font-extrabold { font-weight: 800 !important; }
+    .font-semibold { font-weight: 600 !important; }
+    .text-right { text-align: right !important; }
+    .text-left { text-align: left !important; }
+    .text-center { text-align: center !important; }
+    .text-xs { font-size: 11px !important; }
+    .text-sm { font-size: 13px !important; }
+    .text-base { font-size: 15px !important; }
+    .text-lg { font-size: 17px !important; }
+    .text-xl { font-size: 19px !important; }
+    .text-2xl { font-size: 22px !important; }
+    .text-\\[9px\\] { font-size: 9px !important; }
+    .text-\\[10px\\] { font-size: 10px !important; }
+    .text-\\[11px\\] { font-size: 11px !important; }
+
+    /* Tables */
+    table {
+      width: 100% !important;
+      max-width: 100% !important;
+      border-collapse: collapse !important;
+      margin-top: 10px !important;
+      margin-bottom: 10px !important;
+    }
+    table.table-fixed {
+      table-layout: fixed !important;
+    }
+    table:not(.table-fixed) {
+      table-layout: auto !important;
+    }
+    thead { display: table-header-group !important; }
+    tbody { display: table-row-group !important; }
+    th {
+      background-color: #1F3A5F !important;
+      color: #ffffff !important;
+      font-weight: 700 !important;
+      padding: 7px 10px !important;
+      border: 1px solid #94a3b8 !important;
+      white-space: nowrap !important;
+    }
+    td {
+      padding: 7px 10px !important;
+      border: 1px solid #cbd5e1 !important;
+      box-sizing: border-box !important;
+    }
+    tbody tr:nth-child(even) { background-color: #f8fafc !important; }
+
+    /* Single-line Auto-Fit cell container */
+    .cell-autofit {
+      display: inline-block !important;
+      max-width: 100% !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      box-sizing: border-box !important;
+      vertical-align: middle !important;
+      line-height: 1.3 !important;
+    }
+
+    /* Images */
+    img {
+      max-height: 56px !important;
+      max-width: 130px !important;
+      width: auto !important;
+      height: auto !important;
+      object-fit: contain !important;
+      display: block !important;
+    }
+
+    /* Print & Pagination */
+    .break-inside-avoid, tr, td, th {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
     .no-print { display: none !important; }
     ${colorMode === 'grayscale' ? 'html, body { filter: grayscale(100%) !important; -webkit-filter: grayscale(100%) !important; }' : ''}
   </style>
@@ -800,7 +1131,18 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
   // Document Content Renderer
   const renderDocumentContent = () => {
     const companyName = settings?.factory_name || 'code systems';
-    const companyLogo = settings?.company_logo || '/logo.png';
+    const hasValidLogo = Boolean(
+      settings?.company_logo &&
+      typeof settings.company_logo === 'string' &&
+      settings.company_logo.trim() !== '' &&
+      settings.company_logo !== '/logo.png' &&
+      (settings.company_logo.startsWith('data:image/') ||
+       settings.company_logo.startsWith('http://') ||
+       settings.company_logo.startsWith('https://') ||
+       settings.company_logo.startsWith('file://') ||
+       settings.company_logo.startsWith('blob:'))
+    );
+    const companyLogo = hasValidLogo ? settings.company_logo : '';
     const isThermal = paperSize === '80mm';
 
     // 0. Purchase Invoice Rendering (Both 80mm Thermal and A4 Official)
@@ -858,14 +1200,17 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         return (
           <div className="p-3 bg-white text-slate-900 font-mono text-xs w-[80mm] max-w-[80mm] mx-auto select-text" dir="rtl">
             <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
-              <img
-                src={companyLogo}
-                alt="Logo"
-                className="h-12 w-auto max-w-[110px] object-contain mx-auto mb-1.5"
-                onError={(e) => {
-                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-                }}
-              />
+              {hasValidLogo && (
+                <img
+                  src={companyLogo}
+                  alt=""
+                  style={{ maxHeight: '42px', maxWidth: '100px', width: 'auto', height: 'auto', objectFit: 'contain', margin: '0 auto 6px', display: 'block' }}
+                  className="h-10 w-auto max-w-[100px] object-contain mx-auto mb-1.5"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
               <h2 className="font-extrabold text-sm text-slate-900">{companyName}</h2>
               <div className="text-[11px] font-bold text-[#1F3A5F]">{docTitle}</div>
               <div className="mt-2 text-right pt-2 border-t border-dotted border-slate-300 space-y-0.5 text-[11px]">
@@ -920,20 +1265,23 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
       // A4 / A5 Voucher Layout
       return (
-        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
+        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl" style={{ width: '100%', boxSizing: 'border-box' }}>
           {/* Header */}
-          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
-            <div className="flex items-center gap-4">
-              <img
-                src={companyLogo}
-                alt="Logo"
-                className="h-16 w-auto max-w-[130px] object-contain rounded"
-                onError={(e) => {
-                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-                }}
-              />
+          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #1F3A5F', paddingBottom: '16px' }}>
+            <div className="flex items-center gap-4" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              {hasValidLogo && (
+                <img
+                  src={companyLogo}
+                  alt=""
+                  style={{ maxHeight: '56px', maxWidth: '130px', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
+                  className="h-14 w-auto max-w-[130px] object-contain rounded"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
               <div>
-                <h2 className="text-2xl font-bold text-[#1F3A5F]">{companyName}</h2>
+                <h2 className="text-2xl font-bold text-[#1F3A5F]" style={{ fontSize: '22px', fontWeight: 'bold', color: '#1F3A5F', margin: 0 }}>{companyName}</h2>
                 <div className="text-xs font-bold text-slate-500">نظام إدارة المؤسسات - كود سيستمز المتكامل</div>
                 {settings?.address && <p className="text-xs text-slate-600 mt-1">{settings.address}</p>}
                 {settings?.phone && <p className="text-xs text-slate-600">هاتف: <span className="font-mono">{settings.phone}</span></p>}
@@ -1091,14 +1439,17 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         return (
           <div className="p-3 bg-white text-slate-900 font-mono text-xs w-[80mm] max-w-[80mm] mx-auto select-text" dir="rtl">
             <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
-              <img
-                src={companyLogo}
-                alt="Logo"
-                className="h-10 w-auto max-w-[90px] object-contain mx-auto mb-1"
-                onError={(e) => {
-                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-                }}
-              />
+              {hasValidLogo && (
+                <img
+                  src={companyLogo}
+                  alt=""
+                  style={{ maxHeight: '40px', maxWidth: '90px', width: 'auto', height: 'auto', objectFit: 'contain', margin: '0 auto 4px', display: 'block' }}
+                  className="h-10 w-auto max-w-[90px] object-contain mx-auto mb-1"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
               <h2 className="font-extrabold text-sm text-slate-900">{companyName}</h2>
               <div className="text-[11px] font-bold text-[#1F3A5F]">كشف حساب مالي معتمد</div>
               <div className="text-[10px] text-slate-500 mt-0.5">تاريخ الكشف: {formatDate(new Date().toISOString())}</div>
@@ -1159,31 +1510,34 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
       // 4.B) A4 Official Statement Layout
       return (
-        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
-          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5">
-            <div className="flex items-center gap-4">
-              <img
-                src={companyLogo}
-                alt="Logo"
-                className="h-16 w-auto max-w-[130px] object-contain rounded"
-                onError={(e) => {
-                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-                }}
-              />
+        <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl" style={{ width: '100%', boxSizing: 'border-box' }}>
+          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-5" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #1F3A5F', paddingBottom: '18px' }}>
+            <div className="flex items-center gap-4" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              {hasValidLogo && (
+                <img
+                  src={companyLogo}
+                  alt=""
+                  style={{ maxHeight: '56px', maxWidth: '130px', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
+                  className="h-14 w-auto max-w-[130px] object-contain rounded"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
               <div>
-                <h2 className="text-2xl font-bold text-[#1F3A5F]">{companyName}</h2>
-                <div className="text-xs font-bold text-slate-500">كشف حساب مالي تفصيلي معتمد</div>
+                <h2 className="text-2xl font-bold text-[#1F3A5F]" style={{ fontSize: '22px', fontWeight: 'bold', color: '#1F3A5F', margin: 0 }}>{companyName}</h2>
+                <div className="text-xs font-bold text-slate-500" style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b', marginTop: '2px' }}>كشف حساب مالي تفصيلي معتمد</div>
               </div>
             </div>
-            <div className="text-left font-mono">
-              <span className="inline-block px-3.5 py-1.5 bg-[#1F3A5F] text-white font-bold text-sm rounded mb-2">
+            <div className="text-left font-mono" style={{ textAlign: 'left' }}>
+              <span className="inline-block px-3.5 py-1.5 bg-[#1F3A5F] text-white font-bold text-sm rounded mb-2" style={{ display: 'inline-block', padding: '6px 14px', backgroundColor: '#1F3A5F', color: '#ffffff', fontWeight: 'bold', fontSize: '13px', borderRadius: '4px', marginBottom: '8px' }}>
                 كشف حساب معتمد
               </span>
-              <div className="text-xs text-slate-600 font-mono mt-1">تاريخ الكشف: {formatDate(new Date().toISOString())}</div>
+              <div className="text-xs text-slate-600 font-mono mt-1" style={{ fontSize: '12px', color: '#475569' }}>تاريخ الكشف: {formatDate(new Date().toISOString())}</div>
             </div>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap justify-between items-center gap-4 text-xs font-bold">
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap justify-between items-center gap-4 text-xs font-bold" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '14px 18px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
             <div>
               <span className="text-slate-500 block mb-1">اسم الطرف التجاري:</span>
               <span className="text-sm font-bold text-slate-900 block">{party.name || 'عميل / مورد'}</span>
@@ -1201,58 +1555,66 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           </div>
 
           {/* 4 Summary Cards */}
-          <div className="grid grid-cols-4 gap-3 text-right">
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-              <span className="text-[10px] font-bold text-slate-500 block mb-0.5">رصيد أول المدة</span>
-              <span className="text-sm font-bold font-mono text-slate-900 block">
+          <div className="grid grid-cols-4 gap-3 text-right" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px', textAlign: 'right' }}>
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg" style={{ padding: '12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+              <span className="text-[10px] font-bold text-slate-500 block mb-0.5" style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '2px' }}>رصيد أول المدة</span>
+              <span className="text-sm font-bold font-mono text-slate-900 block" style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a', display: 'block' }}>
                 {formatCurrency(printSummaryCards.openingBalance)}
               </span>
-              <span className="text-[9px] text-slate-500 block mt-0.5 font-semibold">
+              <span className="text-[9px] text-slate-500 block mt-0.5 font-semibold" style={{ fontSize: '9px', color: '#64748b', display: 'block', marginTop: '2px' }}>
                 {printSummaryCards.openingNatureText}
               </span>
             </div>
 
-            <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg">
-              <span className="text-[10px] font-bold text-blue-700 block mb-0.5">إجمالي الفواتير والتوريدات</span>
-              <span className="text-sm font-bold font-mono text-blue-900 block">
+            <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg" style={{ padding: '12px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px' }}>
+              <span className="text-[10px] font-bold text-blue-700 block mb-0.5" style={{ fontSize: '10px', fontWeight: 'bold', color: '#1d4ed8', display: 'block', marginBottom: '2px' }}>إجمالي الفواتير والتوريدات</span>
+              <span className="text-sm font-bold font-mono text-blue-900 block" style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e3a8a', display: 'block' }}>
                 {formatCurrency(printSummaryCards.periodInvoices)}
               </span>
-              <span className="text-[9px] text-blue-600 block mt-0.5 font-semibold">
+              <span className="text-[9px] text-blue-600 block mt-0.5 font-semibold" style={{ fontSize: '9px', color: '#2563eb', display: 'block', marginTop: '2px' }}>
                 الفواتير وتكلفة المراحل للفترة
               </span>
             </div>
 
-            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg">
-              <span className="text-[10px] font-bold text-emerald-700 block mb-0.5">إجمالي المسدد</span>
-              <span className="text-sm font-bold font-mono text-emerald-900 block">
+            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg" style={{ padding: '12px', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px' }}>
+              <span className="text-[10px] font-bold text-emerald-700 block mb-0.5" style={{ fontSize: '10px', fontWeight: 'bold', color: '#047857', display: 'block', marginBottom: '2px' }}>إجمالي المسدد</span>
+              <span className="text-sm font-bold font-mono text-emerald-900 block" style={{ fontSize: '14px', fontWeight: 'bold', color: '#064e3b', display: 'block' }}>
                 {formatCurrency(printSummaryCards.periodPaid)}
               </span>
-              <span className="text-[9px] text-emerald-600 block mt-0.5 font-semibold">
+              <span className="text-[9px] text-emerald-600 block mt-0.5 font-semibold" style={{ fontSize: '9px', color: '#059669', display: 'block', marginTop: '2px' }}>
                 سندات الصرف والدفعات المعتمدة
               </span>
             </div>
 
-            <div className="p-3 bg-slate-900 text-white rounded-lg">
-              <span className="text-[10px] font-bold text-slate-300 block mb-0.5">الرصيد المتبقي الحالي</span>
-              <span className={`text-base font-bold font-mono block ${printSummaryCards.valueClass}`}>
+            <div className="p-3 bg-slate-900 text-white rounded-lg" style={{ padding: '12px', backgroundColor: '#0f172a', color: '#ffffff', borderRadius: '8px' }}>
+              <span className="text-[10px] font-bold text-slate-300 block mb-0.5" style={{ fontSize: '10px', fontWeight: 'bold', color: '#cbd5e1', display: 'block', marginBottom: '2px' }}>الرصيد المتبقي الحالي</span>
+              <span className={`text-base font-bold font-mono block ${printSummaryCards.valueClass}`} style={{ fontSize: '15px', fontWeight: 'bold', display: 'block' }}>
                 {formatCurrency(printSummaryCards.finalBalance)}
               </span>
-              <span className={`text-[9px] block mt-0.5 font-semibold ${printSummaryCards.subtitleClass}`}>
+              <span className={`text-[9px] block mt-0.5 font-semibold ${printSummaryCards.subtitleClass}`} style={{ fontSize: '9px', display: 'block', marginTop: '2px' }}>
                 {printSummaryCards.subtitle}
               </span>
             </div>
           </div>
 
-          <div className="w-full max-w-full overflow-hidden">
-            <table className="w-full max-w-full text-right text-xs border-collapse table-fixed">
+          <div className="w-full max-w-full" style={{ width: '100%', overflow: 'visible', boxSizing: 'border-box' }}>
+            <table className="w-full max-w-full text-right text-xs border-collapse" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '16px', marginBottom: '16px', tableLayout: 'auto', boxSizing: 'border-box' }}>
+              <colgroup>
+                <col style={{ width: '11%', minWidth: '85px' }} />
+                <col style={{ width: '39%', minWidth: '180px' }} />
+                <col style={{ width: '12%', minWidth: '85px' }} />
+                <col style={{ width: '12%', minWidth: '85px' }} />
+                <col style={{ width: '12%', minWidth: '85px' }} />
+                <col style={{ width: '14%', minWidth: '105px' }} />
+              </colgroup>
               <thead>
-                <tr className="bg-[#1F3A5F] text-white font-bold">
-                  <th className="p-2.5 border border-slate-300">التاريخ</th>
-                  <th className="p-2.5 border border-slate-300">نوع الحركة / المستند</th>
-                  <th className="p-2.5 border border-slate-300">رقم المرجع</th>
-                  <th className="p-2.5 border border-slate-300 text-left font-mono">مدين (+)</th>
-                  <th className="p-2.5 border border-slate-300 text-left font-mono">دائن (-)</th>
-                  <th className="p-2.5 border border-slate-300 text-left font-mono">الرصيد التراكمي</th>
+                <tr className="bg-[#1F3A5F] text-white font-bold" style={{ backgroundColor: '#1F3A5F', color: '#ffffff' }}>
+                  <th className="border border-slate-300 text-center" style={{ padding: '8px 6px', border: '1px solid #94a3b8', width: '11%', minWidth: '85px', whiteSpace: 'nowrap', textAlign: 'center' }}>التاريخ</th>
+                  <th className="border border-slate-300" style={{ padding: '8px 10px', border: '1px solid #94a3b8', width: '39%', minWidth: '180px', textAlign: 'right' }}>نوع الحركة / المستند</th>
+                  <th className="border border-slate-300 text-center" style={{ padding: '8px 6px', border: '1px solid #94a3b8', width: '12%', minWidth: '85px', whiteSpace: 'nowrap', textAlign: 'center' }}>رقم المرجع</th>
+                  <th className="border border-slate-300 text-left font-mono" style={{ padding: '8px 6px', border: '1px solid #94a3b8', width: '12%', minWidth: '85px', whiteSpace: 'nowrap', textAlign: 'left' }}>مدين (+)</th>
+                  <th className="border border-slate-300 text-left font-mono" style={{ padding: '8px 6px', border: '1px solid #94a3b8', width: '12%', minWidth: '85px', whiteSpace: 'nowrap', textAlign: 'left' }}>دائن (-)</th>
+                  <th className="border border-slate-300 text-left font-mono" style={{ padding: '8px 8px', border: '1px solid #94a3b8', width: '14%', minWidth: '105px', whiteSpace: 'nowrap', textAlign: 'left' }}>الرصيد التراكمي</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -1263,32 +1625,59 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                     </td>
                   </tr>
                 ) : (
-                  transactions.map((tr, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50">
-                      <td className="p-2.5 border border-slate-200 font-mono">{formatDate(tr.date)}</td>
-                      <td className="p-2.5 border border-slate-200">{tr.description || tr.type}</td>
-                      <td className="p-2.5 border border-slate-200 font-mono">{tr.reference || '-'}</td>
-                      <td className="p-2.5 border border-slate-200 text-left font-mono text-rose-700">{tr.debit > 0 ? formatCurrency(tr.debit) : '-'}</td>
-                      <td className="p-2.5 border border-slate-200 text-left font-mono text-emerald-700">{tr.credit > 0 ? formatCurrency(tr.credit) : '-'}</td>
-                      <td className="p-2.5 border border-slate-200 text-left font-mono font-bold text-slate-900">{formatCurrency(tr.running_balance)}</td>
-                    </tr>
-                  ))
+                  transactions.map((tr, idx) => {
+                    const descText = tr.description || tr.type || '-';
+                    const refText = tr.reference || '-';
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="border border-slate-200 font-mono text-center" style={{ padding: '7px 6px', border: '1px solid #cbd5e1', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <span className="font-mono text-[11px] block whitespace-nowrap">{formatDate(tr.date)}</span>
+                        </td>
+                        <td className="border border-slate-200" style={{ padding: '7px 10px', border: '1px solid #cbd5e1' }}>
+                          <span
+                            className="cell-autofit font-semibold"
+                            style={getAutoFitStyle(descText, 32, 11.5)}
+                            title={descText}
+                          >
+                            {descText}
+                          </span>
+                        </td>
+                        <td className="border border-slate-200 font-mono text-center" style={{ padding: '7px 6px', border: '1px solid #cbd5e1', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <span
+                            className="font-mono text-center block whitespace-nowrap"
+                            title={refText}
+                          >
+                            {refText}
+                          </span>
+                        </td>
+                        <td className="border border-slate-200 text-left font-mono text-rose-700" style={{ padding: '7px 6px', border: '1px solid #cbd5e1', textAlign: 'left', color: '#be123c', whiteSpace: 'nowrap' }}>
+                          <span className="font-mono block whitespace-nowrap">{tr.debit > 0 ? formatCurrency(tr.debit) : '-'}</span>
+                        </td>
+                        <td className="border border-slate-200 text-left font-mono text-emerald-700" style={{ padding: '7px 6px', border: '1px solid #cbd5e1', textAlign: 'left', color: '#047857', whiteSpace: 'nowrap' }}>
+                          <span className="font-mono block whitespace-nowrap">{tr.credit > 0 ? formatCurrency(tr.credit) : '-'}</span>
+                        </td>
+                        <td className="border border-slate-200 text-left font-mono font-bold text-slate-900" style={{ padding: '7px 8px', border: '1px solid #cbd5e1', textAlign: 'left', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                          <span className="font-mono font-bold block whitespace-nowrap">{formatCurrency(tr.running_balance)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
 
-          <div className="grid grid-cols-2 gap-6 pt-12 text-center text-xs font-bold text-slate-700">
-            <div className="space-y-8">
+          <div className="grid grid-cols-2 gap-6 pt-12 text-center text-xs font-bold text-slate-700" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '24px', paddingTop: '40px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', color: '#334155', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+            <div className="space-y-8" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '28px' }}>
               <span>توقيع المحاسب المالي</span>
-              <div className="border-b border-slate-400 w-36 mx-auto"></div>
+              <div className="border-b border-slate-400 w-36 mx-auto" style={{ borderBottom: '1px solid #94a3b8', width: '140px', margin: '0 auto' }}></div>
             </div>
-            <div className="space-y-8">
+            <div className="space-y-8" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '28px' }}>
               <span>توقيع واعتماد الطرف التجاري</span>
-              <div className="border-b border-slate-400 w-36 mx-auto"></div>
+              <div className="border-b border-slate-400 w-36 mx-auto" style={{ borderBottom: '1px solid #94a3b8', width: '140px', margin: '0 auto' }}></div>
             </div>
           </div>
-          <div className="text-center text-[9px] text-slate-400 pt-4 border-t border-slate-200 mt-4 break-inside-avoid">
+          <div className="text-center text-[9px] text-slate-400 pt-4 border-t border-slate-200 mt-4 break-inside-avoid" style={{ textAlign: 'center', fontSize: '9px', color: '#94a3b8', paddingTop: '16px', borderTop: '1px solid #e2e8f0', marginTop: '16px', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
             كشف حساب رسمي مستخرج من نظام كود سيستمز المتكامل • مطابق دفترياً ومحاسبياً
           </div>
         </div>
@@ -1302,19 +1691,22 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
       return (
         <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
-          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-4">
-            <div className="flex items-center gap-3">
-              <img
-                src={companyLogo}
-                alt="Logo"
-                className="h-14 w-auto max-w-[120px] object-contain rounded"
-                onError={(e) => {
-                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-                }}
-              />
+          <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-4" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #1F3A5F', paddingBottom: '16px' }}>
+            <div className="flex items-center gap-3" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {hasValidLogo && (
+                <img
+                  src={companyLogo}
+                  alt=""
+                  style={{ maxHeight: '56px', maxWidth: '120px', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
+                  className="h-14 w-auto max-w-[120px] object-contain rounded"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
               <div>
-                <h2 className="text-xl font-bold text-[#1F3A5F]">{companyName}</h2>
-                <p className="text-xs text-slate-500">{settings?.address || 'جمهورية مصر العربية'}</p>
+                <h2 className="text-xl font-bold text-[#1F3A5F]" style={{ fontSize: '20px', fontWeight: 'bold', color: '#1F3A5F', margin: 0 }}>{companyName}</h2>
+                <p className="text-xs text-slate-500" style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{settings?.address || 'جمهورية مصر العربية'}</p>
               </div>
             </div>
             <div className="text-left">
@@ -1340,16 +1732,24 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             </div>
           </div>
 
-          <div className="w-full max-w-full overflow-hidden">
-            <table className="w-full max-w-full text-right text-xs border-collapse table-fixed">
+          <div className="w-full max-w-full" style={{ width: '100%', overflow: 'visible', boxSizing: 'border-box' }}>
+            <table className="w-full max-w-full text-right text-xs border-collapse" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'auto', boxSizing: 'border-box' }}>
+              <colgroup>
+                <col style={{ width: '12%', minWidth: '85px' }} />
+                <col style={{ width: '36%', minWidth: '180px' }} />
+                <col style={{ width: '14%', minWidth: '85px' }} />
+                <col style={{ width: '12%', minWidth: '75px' }} />
+                <col style={{ width: '12%', minWidth: '75px' }} />
+                <col style={{ width: '14%', minWidth: '95px' }} />
+              </colgroup>
               <thead>
                 <tr className="bg-[#1F3A5F] text-white border-b border-slate-300">
-                  <th className="p-2 border border-slate-200 font-bold">التاريخ</th>
-                  <th className="p-2 border border-slate-200 font-bold">نوع الحركة</th>
-                  <th className="p-2 border border-slate-200 font-bold">رقم المستند</th>
-                  <th className="p-2 border border-slate-200 font-bold text-center">الوارد</th>
-                  <th className="p-2 border border-slate-200 font-bold text-center">المنصرف</th>
-                  <th className="p-2 border border-slate-200 font-bold text-center">الرصيد التراكمي</th>
+                  <th className="border border-slate-200 font-bold text-center" style={{ width: '12%', minWidth: '85px', whiteSpace: 'nowrap', padding: '8px 6px' }}>التاريخ</th>
+                  <th className="border border-slate-200 font-bold" style={{ width: '36%', minWidth: '180px', padding: '8px 10px' }}>نوع الحركة والبيان</th>
+                  <th className="border border-slate-200 font-bold text-center" style={{ width: '14%', minWidth: '85px', whiteSpace: 'nowrap', padding: '8px 6px' }}>رقم المستند</th>
+                  <th className="border border-slate-200 font-bold text-center" style={{ width: '12%', minWidth: '75px', whiteSpace: 'nowrap', padding: '8px 6px' }}>الوارد</th>
+                  <th className="border border-slate-200 font-bold text-center" style={{ width: '12%', minWidth: '75px', whiteSpace: 'nowrap', padding: '8px 6px' }}>المنصرف</th>
+                  <th className="border border-slate-200 font-bold text-center" style={{ width: '14%', minWidth: '95px', whiteSpace: 'nowrap', padding: '8px 8px' }}>الرصيد التراكمي</th>
                 </tr>
               </thead>
               <tbody>
@@ -1360,16 +1760,35 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                     </td>
                   </tr>
                 ) : (
-                  movements.map((m, idx) => (
-                    <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="p-2 border border-slate-200 font-mono">{formatDate(m.date)}</td>
-                      <td className="p-2 border border-slate-200">{m.movement_type_ar || m.type}</td>
-                      <td className="p-2 border border-slate-200 font-mono">{m.document_number || '-'}</td>
-                      <td className="p-2 border border-slate-200 text-center font-mono text-emerald-700">{m.quantity_in > 0 ? formatNumber(m.quantity_in) : '-'}</td>
-                      <td className="p-2 border border-slate-200 text-center font-mono text-rose-700">{m.quantity_out > 0 ? formatNumber(m.quantity_out) : '-'}</td>
-                      <td className="p-2 border border-slate-200 text-center font-mono font-bold text-slate-900">{formatNumber(m.running_balance)}</td>
-                    </tr>
-                  ))
+                  movements.map((m, idx) => {
+                    const movText = m.movement_type_ar || m.type || m.notes || '-';
+                    const docText = m.document_number || '-';
+                    return (
+                      <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
+                        <td className="border border-slate-200 font-mono text-center" style={{ padding: '7px 6px', whiteSpace: 'nowrap' }}>{formatDate(m.date)}</td>
+                        <td className="border border-slate-200" style={{ padding: '7px 10px' }}>
+                          <span
+                            className="cell-autofit font-semibold"
+                            style={getAutoFitStyle(movText, 28, 11.5)}
+                            title={movText}
+                          >
+                            {movText}
+                          </span>
+                        </td>
+                        <td className="border border-slate-200 font-mono text-center" style={{ padding: '7px 6px', whiteSpace: 'nowrap' }}>
+                          <span
+                            className="font-mono text-center block whitespace-nowrap"
+                            title={docText}
+                          >
+                            {docText}
+                          </span>
+                        </td>
+                        <td className="border border-slate-200 text-center font-mono text-emerald-700" style={{ padding: '7px 6px', whiteSpace: 'nowrap' }}>{m.quantity_in > 0 ? formatNumber(m.quantity_in) : '-'}</td>
+                        <td className="border border-slate-200 text-center font-mono text-rose-700" style={{ padding: '7px 6px', whiteSpace: 'nowrap' }}>{m.quantity_out > 0 ? formatNumber(m.quantity_out) : '-'}</td>
+                        <td className="border border-slate-200 text-center font-mono font-bold text-slate-900" style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>{formatNumber(m.running_balance)}</td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1577,47 +1996,75 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
       // Balanced Column Widths Map (Guarantees every column has ample horizontal room)
       const COLUMN_WIDTH_MAP = {
-        grn_number: '18%',
-        po_number: '17%',
-        po_id: '17%',
-        supplier_name: '18%',
-        customer_name: '22%',
-        receipt_date: '14%',
-        order_date: '13%',
-        invoice_date: '13%',
-        receiver_name: '14%',
-        notes: '21%',
-        description: '21%',
-        reason: '20%',
-        code: '12%',
-        name: '24%',
-        phone: '14%',
-        supplier_type: '14%',
-        total_purchases: '14%',
-        total_sales: '14%',
-        total_paid: '13%',
-        balance_due: '14%',
-        total_amount: '14%',
+        name: '30%',
+        item_name: '30%',
+        product_name: '30%',
+        cutting_name: '28%',
+        description: '30%',
+        notes: '26%',
+        customer_name: '26%',
+        supplier_name: '26%',
+        vendor_name: '26%',
+        workshop_name: '26%',
+        expense_name: '26%',
+        receiver_name: '22%',
+        reason: '22%',
+        stage_title: '18%',
+        item_group: '16%',
+        fabric_type: '16%',
+        color: '14%',
+        tx_number: '14%',
+        grn_number: '14%',
+        po_number: '14%',
+        po_id: '14%',
+        cutting_number: '14%',
+        order_number: '14%',
+        invoice_number: '14%',
+        receipt_number: '14%',
+        receipt_date: '12%',
+        order_date: '12%',
+        invoice_date: '12%',
+        due_date: '12%',
+        payment_date: '12%',
+        start_date: '12%',
+        date: '12%',
+        created_at: '12%',
+        code: '10%',
+        customer_code: '10%',
+        supplier_code: '10%',
+        item_code: '10%',
+        product_code: '10%',
+        phone: '12%',
+        supplier_type: '12%',
+        payment_terms: '10%',
+        payment_type: '10%',
+        payment_method: '10%',
+        status: '10%',
+        unit: '8%',
+        quantity: '10%',
+        row_total: '10%',
+        total_purchases: '13%',
+        total_sales: '13%',
+        total_paid: '12%',
+        balance_due: '13%',
+        total_amount: '13%',
+        total_invoice_amount: '13%',
         subtotal: '12%',
         discount_value: '10%',
-        payment_terms: '12%',
-        status: '12%',
+        discount: '10%',
         actual_balance: '12%',
-        cost_price: '12%',
-        selling_price: '12%',
-        item_group: '14%',
-        item_type: '12%',
-        quantity: '12%',
-        due_date: '13%',
-        amount: '14%',
-        paid_amount: '13%',
-        remaining_amount: '14%',
-        return_number: '18%',
-        return_type: '18%',
-        stage_title: '14%',
-        vendor_name: '18%',
-        pricing_type: '13%',
-        total_cost: '14%'
+        cost_price: '11%',
+        selling_price: '11%',
+        amount: '13%',
+        paid_amount: '12%',
+        paid: '12%',
+        remaining: '12%',
+        remaining_amount: '13%',
+        stage_cost: '12%',
+        return_number: '14%',
+        return_type: '14%',
+        pricing_type: '11%',
+        total_cost: '13%'
       };
 
       const getColWidth = (k, count) => {
@@ -1649,14 +2096,17 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         return (
           <div className="p-3 bg-white text-slate-900 font-mono text-xs w-[80mm] max-w-[80mm] mx-auto select-text" dir="rtl">
             <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
-              <img
-                src={companyLogo}
-                alt="Logo"
-                className="h-10 w-auto max-w-[90px] object-contain mx-auto mb-1"
-                onError={(e) => {
-                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-                }}
-              />
+              {hasValidLogo && (
+                <img
+                  src={companyLogo}
+                  alt=""
+                  style={{ maxHeight: '40px', maxWidth: '90px', width: 'auto', height: 'auto', objectFit: 'contain', margin: '0 auto 4px', display: 'block' }}
+                  className="h-10 w-auto max-w-[90px] object-contain mx-auto mb-1"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
               <h2 className="font-extrabold text-sm text-slate-900">{companyName}</h2>
               <div className="text-[11px] font-bold text-[#1F3A5F]">{reportTitle}</div>
               <div className="text-[10px] text-slate-500 mt-0.5">تاريخ الطباعة: {formatDate(new Date().toISOString())}</div>
@@ -1686,14 +2136,17 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           <div className="flex justify-between items-center border-b-2 border-[#1F3A5F] pb-4 mb-4" dir="rtl">
             {/* Top-Right: Logo */}
             <div className="flex items-center gap-3">
-              <img
-                src={companyLogo}
-                alt="Logo"
-                className="h-14 w-auto max-w-[120px] object-contain rounded"
-                onError={(e) => {
-                  if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-                }}
-              />
+              {hasValidLogo && (
+                <img
+                  src={companyLogo}
+                  alt=""
+                  style={{ maxHeight: '56px', maxWidth: '120px', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
+                  className="h-14 w-auto max-w-[120px] object-contain rounded"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
               <div className="text-right">
                 <div className="text-[11px] font-bold text-slate-500">نظام كود سيستمز المتكامل</div>
                 <div className="text-[10px] text-slate-400">قسم الحسابات والإدارة العامة</div>
@@ -1815,15 +2268,26 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                                 );
                               }
                               if (k === 'code' || k.includes('code') || k === 'po_number' || k === 'grn_number' || k === 'po_id' || k === 'phone' || k.includes('phone')) {
+                                const codeStr = String(val || '-');
                                 return (
-                                  <span className="font-mono font-bold whitespace-nowrap block text-center" dir="ltr">
-                                    {String(val || '-')}
+                                  <span
+                                    className="font-mono font-bold whitespace-nowrap block text-center cell-autofit"
+                                    style={getAutoFitStyle(codeStr, 14, isUltraDense ? 9 : isDense ? 10 : 11)}
+                                    title={codeStr}
+                                    dir="ltr"
+                                  >
+                                    {codeStr}
                                   </span>
                                 );
                               }
+                              const textStr = String(val ?? '-');
                               return (
-                                <span className="break-words whitespace-normal leading-tight block">
-                                  {String(val ?? '-')}
+                                <span
+                                  className="cell-autofit font-semibold"
+                                  style={getAutoFitStyle(textStr, isUltraDense ? 14 : isDense ? 20 : 26, isUltraDense ? 9 : isDense ? 10 : 11)}
+                                  title={textStr}
+                                >
+                                  {textStr}
                                 </span>
                               );
                             })()}
@@ -1896,20 +2360,23 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     }
 
     return (
-      <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl">
-        <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-4">
-          <div className="flex items-center gap-3">
-            <img
-              src={companyLogo}
-              alt="Logo"
-              className="h-14 w-auto max-w-[120px] object-contain rounded"
-              onError={(e) => {
-                if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-              }}
-            />
+      <div className="p-8 sm:p-10 space-y-6 text-slate-900 bg-white" dir="rtl" style={{ width: '100%', boxSizing: 'border-box' }}>
+        <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-4" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #1F3A5F', paddingBottom: '16px' }}>
+          <div className="flex items-center gap-3" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {hasValidLogo && (
+              <img
+                src={companyLogo}
+                alt=""
+                style={{ maxHeight: '56px', maxWidth: '120px', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
+                className="h-14 w-auto max-w-[120px] object-contain rounded"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            )}
             <div>
-              <h2 className="text-xl font-bold text-[#1F3A5F]">{companyName}</h2>
-              <p className="text-xs text-slate-500">{settings?.address || 'جمهورية مصر العربية'}</p>
+              <h2 className="text-xl font-bold text-[#1F3A5F]" style={{ fontSize: '20px', fontWeight: 'bold', color: '#1F3A5F', margin: 0 }}>{companyName}</h2>
+              <p className="text-xs text-slate-500" style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{settings?.address || 'جمهورية مصر العربية'}</p>
             </div>
           </div>
           <div className="text-left">
@@ -2195,15 +2662,60 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                     <span>تكلفة الخامة / نوع القماش (مالي)</span>
                   </label>
 
-                  <label className="flex items-center gap-2 text-amber-300 font-bold cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(cutOrderPrintOptions.show_stage_costs)}
-                      onChange={(e) => handleToggleCutOrderOption('show_stage_costs', e.target.checked)}
-                      className="w-4 h-4 rounded text-blue-600 focus:ring-0 accent-blue-600 cursor-pointer"
-                    />
-                    <span>تكاليف مراحل التشغيل (مالي)</span>
-                  </label>
+                  <div className="space-y-1.5 rounded-lg p-2 bg-slate-900/40 border border-slate-700/60">
+                    <label className="flex items-center gap-2 text-amber-300 font-bold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(cutOrderPrintOptions.show_stage_costs)}
+                        onChange={(e) => handleToggleMasterStageCosts(e.target.checked)}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-0 accent-blue-600 cursor-pointer"
+                      />
+                      <span>تكاليف مراحل التشغيل (مالي)</span>
+                    </label>
+
+                    {/* 3 Checkpoints directly under it: الطباعة، التطريز، الحياكة */}
+                    <div className="mr-5 pr-2.5 space-y-1.5 border-r-2 border-amber-500/30 pt-1">
+                      <label className="flex items-center gap-2 text-amber-200/90 hover:text-white text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(cutOrderPrintOptions.show_stage_cost_printing ?? cutOrderPrintOptions.show_stage_costs)}
+                          onChange={(e) => handleToggleSubStageCost('show_stage_cost_printing', e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-0 accent-blue-600 cursor-pointer"
+                        />
+                        <span>الطباعة</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-amber-200/90 hover:text-white text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(cutOrderPrintOptions.show_stage_cost_embroidery ?? cutOrderPrintOptions.show_stage_costs)}
+                          onChange={(e) => handleToggleSubStageCost('show_stage_cost_embroidery', e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-0 accent-blue-600 cursor-pointer"
+                        />
+                        <span>التطريز</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-amber-200/90 hover:text-white text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(cutOrderPrintOptions.show_stage_cost_sewing ?? cutOrderPrintOptions.show_stage_costs)}
+                          onChange={(e) => handleToggleSubStageCost('show_stage_cost_sewing', e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-0 accent-blue-600 cursor-pointer"
+                        />
+                        <span>الحياكة</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-amber-200/90 hover:text-white text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(cutOrderPrintOptions.show_stage_cost_operation ?? cutOrderPrintOptions.show_stage_costs)}
+                          onChange={(e) => handleToggleSubStageCost('show_stage_cost_operation', e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-0 accent-blue-600 cursor-pointer"
+                        />
+                        <span>التشغيل</span>
+                      </label>
+                    </div>
+                  </div>
 
                   <label className="flex items-center gap-2 text-amber-300 font-bold cursor-pointer">
                     <input

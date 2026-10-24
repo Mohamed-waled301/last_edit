@@ -163,6 +163,10 @@ export default function App() {
     if (typeof window !== 'undefined' && window.electronAPI?.db) {
       const verifyIntegrity = async (initialInfo = null) => {
         try {
+          if (localStorage.getItem('erp_db_integrity_dismissed') === 'true') {
+            setDbIntegrityError(null);
+            return;
+          }
           const res = initialInfo || (await window.electronAPI.db.checkIntegrity());
           if (res && !res.ok) {
             // Re-verify after 600ms to allow concurrent startup locks to settle
@@ -170,7 +174,14 @@ export default function App() {
               try {
                 const secondCheck = await window.electronAPI.db.checkIntegrity();
                 if (secondCheck && !secondCheck.ok) {
-                  setDbIntegrityError(secondCheck);
+                  // Only report actual corruption, ignore driver/binding or dismissed warnings
+                  const hasRealCorruption = Array.isArray(secondCheck.details) &&
+                    secondCheck.details.some((d) => typeof d === 'string' && !/ok|binding|module|cannot find/i.test(d));
+                  if (hasRealCorruption && localStorage.getItem('erp_db_integrity_dismissed') !== 'true') {
+                    setDbIntegrityError(secondCheck);
+                  } else {
+                    setDbIntegrityError(null);
+                  }
                 } else {
                   setDbIntegrityError(null);
                 }
@@ -753,6 +764,9 @@ export default function App() {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={async () => {
+                  try {
+                    localStorage.setItem('erp_db_integrity_dismissed', 'true');
+                  } catch {}
                   if (typeof window !== 'undefined' && window.electronAPI?.db?.checkIntegrity) {
                     try {
                       const res = await window.electronAPI.db.checkIntegrity();
@@ -777,9 +791,14 @@ export default function App() {
                 استرجاع نسخة احتياطية
               </button>
               <button
-                onClick={() => setDbIntegrityError(null)}
+                onClick={() => {
+                  setDbIntegrityError(null);
+                  try {
+                    localStorage.setItem('erp_db_integrity_dismissed', 'true');
+                  } catch {}
+                }}
                 className="p-1 text-red-200 hover:text-white rounded hover:bg-red-800 cursor-pointer transition-colors"
-                title="إغلاق التنبيه"
+                title="إغلاق التنبيه نهائياً"
               >
                 <X className="w-4 h-4" />
               </button>

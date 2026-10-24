@@ -51,7 +51,8 @@ import {
 const STAGE_KEYS = [
   { key: 'printing', title: 'الطباعة', icon: Printer, color: 'blue' },
   { key: 'embroidery', title: 'التطريز', icon: Sparkles, color: 'purple' },
-  { key: 'sewing', title: 'الحياكة', icon: Cog, color: 'emerald' }
+  { key: 'sewing', title: 'الحياكة', icon: Cog, color: 'emerald' },
+  { key: 'operation', title: 'التشغيل', icon: Layers, color: 'amber' }
 ];
 
 /**
@@ -257,6 +258,18 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
       total_cost: 0,
       paid: 0,
       remaining: 0
+    },
+    operation: {
+      vendor_id: '',
+      vendor_name: '',
+      pricing_type: 'fixed',
+      price_per_piece: '',
+      fixed_total: '',
+      batches: [],
+      notes: '',
+      total_cost: 0,
+      paid: 0,
+      remaining: 0
     }
   });
 
@@ -421,6 +434,12 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
                   ...(o.stages.sewing || {}),
                   price_per_piece: String(o.stages.sewing?.price_per_piece ?? ''),
                   fixed_total: String(o.stages.sewing?.fixed_total ?? o.stages.sewing?.total_cost ?? '')
+                },
+                operation: {
+                  ...prev.operation,
+                  ...(o.stages.operation || {}),
+                  price_per_piece: String(o.stages.operation?.price_per_piece ?? ''),
+                  fixed_total: String(o.stages.operation?.fixed_total ?? o.stages.operation?.total_cost ?? '')
                 }
               }));
             } else {
@@ -716,7 +735,8 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
       const stageActivityMap = {
         printing: 'طباعة',
         embroidery: 'تطريز',
-        sewing: 'حياكة'
+        sewing: 'حياكة',
+        operation: 'تشغيل'
       };
       const newParty = await api.createParty({
         name: inlineVendorState.name.trim(),
@@ -1681,7 +1701,8 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
                             const stageActivities = {
                               printing: ['طباعة', 'الطباعة', 'printing', 'service_printing'],
                               embroidery: ['تطريز', 'التطريز', 'embroidery', 'service_embroidery'],
-                              sewing: ['حياكة', 'الحياكة', 'sewing', 'service_sewing']
+                              sewing: ['حياكة', 'الحياكة', 'sewing', 'service_sewing'],
+                              operation: ['تشغيل', 'التشغيل', 'operation', 'service_operation', 'processing', 'service_processing']
                             };
                             const matchActs = stageActivities[k] || [];
                             if (matchActs.includes(w.supplier_type)) return true;

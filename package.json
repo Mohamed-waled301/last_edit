@@ -1,7 +1,7 @@
 {
   "name": "code-systems",
   "private": true,
-  "version": "1.1.6",
+  "version": "1.1.7",
   "type": "module",
   "description": "code systems - نظام تخطيط موارد المؤسسات المتكامل",
   "author": "code systems",
@@ -72,7 +72,8 @@
     },
     "asar": true,
     "asarUnpack": [
-      "**/node_modules/better-sqlite3/**/*"
+      "**/node_modules/better-sqlite3/**/*",
+      "electron/better_sqlite3.node"
     ],
     "electronFuses": {
       "runAsNode": false,

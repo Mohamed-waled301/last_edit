@@ -112,13 +112,14 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
           {/* Header */}
           <div className="flex justify-between items-start border-b-2 border-[#1F3A5F] pb-6">
             <div className="flex items-center gap-4">
-              {settings?.company_logo && (
+              {settings?.company_logo && settings.company_logo !== '/logo.png' && (
                 <img
                   src={settings.company_logo}
                   alt=""
+                  style={{ maxHeight: '56px', maxWidth: '140px', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
                   className="h-16 w-auto max-w-[140px] object-contain rounded"
                   onError={(e) => {
-                    e.target.style.display = 'none';
+                    e.currentTarget.style.display = 'none';
                   }}
                 />
               )}
@@ -244,14 +245,17 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
             }
           `}</style>
           <div className="text-center border-b border-dashed border-gray-400 pb-3 mb-3">
-            <img
-              src={settings?.company_logo || '/logo.png'}
-              alt="code systems logo"
-              className="h-12 w-auto max-w-[100px] object-contain mx-auto mb-1.5"
-              onError={(e) => {
-                if (e.target.src !== '/logo.png') e.target.src = '/logo.png';
-              }}
-            />
+            {settings?.company_logo && settings.company_logo !== '/logo.png' && (
+              <img
+                src={settings.company_logo}
+                alt=""
+                style={{ maxHeight: '42px', maxWidth: '100px', width: 'auto', height: 'auto', objectFit: 'contain', margin: '0 auto 6px', display: 'block' }}
+                className="h-12 w-auto max-w-[100px] object-contain mx-auto mb-1.5"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            )}
             <h2 className="font-extrabold text-sm text-gray-900">{settings?.factory_name || 'code systems'}</h2>
             <div className="text-[11px] font-bold text-[#1F3A5F]">نظام code systems</div>
             {settings?.address && <p className="text-[10px] text-gray-600 mt-0.5">{settings.address}</p>}
