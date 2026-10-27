@@ -392,7 +392,7 @@ export const suppliersRepo = {
    */
   async createPurchaseOrder(data, userId = 'usr-purchasing') {
     if (data.order_date) validateNotPastDate(data.order_date, 'تاريخ أمر التوريد');
-    const id = data.id || `po-${Date.now()}`;
+    const id = data.id || `po-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const poNumber = data.po_number || (await this.getNextPONumber(new Date().getFullYear()));
     const now = new Date().toISOString();
     const today = now.split('T')[0];
@@ -407,7 +407,7 @@ export const suppliersRepo = {
       const total = Number((qty * price).toFixed(2));
       subtotal += total;
       return {
-        id: `poi-${Date.now()}-${idx}`,
+        id: item.id || `poi-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${idx}`,
         po_id: id,
         material_id: item.material_id,
         quantity_ordered: qty,
@@ -557,7 +557,7 @@ export const suppliersRepo = {
       }
 
       // Immediate Goods Receipt & Stock Increase in the same transaction
-      const grnId = `grn-${Date.now()}`;
+      const grnId = `grn-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const grnNumber = `GRN-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
       const grn = {
         id: grnId,
@@ -575,7 +575,7 @@ export const suppliersRepo = {
       for (let idx = 0; idx < items.length; idx++) {
         const line = items[idx];
         await db.goods_receipt_items.add({
-          id: `gri-${Date.now()}-${idx}`,
+          id: `gri-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${idx}`,
           grn_id: grnId,
           material_id: line.material_id,
           quantity_received: line.quantity_ordered,
@@ -585,7 +585,7 @@ export const suppliersRepo = {
 
         // Stock movement row (direction: 'in')
         await db.stock_movements.add({
-          id: `sm-${Date.now()}-${idx}`,
+          id: `sm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${idx}`,
           item_id: line.material_id,
           material_id: line.material_id,
           location_id: data.location_id || 'loc-main',
@@ -639,7 +639,7 @@ export const suppliersRepo = {
       }
 
       // Create supplier invoice: paid for cash, unpaid for credit (adds to supplier payable)
-      const sinvId = `sinv-${Date.now()}`;
+      const sinvId = `sinv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const sinvNumber = `INV-SUP-${poNumber.replace(/^PO-/, '')}`;
       await db.supplier_invoices.add({
         id: sinvId,
@@ -664,6 +664,390 @@ export const suppliersRepo = {
 
     await auditRepo.log(userId, 'CREATE_PURCHASE_ORDER', 'purchase_orders', id, null, po);
     return { ...po, items };
+  },
+
+  /**
+   * Update / Edit an existing purchase invoice / order
+   * - Safely calculates inventory deltas (prevents negative stock on reductions)
+   * - Adjusts treasury cash movements and balances if cash
+   * - Reconciles supplier invoice payable and installments if credit
+   * - Updates stock movements and goods receipts
+   * - Logs UPDATE_PURCHASE_ORDER to Audit Log
+   */
+  async updatePurchaseOrder(poId, data, userId = 'usr-purchasing') {
+    const oldPO = await db.purchase_orders.get(poId);
+    if (!oldPO) throw new Error('أمر التوريد غير موجود');
+    if (oldPO.status === 'cancelled') throw new Error('لا يمكن تعديل أمر توريد ملغي');
+
+    const now = new Date().toISOString();
+    const today = now.split('T')[0];
+
+    const oldPOItems = await db.purchase_order_items.where('po_id').equals(poId).toArray();
+
+    if (data.order_date) validateNotPastDate(data.order_date, 'تاريخ أمر التوريد');
+
+    const orderDate = data.order_date || oldPO.order_date || today;
+    const paymentTerms = data.payment_terms || oldPO.payment_terms || 'cash';
+    const oldPaymentTerms = oldPO.payment_terms || 'cash';
+
+    // 1. Process items and calculate subtotal
+    let subtotal = 0;
+    const newItems = (data.items || []).map((item, idx) => {
+      const qty = Math.max(0, Number(item.quantity_ordered !== undefined ? item.quantity_ordered : (item.quantity ?? 0)) || 0);
+      const price = Math.max(0, Number(item.unit_price) || 0);
+      const total = Number((qty * price).toFixed(2));
+      subtotal += total;
+      return {
+        id: item.id || `poi-${Date.now()}-${idx}`,
+        po_id: poId,
+        material_id: item.material_id,
+        quantity_ordered: qty,
+        unit_price: price,
+        total_price: total,
+      };
+    });
+
+    if (newItems.length === 0) {
+      throw new Error('لا يمكن حفظ أمر التوريد بدون بنود أصناف');
+    }
+
+    // 2. Calculate totals using calculatePurchaseOrderTotals
+    const totals = calculatePurchaseOrderTotals({
+      subtotal,
+      discount_percent: data.discount_percent,
+      discount_value: data.discount_value !== undefined ? data.discount_value : data.discount_amount,
+      additional_expenses: data.additional_expenses
+    });
+
+    if (!totals.isValid) {
+      throw new Error(totals.errorMessage || 'الصافي النهائي لا يمكن أن يكون أقل من صفر');
+    }
+
+    const discountPercent = totals.discountPercent;
+    const discountValue = totals.discountValue;
+    const additionalExpenses = totals.additionalExpenses;
+    const grandTotal = totals.finalNet;
+    const oldGrandTotal = Number(oldPO.total_amount ?? oldPO.grand_total ?? 0);
+
+    // 3. Installments validation for credit orders (optional)
+    let installments = [];
+    if (paymentTerms === 'credit' && Array.isArray(data.installments) && data.installments.length > 0) {
+      const rawInst = data.installments;
+      const sumInst = Number(rawInst.reduce((s, it) => s + (Number(it.amount) || 0), 0).toFixed(2));
+      if (Math.abs(sumInst - grandTotal) > 0.01) {
+        throw new Error(
+          `إجمالي مبالغ الأقساط (${sumInst} ج.م) يجب أن يساوي تماماً إجمالي أمر التوريد الصافي (${grandTotal} ج.م). الفارق المتبقي: ${(grandTotal - sumInst).toFixed(2)} ج.م`
+        );
+      }
+      installments = rawInst.map((inst, idx) => ({
+        id: inst.id || `inst-${Date.now()}-${idx}`,
+        po_id: poId,
+        supplier_id: data.supplier_id || oldPO.supplier_id,
+        due_date: inst.due_date || today,
+        amount: Number(inst.amount) || 0,
+        paid_amount: Number(inst.paid_amount) || 0,
+        status: inst.status || 'unpaid',
+        notes: inst.notes || ''
+      }));
+    }
+
+    // 4. Compute stock delta per material_id and pre-check negative stock!
+    const oldQtyMap = new Map();
+    for (const itm of oldPOItems) {
+      const q = Number(itm.quantity_ordered !== undefined ? itm.quantity_ordered : (itm.quantity ?? 0)) || 0;
+      oldQtyMap.set(itm.material_id, (oldQtyMap.get(itm.material_id) || 0) + q);
+    }
+
+    const newQtyMap = new Map();
+    for (const itm of newItems) {
+      const q = itm.quantity_ordered;
+      newQtyMap.set(itm.material_id, (newQtyMap.get(itm.material_id) || 0) + q);
+    }
+
+    const allMatIds = new Set([...oldQtyMap.keys(), ...newQtyMap.keys()]);
+    const deltas = new Map();
+
+    for (const matId of allMatIds) {
+      const oldQ = oldQtyMap.get(matId) || 0;
+      const newQ = newQtyMap.get(matId) || 0;
+      const delta = Number((newQ - oldQ).toFixed(3));
+      deltas.set(matId, delta);
+
+      if (delta < 0) {
+        const itm = await db.items.get(matId);
+        const mat = await db.materials.get(matId);
+        const currentStock = Number(itm?.current_stock ?? mat?.current_stock) || 0;
+        const itemName = itm?.name || mat?.name || matId;
+        const reduction = Math.abs(delta);
+        if (currentStock < reduction) {
+          throw new Error(
+            `لا يمكن تعديل أمر التوريد: الكمية المتوفرة بالمخزن من الصنف (${itemName}) هي (${currentStock})، وتخفيض الكمية بمقدار (${reduction}) سيؤدي إلى رصيد مخزني سالب.`
+          );
+        }
+      }
+    }
+
+    // 5. Database transaction (atomic all-or-nothing)
+    try {
+      await db.transaction('rw', [
+        db.purchase_orders,
+        db.purchase_order_items,
+        db.materials,
+        db.items,
+        db.goods_receipts,
+        db.goods_receipt_items,
+        db.stock_movements,
+        db.supplier_invoices,
+        db.treasury_accounts,
+        db.cash_transactions
+      ], async () => {
+        // A) Update purchase_order_items
+        await db.purchase_order_items.where('po_id').equals(poId).delete();
+        for (const itm of newItems) {
+          await db.purchase_order_items.add(itm);
+
+          if (itm.unit_price > 0) {
+            const mat = await db.materials.get(itm.material_id);
+            if (mat) {
+              await db.materials.update(mat.id, {
+                last_purchase_price: itm.unit_price,
+                cost_price: itm.unit_price,
+              });
+            }
+            const itemMaster = await db.items.get(itm.material_id);
+            if (itemMaster) {
+              await db.items.update(itemMaster.id, {
+                last_purchase_price: itm.unit_price,
+                cost_price: itm.unit_price,
+              });
+            }
+          }
+        }
+
+        // B) Update goods receipts & goods receipt items
+        let grn = await db.goods_receipts.where('po_id').equals(poId).first();
+        let grnId = grn?.id;
+        if (!grn) {
+          grnId = `grn-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+          grn = {
+            id: grnId,
+            grn_number: `GRN-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`,
+            po_id: poId,
+            supplier_id: data.supplier_id || oldPO.supplier_id,
+            receipt_date: orderDate,
+            receiver_name: 'استلام فوري مع فاتورة الشراء',
+            notes: data.notes || 'استلام فوري تلقائي عند اعتماد فاتورة الشراء',
+            created_by: userId,
+            created_at: now
+          };
+          await db.goods_receipts.add(grn);
+        } else {
+          await db.goods_receipts.update(grn.id, {
+            supplier_id: data.supplier_id || oldPO.supplier_id,
+            receipt_date: orderDate,
+            notes: data.notes !== undefined ? data.notes : grn.notes
+          });
+        }
+
+        await db.goods_receipt_items.where('grn_id').equals(grnId).delete();
+        for (let idx = 0; idx < newItems.length; idx++) {
+          const line = newItems[idx];
+          const griId = `gri-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${idx}`;
+          await db.goods_receipt_items.add({
+            id: griId,
+            grn_id: grnId,
+            material_id: line.material_id,
+            quantity_received: line.quantity_ordered,
+            unit_cost: line.unit_price,
+            total_cost: line.total_price
+          });
+        }
+
+        // Apply deltas to cached stock and record delta stock movements
+        for (const [matId, delta] of deltas.entries()) {
+          if (delta !== 0) {
+            const isIncrease = delta > 0;
+            const absQty = Math.abs(delta);
+
+            const smId = `sm-upd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${matId}`;
+            await db.stock_movements.add({
+              id: smId,
+              item_id: matId,
+              material_id: matId,
+              location_id: data.location_id || 'loc-main',
+              movement_type: isIncrease ? 'purchase_receipt' : 'reversal',
+              direction: isIncrease ? 'in' : 'out',
+              quantity: absQty,
+              quantity_change: delta,
+              unit_cost: newItems.find(i => i.material_id === matId)?.unit_price || 0,
+              document_id: poId,
+              reference_type: isIncrease ? 'PURCHASE_RECEIPT' : 'PURCHASE_ORDER_EDIT',
+              reference_id: poId,
+              date: orderDate,
+              movement_date: orderDate,
+              notes: `حركة مخزنية لتعديل فاتورة الشراء ${oldPO.po_number} (${isIncrease ? 'زيادة' : 'تخفيض'} كمية)`,
+              created_by: userId,
+              created_at: now
+            });
+
+            const itm = await db.items.get(matId);
+            if (itm) {
+              const newStock = Number(((Number(itm.current_stock) || 0) + delta).toFixed(3));
+              await db.items.update(itm.id, { current_stock: newStock });
+            }
+            const mat = await db.materials.get(matId);
+            if (mat) {
+              const newStock = Number(((Number(mat.current_stock) || 0) + delta).toFixed(3));
+              await db.materials.update(mat.id, { current_stock: newStock });
+            }
+          }
+        }
+
+        // C) Treasury & Cash Transactions reconciliation
+        const targetAccountId = data.account_id || oldPO.account_id;
+        let treasury = (targetAccountId ? await db.treasury_accounts.get(targetAccountId) : null) ||
+                       (await db.treasury_accounts.where('is_main').equals(1).first()) ||
+                       (await db.treasury_accounts.where('account_type').equals('treasury').first()) ||
+                       (await db.treasury_accounts.toCollection().first());
+
+        if (oldPaymentTerms === 'cash' && paymentTerms === 'cash') {
+          const diff = Number((grandTotal - oldGrandTotal).toFixed(2));
+          if (diff !== 0 && treasury) {
+            const currentBal = Number(treasury.current_balance) || 0;
+            const newBal = Number((currentBal - diff).toFixed(2));
+            await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
+
+            await db.cash_transactions.add({
+              id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+              account_id: treasury.id,
+              tx_type: diff > 0 ? 'outflow' : 'inflow',
+              category: 'purchase_orders',
+              amount: Math.abs(diff),
+              balance_after: newBal,
+              reference_type: 'purchase_orders',
+              reference_id: poId,
+              description: diff > 0 
+                ? `صرف فارق تعديل بالزيادة لفاتورة شراء ${oldPO.po_number}`
+                : `استرداد فارق تعديل بالتخفيض لفاتورة شراء ${oldPO.po_number}`,
+              created_by: userId,
+              created_at: now
+            });
+          }
+        } else if (oldPaymentTerms === 'cash' && paymentTerms === 'credit') {
+          if (oldGrandTotal > 0 && treasury) {
+            const currentBal = Number(treasury.current_balance) || 0;
+            const newBal = Number((currentBal + oldGrandTotal).toFixed(2));
+            await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
+
+            await db.cash_transactions.add({
+              id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+              account_id: treasury.id,
+              tx_type: 'inflow',
+              category: 'purchase_orders',
+              amount: oldGrandTotal,
+              balance_after: newBal,
+              reference_type: 'purchase_orders',
+              reference_id: poId,
+              description: `استرداد نقدي لتعديل فاتورة شراء ${oldPO.po_number} من نقدي إلى آجل`,
+              created_by: userId,
+              created_at: now
+            });
+          }
+        } else if (oldPaymentTerms === 'credit' && paymentTerms === 'cash') {
+          if (grandTotal > 0 && treasury) {
+            const currentBal = Number(treasury.current_balance) || 0;
+            const newBal = Number((currentBal - grandTotal).toFixed(2));
+            await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
+
+            await db.cash_transactions.add({
+              id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+              account_id: treasury.id,
+              tx_type: 'outflow',
+              category: 'purchase_orders',
+              amount: grandTotal,
+              balance_after: newBal,
+              reference_type: 'purchase_orders',
+              reference_id: poId,
+              description: `صرف نقدي لتعديل فاتورة شراء ${oldPO.po_number} من آجل إلى نقدي`,
+              created_by: userId,
+              created_at: now
+            });
+          }
+        }
+
+        // D) Supplier Invoice update
+        let sinv = await db.supplier_invoices.where('po_id').equals(poId).first();
+        const sinvNumber = sinv?.invoice_number || `INV-SUP-${oldPO.po_number.replace(/^PO-/, '')}`;
+        const sinvDueDate = installments.length > 0 ? installments[0].due_date : (data.due_date || oldPO.due_date);
+
+        if (sinv) {
+          await db.supplier_invoices.update(sinv.id, {
+            supplier_id: data.supplier_id || oldPO.supplier_id,
+            invoice_date: orderDate,
+            due_date: sinvDueDate,
+            payment_terms: paymentTerms,
+            installments,
+            subtotal,
+            total_amount: grandTotal,
+            paid_amount: paymentTerms === 'cash' ? grandTotal : 0,
+            status: paymentTerms === 'cash' ? 'paid' : 'unpaid',
+            notes: `فاتورة استلام أمر الشراء ${oldPO.po_number} (معدلة)`
+          });
+        } else {
+          await db.supplier_invoices.add({
+            id: `sinv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            invoice_number: sinvNumber,
+            supplier_id: data.supplier_id || oldPO.supplier_id,
+            grn_id: grnId,
+            po_id: poId,
+            invoice_date: orderDate,
+            due_date: sinvDueDate,
+            payment_terms: paymentTerms,
+            installments,
+            subtotal,
+            tax_amount: 0,
+            total_amount: grandTotal,
+            paid_amount: paymentTerms === 'cash' ? grandTotal : 0,
+            status: paymentTerms === 'cash' ? 'paid' : 'unpaid',
+            notes: `فاتورة استلام أمر الشراء ${oldPO.po_number} (معدلة)`,
+            created_by: userId,
+            created_at: now
+          });
+        }
+
+        // E) Update purchase_orders table
+        const updatedPOFields = {
+          supplier_id: data.supplier_id || oldPO.supplier_id,
+          order_date: orderDate,
+          expected_date: orderDate,
+          account_id: paymentTerms === 'cash' ? (treasury?.id || null) : null,
+          payment_terms: paymentTerms,
+          subtotal: Number(subtotal.toFixed(2)),
+          discount_percent: discountPercent,
+          discount_value: discountValue,
+          additional_expenses: additionalExpenses,
+          total_amount: grandTotal,
+          grand_total: grandTotal,
+          installments,
+          due_date: installments.length > 0 ? installments[0].due_date : (data.due_date || null),
+          notes: data.notes !== undefined ? data.notes : oldPO.notes,
+          updated_at: now,
+          updated_by: userId
+        };
+
+        await db.purchase_orders.update(poId, updatedPOFields);
+      });
+    } catch (e) {
+      throw e;
+    }
+
+    const updatedPO = await db.purchase_orders.get(poId);
+    await auditRepo.log(userId, 'UPDATE_PURCHASE_ORDER', 'purchase_orders', poId, oldPO, updatedPO);
+
+    return { ...updatedPO, items: newItems };
   },
 
   /**

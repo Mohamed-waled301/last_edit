@@ -13,7 +13,8 @@ import {
   X,
   FileText,
   Trash2,
-  Printer
+  Printer,
+  Edit
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
@@ -346,6 +347,21 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                               <Printer className="w-3.5 h-3.5" />
                               <span>طباعة</span>
                             </button>
+
+                            {o.status !== 'cancelled' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (onNavigate) onNavigate(`purchases/${o.id}/edit`);
+                                  else window.location.hash = `#/purchases/${o.id}/edit`;
+                                }}
+                                className="px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 rounded-md font-semibold transition-colors inline-flex items-center gap-1 border border-slate-200 cursor-pointer"
+                                title="تعديل فاتورة الشراء"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                                <span>تعديل</span>
+                              </button>
+                            )}
 
                             {canCancel && (
                               <button

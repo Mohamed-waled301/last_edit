@@ -469,6 +469,24 @@ export const api = {
     }
     return { success: true, data: res, ...res, message: 'تم إصدار أمر التوريد بنجاح' };
   },
+  updatePurchaseOrder: async (id, data) => {
+    const res = await suppliersRepo.updatePurchaseOrder(id, data, currentUserId);
+    syncPush('purchase_orders', 'update', res, id);
+    if (Array.isArray(res.items)) {
+      syncPush('purchase_order_items', 'insert', res.items);
+    }
+    const tx = await db.cash_transactions.where('reference_id').equals(id).reverse().first().catch(() => null);
+    if (tx) {
+      syncPush('cash_transactions', 'insert', tx);
+      const acc = await db.treasury_accounts.get(tx.account_id).catch(() => null);
+      if (acc) syncPush('treasury_accounts', 'update', acc, acc.id);
+    }
+    const sinv = await db.supplier_invoices.where('po_id').equals(id).first().catch(() => null);
+    if (sinv) {
+      syncPush('supplier_invoices', 'update', sinv, sinv.id);
+    }
+    return { success: true, data: res, ...res, message: 'تم تعديل أمر التوريد وفاتورة الشراء بنجاح' };
+  },
   receivePurchaseOrderFull: async (poId) => {
     const res = await suppliersRepo.receivePurchaseOrderFull(poId, currentUserId);
     return { success: true, data: res, ...res, message: 'تم استلام أمر التوريد بالكامل وتحديث أرصدة المخزون وحساب المورد بنجاح' };

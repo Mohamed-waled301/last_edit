@@ -546,8 +546,9 @@ export default function App() {
         if (action === 'new') {
           return <PurchaseOrderFormPage onBack={() => navigateTo('purchases')} onNotify={showNotification} />;
         }
-        if (subAction === 'edit' && parts[1]) {
-          return <PurchaseOrderFormPage orderId={parts[1]} onBack={() => navigateTo('purchases')} onNotify={showNotification} />;
+        if ((subAction === 'edit' && parts[1]) || (action === 'edit' && parts[2])) {
+          const poId = subAction === 'edit' ? parts[1] : parts[2];
+          return <PurchaseOrderFormPage orderId={poId} onBack={() => navigateTo('purchases')} onNotify={showNotification} />;
         }
         return <PurchasesListPage onNavigate={navigateTo} onNotify={showNotification} />;
 

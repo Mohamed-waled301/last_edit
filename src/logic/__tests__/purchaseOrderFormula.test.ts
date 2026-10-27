@@ -5,9 +5,9 @@ import { db } from '../../data/db';
 import { suppliersRepo, partiesRepo } from '../../data';
 import { getTodayDateString } from '../../utils/formatters';
 
-describe('Purchase Order Formula & Validations (Requirement D)', () => {
+describe('Purchase Order Formula & Validations (Requirement D & Net Formula)', () => {
   describe('Pure Calculation: calculatePurchaseOrderTotals', () => {
-    it('1. Subtracts discount value and additional expenses: subtotal - discount - expenses', () => {
+    it('1. Calculates net formula: (subtotal - discount) + expenses', () => {
       const result = calculatePurchaseOrderTotals({
         subtotal: 1000,
         discount_amount: 150,
@@ -17,13 +17,14 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
       expect(result.subtotal).toBe(1000);
       expect(result.discountValue).toBe(150);
       expect(result.additionalExpenses).toBe(50);
-      expect(result.rawNet).toBe(800);
-      expect(result.finalNet).toBe(800);
+      // (1000 - 150) + 50 = 900
+      expect(result.rawNet).toBe(900);
+      expect(result.finalNet).toBe(900);
       expect(result.isValid).toBe(true);
       expect(result.errorMessage).toBe('');
     });
 
-    it('2. Calculates discount by percentage and subtracts additional expenses correctly', () => {
+    it('2. Calculates discount by percentage and adds additional expenses correctly', () => {
       const result = calculatePurchaseOrderTotals({
         subtotal: 5000,
         discount_percent: 10, // 10% of 5000 = 500
@@ -34,9 +35,9 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
       expect(result.discountPercent).toBe(10);
       expect(result.discountValue).toBe(500);
       expect(result.additionalExpenses).toBe(300);
-      // 5000 - 500 - 300 = 4200
-      expect(result.rawNet).toBe(4200);
-      expect(result.finalNet).toBe(4200);
+      // (5000 - 500) + 300 = 4800
+      expect(result.rawNet).toBe(4800);
+      expect(result.finalNet).toBe(4800);
       expect(result.isValid).toBe(true);
     });
 
@@ -50,35 +51,35 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
 
       expect(result.discountValue).toBe(250);
       expect(result.additionalExpenses).toBe(100);
-      // 2000 - 250 - 100 = 1650
-      expect(result.finalNet).toBe(1650);
+      // (2000 - 250) + 100 = 1850
+      expect(result.finalNet).toBe(1850);
       expect(result.isValid).toBe(true);
     });
 
-    it('4. Handles expenses larger than remaining amount (negative net blocked)', () => {
+    it('4. Handles discount exceeding subtotal (negative net or invalid discount blocked)', () => {
       const result = calculatePurchaseOrderTotals({
         subtotal: 1000,
-        discount_amount: 200, // remaining 800
-        additional_expenses: 950, // expenses > 800
+        discount_amount: 1200,
+        additional_expenses: 50,
       });
 
       expect(result.rawNet).toBe(-150);
       expect(result.finalNet).toBe(0); // clamped to 0
       expect(result.isValid).toBe(false);
-      expect(result.errorMessage).toBe('الصافي النهائي لا يمكن أن يكون أقل من صفر');
+      expect(result.errorMessage).toContain('الصافي النهائي لا يمكن أن يكون أقل من صفر أو الخصم أكبر من الإجمالي');
     });
 
-    it('5. Handles additional expenses directly exceeding subtotal when discount is 0', () => {
+    it('5. Handles discount exceeding subtotal when expenses are 0', () => {
       const result = calculatePurchaseOrderTotals({
         subtotal: 400,
-        discount_amount: 0,
-        additional_expenses: 650,
+        discount_amount: 500,
+        additional_expenses: 0,
       });
 
-      expect(result.rawNet).toBe(-250);
+      expect(result.rawNet).toBe(-100);
       expect(result.finalNet).toBe(0);
       expect(result.isValid).toBe(false);
-      expect(result.errorMessage).toBe('الصافي النهائي لا يمكن أن يكون أقل من صفر');
+      expect(result.errorMessage).toContain('الصافي النهائي لا يمكن أن يكون أقل من صفر أو الخصم أكبر من الإجمالي');
     });
 
     it('6. Handles string inputs and zero edge-cases cleanly', () => {
@@ -91,8 +92,9 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
       expect(result.subtotal).toBe(1200.5);
       expect(result.discountValue).toBe(100.25);
       expect(result.additionalExpenses).toBe(50.25);
-      expect(result.rawNet).toBe(1050);
-      expect(result.finalNet).toBe(1050);
+      // (1200.50 - 100.25) + 50.25 = 1150.50
+      expect(result.rawNet).toBe(1150.5);
+      expect(result.finalNet).toBe(1150.5);
       expect(result.isValid).toBe(true);
     });
   });
@@ -119,7 +121,7 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
       supplierId = partyRes.id;
     });
 
-    it('7. Enforces formula when saving PO: grandTotal = subtotal - discount - expenses', async () => {
+    it('7. Enforces formula when saving PO: grandTotal = (subtotal - discount) + expenses', async () => {
       const poData = {
         supplier_id: supplierId,
         payment_terms: 'credit',
@@ -134,7 +136,7 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
         ],
         installments: [
           { amount: 5000, due_date: '2026-10-20' },
-          { amount: 4200, due_date: '2026-10-30' },
+          { amount: 4800, due_date: '2026-10-30' },
         ]
       };
 
@@ -146,24 +148,24 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
       expect(savedPO.subtotal).toBe(10000);
       expect(savedPO.discount_value).toBe(500);
       expect(savedPO.additional_expenses).toBe(300);
-      // 10000 - 500 - 300 = 9200
-      expect(savedPO.total_amount).toBe(9200);
-      expect(savedPO.grand_total).toBe(9200);
+      // (10000 - 500) + 300 = 9800
+      expect(savedPO.total_amount).toBe(9800);
+      expect(savedPO.grand_total).toBe(9800);
 
       // Verify supplier invoice matches
       const invoice = await db.supplier_invoices.where('po_id').equals(res.id).first();
       expect(invoice).toBeDefined();
-      expect(invoice.total_amount).toBe(9200);
+      expect(invoice.total_amount).toBe(9800);
     });
 
-    it('8. Blocks saving purchase order when final net < 0 with clear Arabic error', async () => {
+    it('8. Blocks saving purchase order when discount exceeds subtotal with clear Arabic error', async () => {
       const poData = {
         supplier_id: supplierId,
         payment_terms: 'cash',
         order_date: getTodayDateString(),
         subtotal: 2000,
-        discount_amount: 500, // remaining 1500
-        additional_expenses: 1800, // expenses > remaining!
+        discount_amount: 2500, // discount > subtotal
+        additional_expenses: 100,
         items: [
           { material_id: 'mat-test', quantity_ordered: 20, unit_price: 100 }
         ]
@@ -171,7 +173,7 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
 
       await expect(
         suppliersRepo.createPurchaseOrder(poData, 'usr-test')
-      ).rejects.toThrow('الصافي النهائي لا يمكن أن يكون أقل من صفر');
+      ).rejects.toThrow('الصافي النهائي لا يمكن أن يكون أقل من صفر أو الخصم أكبر من الإجمالي');
     });
 
     it('9. Rejects installments that do not sum to the corrected final net', async () => {
@@ -181,12 +183,12 @@ describe('Purchase Order Formula & Validations (Requirement D)', () => {
         order_date: getTodayDateString(),
         subtotal: 5000,
         discount_amount: 200,
-        additional_expenses: 300, // net = 4500
+        additional_expenses: 300, // net = (5000 - 200) + 300 = 5100
         items: [
           { material_id: 'mat-test', quantity_ordered: 50, unit_price: 100 }
         ],
         installments: [
-          // sum = 5000 (wrong, sums to subtotal instead of final net 4500)
+          // sum = 5000 (wrong, sums to 5000 instead of final net 5100)
           { amount: 3000, due_date: '2026-10-20' },
           { amount: 2000, due_date: '2026-10-30' },
         ]

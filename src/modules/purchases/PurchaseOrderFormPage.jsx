@@ -202,17 +202,72 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         setSectionsList(secs);
         setTreasuries(tList);
 
-        const poNum = await suppliersRepo.getNextPONumber().catch(() => `PO-${new Date().getFullYear()}-0001`);
         const mainT = tList.find((t) => t.is_main === 1 || t.is_main === true) || tList[0];
 
-        setForm((prev) => ({
-          ...prev,
-          po_number: poNum,
-          supplier_id: '',
-          account_id: mainT ? mainT.id : 'acc-main',
-          order_date: today,
-          payment_terms: 'cash'
-        }));
+        let existingPO = null;
+        if (orderId) {
+          const poRes = await api.getPurchaseOrder(orderId).catch(() => null);
+          existingPO = poRes?.data || poRes?.purchase_order || poRes || null;
+        }
+
+        if (existingPO) {
+          const loadedItems = Array.isArray(existingPO.items) && existingPO.items.length > 0
+            ? existingPO.items.map((it) => {
+                const itmObj = itms.find((m) => String(m.id) === String(it.material_id));
+                const qty = it.quantity_ordered !== undefined ? it.quantity_ordered : (it.quantity ?? 1);
+                const price = it.unit_price ?? 0;
+                return {
+                  id: it.id,
+                  material_id: it.material_id,
+                  item_code: itmObj?.code || it.material_code || it.code || '',
+                  code_error: '',
+                  quantity_ordered: String(qty),
+                  unit_price: String(price),
+                  total_price: Number(it.total_price) || Number((Number(qty) * Number(price)).toFixed(2))
+                };
+              })
+            : [
+                {
+                  material_id: '',
+                  item_code: '',
+                  code_error: '',
+                  quantity_ordered: '1',
+                  unit_price: '',
+                  total_price: 0
+                }
+              ];
+
+          setForm({
+            po_number: existingPO.po_number || '',
+            supplier_id: existingPO.supplier_id || '',
+            account_id: existingPO.account_id || (mainT ? mainT.id : 'acc-main'),
+            order_date: existingPO.order_date || today,
+            payment_terms: existingPO.payment_terms || 'cash',
+            discount_percent: existingPO.discount_percent !== undefined && existingPO.discount_percent !== null ? String(existingPO.discount_percent) : '',
+            discount_value: existingPO.discount_value !== undefined && existingPO.discount_value !== null ? String(existingPO.discount_value) : '',
+            additional_expenses: existingPO.additional_expenses !== undefined && existingPO.additional_expenses !== null ? String(existingPO.additional_expenses) : '0',
+            notes: existingPO.notes || '',
+            items: loadedItems,
+            installments: Array.isArray(existingPO.installments)
+              ? existingPO.installments.map((inst) => ({
+                  id: inst.id,
+                  due_date: inst.due_date || today,
+                  amount: String(inst.amount ?? ''),
+                  notes: inst.notes || ''
+                }))
+              : []
+          });
+        } else {
+          const poNum = await suppliersRepo.getNextPONumber().catch(() => `PO-${new Date().getFullYear()}-0001`);
+          setForm((prev) => ({
+            ...prev,
+            po_number: poNum,
+            supplier_id: '',
+            account_id: mainT ? mainT.id : 'acc-main',
+            order_date: today,
+            payment_terms: 'cash'
+          }));
+        }
 
         // Prep quick add defaults
         const nextCodeRes = await api.getNextItemCode();
@@ -232,7 +287,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       }
     }
     loadData();
-  }, []);
+  }, [orderId]);
 
   // Selected supplier details
   const selectedSupplier = suppliers.find((s) => s.id === form.supplier_id);
@@ -527,7 +582,22 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
   }, 0);
 
   const handleDiscountPercentChange = (pctVal) => {
-    const pct = Number(pctVal) || 0;
+    if (pctVal === '' || pctVal === null || pctVal === undefined) {
+      setForm((prev) => ({
+        ...prev,
+        discount_percent: '',
+        discount_value: ''
+      }));
+      return;
+    }
+    const pct = Number(pctVal);
+    if (isNaN(pct) || pct < 0) {
+      setForm((prev) => ({
+        ...prev,
+        discount_percent: pctVal
+      }));
+      return;
+    }
     const val = Number(((subtotal * pct) / 100).toFixed(2));
     setForm((prev) => ({
       ...prev,
@@ -537,7 +607,22 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
   };
 
   const handleDiscountValueChange = (valVal) => {
-    const val = Number(valVal) || 0;
+    if (valVal === '' || valVal === null || valVal === undefined) {
+      setForm((prev) => ({
+        ...prev,
+        discount_value: '',
+        discount_percent: ''
+      }));
+      return;
+    }
+    const val = Number(valVal);
+    if (isNaN(val) || val < 0) {
+      setForm((prev) => ({
+        ...prev,
+        discount_value: valVal
+      }));
+      return;
+    }
     const pct = subtotal > 0 ? Number(((val / subtotal) * 100).toFixed(2)) : 0;
     setForm((prev) => ({
       ...prev,
@@ -856,12 +941,20 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         }))
       };
 
-      const res = await api.createPurchaseOrder(payload);
+      let res;
+      if (isEdit) {
+        res = await api.updatePurchaseOrder(orderId, payload);
+      } else {
+        res = await api.createPurchaseOrder(payload);
+      }
+
       isSavedRef.current = true;
       navigationGuard.unregister();
       setShowConfirmModal(false);
       if (onNotify) {
-        onNotify('تم إصدار فاتورة الشراء واعتماد استلام المخزون وحساب المورد بنجاح');
+        onNotify(isEdit
+          ? 'تم تعديل فاتورة الشراء وتحديث المخزون وحساب المورد بنجاح'
+          : 'تم إصدار فاتورة الشراء واعتماد استلام المخزون وحساب المورد بنجاح');
       }
 
       // Check settings for post-issue print behavior
@@ -898,7 +991,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       // Default: 'ask' -> open PostIssuePrintDialog
       setShowPrintModal(true);
     } catch (err) {
-      alert(err.message || 'حدث خطأ أثناء إصدار الفاتورة');
+      alert(err.message || (isEdit ? 'حدث خطأ أثناء تعديل الفاتورة' : 'حدث خطأ أثناء إصدار الفاتورة'));
     } finally {
       setSaving(false);
     }
@@ -906,7 +999,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
 
   if (loading) {
     return (
-      <PageContainer title="أمر توريد مشتريات">
+      <PageContainer title={isEdit ? "تعديل أمر توريد مشتريات" : "أمر توريد مشتريات"}>
         <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500">
           جاري تحميل بيانات أمر التوريد...
         </div>
@@ -916,8 +1009,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
 
   return (
     <PageContainer
-      title="إنشاء أمر شراء وتوريد خامات"
-      subtitle="إصدار أوامر التوريد، استلام البضاعة الفوري أو الآجل، إدارة الأقساط وجدول السداد، وفحص رصيد المخزن الحي"
+      title={isEdit ? `تعديل فاتورة مشتريات (أمر توريد رقم ${form.po_number || ''})` : "إنشاء أمر شراء وتوريد خامات"}
+      subtitle={isEdit ? "تعديل الأصناف والكميات والأسعار والخصم، وتحديث المخزون وحساب المورد تلقائياً" : "إصدار أوامر التوريد، استلام البضاعة الفوري أو الآجل، إدارة الأقساط وجدول السداد، وفحص رصيد المخزن الحي"}
+      breadcrumbs={isEdit ? [{ label: 'المشتريات', href: '#/purchases' }, { label: `تعديل أمر ${form.po_number || ''}` }] : [{ label: 'المشتريات', href: '#/purchases' }, { label: 'فاتورة شراء جديدة' }]}
       actions={
         <div className="flex items-center gap-2">
           <button
@@ -935,7 +1029,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
             className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
-            <span>{saving ? 'جاري الإصدار...' : 'إصدار الفاتورة'}</span>
+            <span>{saving ? 'جاري الحفظ...' : (isEdit ? 'حفظ التعديلات' : 'إصدار الفاتورة')}</span>
           </button>
         </div>
       }
@@ -1911,7 +2005,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
             className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-xs text-sm font-medium disabled:opacity-50 cursor-pointer"
           >
             <Save className="w-4 h-4" />
-            <span>{saving ? 'جاري الإصدار...' : 'إصدار الفاتورة'}</span>
+            <span>{saving ? 'جاري الحفظ...' : (isEdit ? 'حفظ التعديلات' : 'إصدار الفاتورة')}</span>
           </button>
         </div>
       </form>
@@ -1921,7 +2015,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         isOpen={showConfirmModal}
         onClose={() => setShowConfirmModal(false)}
         onConfirm={handleConfirmIssue}
-        title="تأكيد إصدار فاتورة المشتريات"
+        title={isEdit ? "تأكيد تعديل فاتورة المشتريات" : "تأكيد إصدار فاتورة المشتريات"}
         documentType="فاتورة مشتريات"
         partyLabel="المورد"
         partyName={selectedSupplier?.name || ''}
@@ -1945,7 +2039,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         onFinished={handlePostIssueDone}
         documentType="purchase_invoice"
         documentNumber={issuedOrder?.po_number || form.po_number}
-        documentTitle={`تم إصدار فاتورة الشراء رقم ${issuedOrder?.po_number || form.po_number}`}
+        documentTitle={isEdit ? `تم تعديل فاتورة الشراء رقم ${issuedOrder?.po_number || form.po_number}` : `تم إصدار فاتورة الشراء رقم ${issuedOrder?.po_number || form.po_number}`}
         documentData={issuedOrder}
         onPrint={handleExecutePrint}
         onPreview={handleExecutePreview}
