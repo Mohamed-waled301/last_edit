@@ -314,4 +314,55 @@ describe('Purchase Invoice Editing & Optional Discount Fields Suite (تعديل 
       expect(BalanceCalculator.calculateSupplierBalance(invoices, []).balanceDue).toBe(1200);
     });
   });
+
+  describe('3. Purchase Invoice Printout Discount Visibility in Items Table', () => {
+    it('displays the applied discount in the items table under "الخصم" column and updates line total', async () => {
+      const { generatePurchaseInvoiceHtml } = await import('../../modules/print/invoicePrintTemplates');
+
+      // 1. Invoice WITH discount: 1 item at 100 LE with 10% discount (10 LE)
+      const poWithDiscount = await suppliersRepo.createPurchaseOrder({
+        supplier_id: supplierId,
+        payment_terms: 'cash',
+        account_id: 'acc-main',
+        order_date: getTodayDateString(),
+        subtotal: 100,
+        discount_percent: 10,
+        items: [
+          { material_id: item1Id, quantity_ordered: 1, unit_price: 100 }
+        ]
+      }, 'usr-test');
+
+      const fullPO = await suppliersRepo.getPurchaseOrder(poWithDiscount.id);
+      const htmlWithDiscount = generatePurchaseInvoiceHtml(fullPO, {}, 'A4');
+
+      // Must display the discount value in the items table row (not '-')
+      expect(htmlWithDiscount).toContain('10.00 ج.م');
+      // Must display net total 90.00 ج.م
+      expect(htmlWithDiscount).toContain('90.00 ج.م');
+      // Must display discount in the totals section
+      expect(htmlWithDiscount).toContain('الخصم التجاري (10%):');
+      expect(htmlWithDiscount).toContain('-10.00 ج.م');
+
+      // 2. Invoice WITHOUT discount: 1 item at 100 LE with 0 discount
+      const poNoDiscount = await suppliersRepo.createPurchaseOrder({
+        supplier_id: supplierId,
+        payment_terms: 'cash',
+        account_id: 'acc-main',
+        order_date: getTodayDateString(),
+        subtotal: 100,
+        items: [
+          { material_id: item1Id, quantity_ordered: 1, unit_price: 100 }
+        ]
+      }, 'usr-test');
+
+      const fullPONoDisc = await suppliersRepo.getPurchaseOrder(poNoDiscount.id);
+      const htmlNoDiscount = generatePurchaseInvoiceHtml(fullPONoDisc, {}, 'A4');
+
+      // In the items table row under discount column, displays '-' when no discount
+      expect(htmlNoDiscount).toContain('<td style="padding: 6px 8px; text-align: center;" class="font-mono">-</td>');
+      // Net line total is 100.00 ج.م
+      expect(htmlNoDiscount).toContain('100.00 ج.م');
+      expect(htmlNoDiscount).not.toContain('الخصم التجاري:');
+    });
+  });
 });

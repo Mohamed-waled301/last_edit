@@ -309,14 +309,19 @@ export const suppliersRepo = {
 
     const populatedItems = orderItems.map(i => {
       const itm = itemMap.get(i.material_id) || matMap.get(i.material_id);
+      const qty = Number(i.quantity_ordered ?? i.quantity) || 0;
+      const unitPrice = Number(i.unit_price) || 0;
+      const disc = Number(i.discount ?? i.discount_value ?? 0);
       return {
         ...i,
         material_name: itm ? itm.name : (i.material_name || i.material_id),
         material_code: itm ? (itm.code || itm.sku) : (i.material_code || ''),
         material_unit: itm ? itm.unit : (i.material_unit || 'قطعة'),
-        quantity: Number(i.quantity) || 0,
-        unit_price: Number(i.unit_price) || 0,
-        total_price: Number(i.total_price) || (Number(i.quantity || 0) * Number(i.unit_price || 0)),
+        quantity: qty,
+        quantity_ordered: qty,
+        unit_price: unitPrice,
+        discount: disc,
+        total_price: Number(i.total_price) || (qty * unitPrice - disc),
       };
     });
 
@@ -542,7 +547,7 @@ export const suppliersRepo = {
         // Log treasury transaction linked to the purchase order
         await db.cash_transactions.add({
           id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+          tx_number: `TXN-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 899 + 100)}`,
           account_id: treasury.id,
           tx_type: 'outflow',
           category: 'purchase_orders',
@@ -919,7 +924,7 @@ export const suppliersRepo = {
 
             await db.cash_transactions.add({
               id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+              tx_number: `TXN-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 899 + 100)}`,
               account_id: treasury.id,
               tx_type: diff > 0 ? 'outflow' : 'inflow',
               category: 'purchase_orders',
@@ -942,7 +947,7 @@ export const suppliersRepo = {
 
             await db.cash_transactions.add({
               id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+              tx_number: `TXN-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 899 + 100)}`,
               account_id: treasury.id,
               tx_type: 'inflow',
               category: 'purchase_orders',
@@ -963,7 +968,7 @@ export const suppliersRepo = {
 
             await db.cash_transactions.add({
               id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              tx_number: `TXN-${Date.now().toString().slice(-4)}`,
+              tx_number: `TXN-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 899 + 100)}`,
               account_id: treasury.id,
               tx_type: 'outflow',
               category: 'purchase_orders',

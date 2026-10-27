@@ -177,7 +177,10 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
 
   // Totals in exact currency
   const subtotal = Number(po.subtotal ?? 0);
-  const discount = Number(po.discount_value ?? 0);
+  let discount = Number(po.discount_value ?? po.discount_amount ?? po.discount ?? 0);
+  if (!discount && Number(po.discount_percent) > 0 && subtotal > 0) {
+    discount = Number(((subtotal * Number(po.discount_percent)) / 100).toFixed(2));
+  }
   const additionalExpenses = Number(po.additional_expenses ?? 0);
   const totalAmount = Number(po.total_amount ?? po.grand_total ?? (subtotal - discount + additionalExpenses));
 
@@ -256,7 +259,7 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
           </div>
           ${discount > 0 ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 2px; color: #b91c1c;">
-              <span>الخصم التجاري:</span>
+              <span>الخصم التجاري${Number(po.discount_percent) > 0 ? ` (${po.discount_percent}%)` : ''}:</span>
               <span class="font-mono font-bold">-${formatCurrency(discount)}</span>
             </div>
           ` : ''}
@@ -322,11 +325,47 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
   }
 
   // --- 1.B) A4 Official Layout for Purchase Invoice ---
-  const itemsRowsA4 = items.map((it, idx) => {
+  const explicitLineDiscountsSum = items.reduce((sum, it) => sum + Number(it.discount ?? it.discount_value ?? 0), 0);
+  const effectiveInvoiceDiscount = discount > 0 ? discount : explicitLineDiscountsSum;
+
+  const itemsWithGross = items.map(it => {
     const qty = Number(it.quantity_ordered ?? it.quantity ?? 1);
     const price = Number(it.unit_price ?? 0);
-    const lineDiscount = Number(it.discount ?? 0);
-    const lineTotal = Number(it.total_price ?? (qty * price - lineDiscount));
+    const gross = Number((qty * price).toFixed(2));
+    const explicitDisc = Number(it.discount ?? it.discount_value ?? 0);
+    return { it, qty, price, gross, explicitDisc };
+  });
+
+  const totalGross = itemsWithGross.reduce((s, x) => s + x.gross, 0) || subtotal || 1;
+
+  let distributedDiscounts = [];
+  if (effectiveInvoiceDiscount > 0 && explicitLineDiscountsSum === 0) {
+    if (itemsWithGross.length === 1) {
+      distributedDiscounts = [effectiveInvoiceDiscount];
+    } else {
+      const totalDiscPiasters = toPiasters(effectiveInvoiceDiscount);
+      const shares = itemsWithGross.map((x, idx) => {
+        const exact = (totalDiscPiasters * x.gross) / totalGross;
+        const base = Math.floor(exact);
+        const rem = exact - base;
+        return { idx, base, rem };
+      });
+      const sumBase = shares.reduce((s, sh) => s + sh.base, 0);
+      let left = totalDiscPiasters - sumBase;
+      const sorted = [...shares].sort((a, b) => b.rem - a.rem);
+      for (let i = 0; i < left && i < sorted.length; i++) {
+        shares[sorted[i].idx].base += 1;
+      }
+      distributedDiscounts = shares.map(sh => fromPiasters(sh.base));
+    }
+  }
+
+  const itemsRowsA4 = itemsWithGross.map(({ it, qty, price, gross, explicitDisc }, idx) => {
+    let lineDiscount = explicitDisc;
+    if (lineDiscount <= 0 && distributedDiscounts.length > idx) {
+      lineDiscount = distributedDiscounts[idx];
+    }
+    const lineTotal = Number(Math.max(0, gross - lineDiscount).toFixed(2));
     const matName = it.material_name || it.item_name || it.name || '';
     const matCode = it.material_code || it.item_code || '-';
 
@@ -465,7 +504,7 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
           </div>
           ${discount > 0 ? `
             <div style="display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #e2e8f0; color: #b91c1c;">
-              <span>الخصم التجاري:</span>
+              <span>الخصم التجاري${Number(po.discount_percent) > 0 ? ` (${po.discount_percent}%)` : ''}:</span>
               <span class="font-mono font-bold">-${formatCurrency(discount)}</span>
             </div>
           ` : ''}
