@@ -1,7 +1,7 @@
 {
   "name": "code-systems",
   "private": true,
-  "version": "1.1.7",
+  "version": "1.1.8",
   "type": "module",
   "description": "code systems - نظام تخطيط موارد المؤسسات المتكامل",
   "author": "code systems",
