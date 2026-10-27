@@ -246,8 +246,8 @@ describe('Purchase Invoice Editing & Optional Discount Fields Suite (تعديل 
       expect((await itemsRepo.getById(item1Id)).current_stock).toBe(30);
 
       // 2. Simulate consumption/sales leaving only 2 units in stock
-      await db.stock_movements.add({
-        id: `sm-sale-test-${Date.now()}`,
+      await db.stock_movements.put({
+        id: `sm-sale-test-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         item_id: item1Id,
         material_id: item1Id,
         location_id: 'loc-main',
@@ -312,6 +312,50 @@ describe('Purchase Invoice Editing & Optional Discount Fields Suite (تعديل 
       // Supplier balance now shows 1200 payable
       const invoices = await db.supplier_invoices.where('supplier_id').equals(supplierId).toArray();
       expect(BalanceCalculator.calculateSupplierBalance(invoices, []).balanceDue).toBe(1200);
+    });
+
+    it('editing an invoice allows saving with its historical/past date without error', async () => {
+      // 1. Create invoice today
+      const po = await suppliersRepo.createPurchaseOrder({
+        supplier_id: supplierId,
+        payment_terms: 'cash',
+        account_id: 'acc-main',
+        order_date: getTodayDateString(),
+        subtotal: 500,
+        items: [
+          { material_id: item1Id, quantity_ordered: 5, unit_price: 100 }
+        ]
+      }, 'usr-test');
+
+      // 2. Simulate invoice created in the past (e.g. 2026-01-15)
+      const pastDate = '2026-01-15';
+      await db.purchase_orders.update(po.id, { order_date: pastDate, expected_date: pastDate });
+
+      // 3. Edit invoice keeping its past date or updating items on that past date
+      const updated = await suppliersRepo.updatePurchaseOrder(po.id, {
+        supplier_id: supplierId,
+        payment_terms: 'cash',
+        account_id: 'acc-main',
+        order_date: pastDate,
+        subtotal: 700,
+        items: [
+          { material_id: item1Id, quantity_ordered: 7, unit_price: 100 }
+        ]
+      }, 'usr-test');
+
+      expect(updated.order_date).toBe(pastDate);
+      expect(updated.total_amount).toBe(700);
+
+      // Verify that creating a NEW purchase order with past date is still rejected
+      await expect(
+        suppliersRepo.createPurchaseOrder({
+          supplier_id: supplierId,
+          payment_terms: 'cash',
+          account_id: 'acc-main',
+          order_date: '2025-01-01',
+          items: [{ material_id: item1Id, quantity_ordered: 1, unit_price: 100 }]
+        }, 'usr-test')
+      ).rejects.toThrow(/ممنوع اعتماد تاريخ في الماضي/);
     });
   });
 

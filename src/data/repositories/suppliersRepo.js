@@ -689,8 +689,7 @@ export const suppliersRepo = {
 
     const oldPOItems = await db.purchase_order_items.where('po_id').equals(poId).toArray();
 
-    if (data.order_date) validateNotPastDate(data.order_date, 'تاريخ أمر التوريد');
-
+    // In case of editing an invoice only, saving on its existing/historical date is permitted
     const orderDate = data.order_date || oldPO.order_date || today;
     const paymentTerms = data.payment_terms || oldPO.payment_terms || 'cash';
     const oldPaymentTerms = oldPO.payment_terms || 'cash';
@@ -703,7 +702,7 @@ export const suppliersRepo = {
       const total = Number((qty * price).toFixed(2));
       subtotal += total;
       return {
-        id: item.id || `poi-${Date.now()}-${idx}`,
+        id: item.id || `poi-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${idx}`,
         po_id: poId,
         material_id: item.material_id,
         quantity_ordered: qty,
@@ -793,8 +792,7 @@ export const suppliersRepo = {
     }
 
     // 5. Database transaction (atomic all-or-nothing)
-    try {
-      await db.transaction('rw', [
+    await db.transaction('rw', [
         db.purchase_orders,
         db.purchase_order_items,
         db.materials,
@@ -806,10 +804,9 @@ export const suppliersRepo = {
         db.treasury_accounts,
         db.cash_transactions
       ], async () => {
-        // A) Update purchase_order_items
         await db.purchase_order_items.where('po_id').equals(poId).delete();
         for (const itm of newItems) {
-          await db.purchase_order_items.add(itm);
+          await db.purchase_order_items.put(itm);
 
           if (itm.unit_price > 0) {
             const mat = await db.materials.get(itm.material_id);
@@ -836,7 +833,7 @@ export const suppliersRepo = {
           grnId = `grn-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
           grn = {
             id: grnId,
-            grn_number: `GRN-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`,
+            grn_number: `GRN-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 899 + 100)}`,
             po_id: poId,
             supplier_id: data.supplier_id || oldPO.supplier_id,
             receipt_date: orderDate,
@@ -857,8 +854,8 @@ export const suppliersRepo = {
         await db.goods_receipt_items.where('grn_id').equals(grnId).delete();
         for (let idx = 0; idx < newItems.length; idx++) {
           const line = newItems[idx];
-          const griId = `gri-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${idx}`;
-          await db.goods_receipt_items.add({
+          const griId = `gri-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${idx}`;
+          await db.goods_receipt_items.put({
             id: griId,
             grn_id: grnId,
             material_id: line.material_id,
@@ -875,7 +872,7 @@ export const suppliersRepo = {
             const absQty = Math.abs(delta);
 
             const smId = `sm-upd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${matId}`;
-            await db.stock_movements.add({
+            await db.stock_movements.put({
               id: smId,
               item_id: matId,
               material_id: matId,
@@ -922,7 +919,7 @@ export const suppliersRepo = {
             const newBal = Number((currentBal - diff).toFixed(2));
             await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
 
-            await db.cash_transactions.add({
+            await db.cash_transactions.put({
               id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               tx_number: `TXN-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 899 + 100)}`,
               account_id: treasury.id,
@@ -945,7 +942,7 @@ export const suppliersRepo = {
             const newBal = Number((currentBal + oldGrandTotal).toFixed(2));
             await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
 
-            await db.cash_transactions.add({
+            await db.cash_transactions.put({
               id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               tx_number: `TXN-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 899 + 100)}`,
               account_id: treasury.id,
@@ -966,7 +963,7 @@ export const suppliersRepo = {
             const newBal = Number((currentBal - grandTotal).toFixed(2));
             await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
 
-            await db.cash_transactions.add({
+            await db.cash_transactions.put({
               id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               tx_number: `TXN-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 899 + 100)}`,
               account_id: treasury.id,
@@ -1002,7 +999,7 @@ export const suppliersRepo = {
             notes: `فاتورة استلام أمر الشراء ${oldPO.po_number} (معدلة)`
           });
         } else {
-          await db.supplier_invoices.add({
+          await db.supplier_invoices.put({
             id: `sinv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
             invoice_number: sinvNumber,
             supplier_id: data.supplier_id || oldPO.supplier_id,
@@ -1045,9 +1042,6 @@ export const suppliersRepo = {
 
         await db.purchase_orders.update(poId, updatedPOFields);
       });
-    } catch (e) {
-      throw e;
-    }
 
     const updatedPO = await db.purchase_orders.get(poId);
     await auditRepo.log(userId, 'UPDATE_PURCHASE_ORDER', 'purchase_orders', poId, oldPO, updatedPO);

@@ -345,8 +345,8 @@ export const itemsRepo = {
         for (let i = 0; i < variants.length; i++) {
           const v = variants[i];
           if (v.opening_balance > 0) {
-            await db.stock_movements.add({
-              id: `sm-op-${Date.now()}-${i}`,
+            await db.stock_movements.put({
+              id: `sm-op-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${i}`,
               item_id: id,
               material_id: id,
               variant_id: v.id,
@@ -368,8 +368,8 @@ export const itemsRepo = {
           }
         }
       } else if (totalStock > 0) {
-        await db.stock_movements.add({
-          id: `sm-op-${Date.now()}`,
+        await db.stock_movements.put({
+          id: `sm-op-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           item_id: id,
           material_id: id,
           variant_id: null,

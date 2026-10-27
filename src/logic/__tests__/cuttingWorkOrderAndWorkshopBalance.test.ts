@@ -9,7 +9,9 @@ import {
   DEFAULT_CUT_ORDER_PRINT_OPTIONS
 } from '../../modules/print/invoicePrintTemplates';
 
-describe('Cutting Work Order Checkboxes, Subcontractor Balance Integration, & Print Layouts', () => {
+import { isFeatureEnabled } from '../../editions/editionConfig';
+
+describe.skipIf(!isFeatureEnabled('cutting'))('Cutting Work Order Checkboxes, Subcontractor Balance Integration, & Print Layouts', () => {
   beforeEach(async () => {
     // Clear relevant tables
     await db.production_orders.clear();
