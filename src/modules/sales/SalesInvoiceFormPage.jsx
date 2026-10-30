@@ -876,10 +876,10 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
                     <th className="p-3 min-w-[130px]">المقاس واللون</th>
                     <th className="p-3 w-24 text-center font-mono">الرصيد المتاح</th>
                     <th className="p-3 w-24 text-center font-mono">الكمية المباعة</th>
-                    <th className="p-3 w-28 text-center font-mono">السعر قبل الخصم</th>
-                    <th className="p-3 w-24 text-center font-mono text-red-300">قيمة الخصم</th>
-                    <th className="p-3 w-28 text-center font-mono text-emerald-300">السعر بعد الخصم</th>
-                    <th className="p-3 w-32 text-left font-mono">إجمالي البند</th>
+                    <th className="p-3 min-w-[120px] text-center font-mono whitespace-nowrap">السعر قبل الخصم</th>
+                    <th className="p-3 min-w-[110px] text-center font-mono text-red-300 whitespace-nowrap">قيمة الخصم</th>
+                    <th className="p-3 min-w-[120px] text-center font-mono text-emerald-300 whitespace-nowrap">السعر بعد الخصم</th>
+                    <th className="p-3 min-w-[130px] text-left font-mono whitespace-nowrap">إجمالي البند</th>
                     <th className="p-3 w-12 text-center">حذف</th>
                   </tr>
                 </thead>
@@ -994,12 +994,12 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
                         </td>
 
                         {/* Price After Discount (Requirement F2) */}
-                        <td className="p-3 text-center font-mono font-bold text-emerald-700 bg-emerald-50/40">
+                        <td className="p-3 text-center font-mono font-bold text-emerald-700 bg-emerald-50/40 whitespace-nowrap min-w-[120px]">
                           {formatCurrency(line.unit_selling_price)}
                         </td>
 
                         {/* Line Total */}
-                        <td className="p-3 text-left font-mono font-bold text-gray-900">
+                        <td className="p-3 text-left font-mono font-bold text-gray-900 whitespace-nowrap min-w-[130px]">
                           {formatCurrency(lineTotal)}
                         </td>
 

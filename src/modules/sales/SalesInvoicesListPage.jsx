@@ -137,7 +137,7 @@ export default function SalesInvoicesListPage({ onNotify }) {
                 <th className="p-3">تاريخ الفاتورة</th>
                 <th className="p-3 text-center">طريقة الدفع</th>
                 <th className="p-3 text-center">تاريخ الاستحقاق</th>
-                <th className="p-3 text-left font-mono">إجمالي الفاتورة</th>
+                <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">إجمالي الفاتورة</th>
                 <th className="p-3 text-center">الحالة</th>
                 <th className="p-3 text-center">إجراءات</th>
               </tr>
@@ -182,7 +182,7 @@ export default function SalesInvoicesListPage({ onNotify }) {
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
-                      <td className="p-3 text-left font-mono font-bold text-green-700">{formatCurrency(total)}</td>
+                      <td className="p-3 text-left font-mono font-bold text-green-700 whitespace-nowrap min-w-[130px]">{formatCurrency(total)}</td>
                       <td className="p-3 text-center">
                         <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
                           inv.status === 'cancelled'

@@ -446,7 +446,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
             {/* Card #1: Opening Balance */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
               <span className="text-xs font-bold text-slate-500 block mb-1">رصيد أول المدة</span>
-              <span className="text-lg font-bold font-mono text-slate-800 block">
+              <span className="text-lg font-bold font-mono text-slate-800 block whitespace-nowrap">
                 {formatCurrency(cardSummary.openingBalance)}
               </span>
               <span className="text-[11px] text-slate-500 font-semibold block mt-1">
@@ -457,7 +457,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
             {/* Card #2: Period Invoices & Services */}
             <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-4">
               <span className="text-xs font-bold text-blue-700 block mb-1">إجمالي الفواتير والتوريدات</span>
-              <span className="text-lg font-bold font-mono text-blue-900 block">
+              <span className="text-lg font-bold font-mono text-blue-900 block whitespace-nowrap">
                 {formatCurrency(cardSummary.periodInvoices)}
               </span>
               <span className="text-[11px] text-blue-600 block mt-1">الفواتير وتكلفة المراحل للفترة</span>
@@ -466,7 +466,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
             {/* Card #3: Total Paid / Settled */}
             <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-4">
               <span className="text-xs font-bold text-emerald-700 block mb-1">إجمالي المسدد</span>
-              <span className="text-lg font-bold font-mono text-emerald-900 block">
+              <span className="text-lg font-bold font-mono text-emerald-900 block whitespace-nowrap">
                 {formatCurrency(cardSummary.periodPaid)}
               </span>
               <span className="text-[11px] text-emerald-600 block mt-1">سندات الصرف والدفعات المعتمدة</span>
@@ -475,7 +475,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
             {/* Card #4: Final Remaining Cumulative Balance */}
             <div className="bg-slate-900 text-white rounded-xl p-4">
               <span className="text-xs font-bold text-slate-300 block mb-1">الرصيد المتبقي الحالي</span>
-              <span className={`text-xl font-bold font-mono block ${cardSummary.valueClass}`}>
+              <span className={`text-xl font-bold font-mono block whitespace-nowrap ${cardSummary.valueClass}`}>
                 {formatCurrency(cardSummary.finalBalance)}
               </span>
               <span className={`text-[11px] block mt-1 font-medium ${cardSummary.subtitleClass}`}>
@@ -578,11 +578,11 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                   <th className="p-3 w-36 font-mono">رقم المستند / أمر القص</th>
                   <th className="p-3 w-28">المرحلة</th>
                   <th className="p-3">البيان والتفاصيل</th>
-                  <th className="p-3 w-28 text-left font-mono">
+                  <th className="p-3 min-w-[130px] text-left font-mono whitespace-nowrap">
                     {vendor?.is_customer && !vendor?.is_supplier ? 'المستحق (عليه)' : 'المستحق (له)'}
                   </th>
-                  <th className="p-3 w-28 text-left font-mono">المسدد (منه)</th>
-                  <th className="p-3 w-32 text-left font-mono">الرصيد التراكمي</th>
+                  <th className="p-3 min-w-[130px] text-left font-mono whitespace-nowrap">المسدد (منه)</th>
+                  <th className="p-3 min-w-[140px] text-left font-mono whitespace-nowrap">الرصيد التراكمي</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -596,17 +596,17 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                     <td className="p-3">
                       رصيد افتتاحي مسجل بدفتر الأستاذ ({cardSummary.openingNatureText})
                     </td>
-                    <td className="p-3 text-left font-mono">
+                    <td className="p-3 text-left font-mono whitespace-nowrap">
                       {vendor?.is_customer && !vendor?.is_supplier
                         ? (summary.opening_type === 'debit' ? formatCurrency(summary.opening_balance) : '-')
                         : (summary.opening_type === 'credit' ? formatCurrency(summary.opening_balance) : '-')}
                     </td>
-                    <td className="p-3 text-left font-mono">
+                    <td className="p-3 text-left font-mono whitespace-nowrap">
                       {vendor?.is_customer && !vendor?.is_supplier
                         ? (summary.opening_type === 'credit' ? formatCurrency(summary.opening_balance) : '-')
                         : (summary.opening_type === 'debit' ? formatCurrency(summary.opening_balance) : '-')}
                     </td>
-                    <td className="p-3 text-left font-mono text-[#1F3A5F]">
+                    <td className="p-3 text-left font-mono text-[#1F3A5F] whitespace-nowrap">
                       {formatCurrency(cardSummary.signedOpening)}
                     </td>
                   </tr>
@@ -643,13 +643,13 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                         </span>
                       </td>
                       <td className="p-3 text-slate-800 font-medium">{row.description}</td>
-                      <td className="p-3 text-left font-mono font-bold text-blue-900">
+                      <td className="p-3 text-left font-mono font-bold text-blue-900 whitespace-nowrap">
                         {row.debit > 0 ? formatCurrency(row.debit) : '-'}
                       </td>
-                      <td className="p-3 text-left font-mono font-bold text-emerald-700">
+                      <td className="p-3 text-left font-mono font-bold text-emerald-700 whitespace-nowrap">
                         {row.credit > 0 ? formatCurrency(row.credit) : '-'}
                       </td>
-                      <td className={`p-3 text-left font-mono font-bold ${row.running_balance >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>
+                      <td className={`p-3 text-left font-mono font-bold whitespace-nowrap ${row.running_balance >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>
                         {formatCurrency(row.running_balance)}
                       </td>
                     </tr>

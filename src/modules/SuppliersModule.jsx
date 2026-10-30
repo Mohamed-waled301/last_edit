@@ -23,6 +23,7 @@ import BackButton from '../components/BackButton';
 import { api } from '../services/api';
 import { formatCurrency, formatNumber, formatDate, getTodayDateString, isPastDate } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
+import { triggerPrint } from '../utils/print';
 import { FieldError, validators, Validators } from '../utils/validation';
 import {
   DEFAULT_PHONE_VALUE,
@@ -2048,7 +2049,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => triggerPrint()}
                   className="h-9 px-3 bg-white hover:bg-gray-50 text-gray-700 rounded-md font-semibold text-xs border border-gray-300 flex items-center gap-1.5 cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5" />

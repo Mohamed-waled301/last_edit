@@ -1567,8 +1567,8 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                       <th className="p-3 w-28 text-center font-mono">كود الصنف</th>
                       <th className="p-3">الصنف / الخامة</th>
                       <th className="p-3 w-28">الكمية المطلوبة</th>
-                      <th className="p-3 w-28">سعر الوحدة</th>
-                      <th className="p-3 w-28 text-left font-mono">الإجمالي</th>
+                      <th className="p-3 min-w-[120px] text-center font-mono whitespace-nowrap">سعر الوحدة</th>
+                      <th className="p-3 min-w-[130px] text-left font-mono whitespace-nowrap">الإجمالي</th>
                       <th className="p-3 w-12 text-center">إجراء</th>
                     </tr>
                   </thead>
@@ -1667,7 +1667,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
                             className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold bg-white text-slate-800"
                           />
                         </td>
-                        <td className="p-3 text-left font-mono font-bold text-slate-900">
+                        <td className="p-3 text-left font-mono font-bold text-slate-900 whitespace-nowrap min-w-[130px]">
                           {formatCurrency(line.total_price || 0)}
                         </td>
                         <td className="p-2 text-center">

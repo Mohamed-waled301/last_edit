@@ -34,6 +34,39 @@ function cleanRowData(obj) {
 }
 
 /**
+ * Automatically calculates and sets generous column widths on XLSX worksheets
+ * to completely eliminate truncation, clipping, and Excel hash overflows (#####).
+ */
+export function applyAutoColumnWidths(worksheet) {
+  if (!worksheet || !worksheet['!ref']) return;
+  try {
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    const colWidths = [];
+
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      let maxLen = 12; // Minimum baseline column width
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        const cellAddress = XLSX.utils.encode_cell({ c: C, r: R });
+        const cell = worksheet[cellAddress];
+        if (cell && cell.v !== undefined && cell.v !== null) {
+          const valStr = String(cell.v).trim();
+          const visualLen = valStr.length;
+          if (visualLen > maxLen) {
+            maxLen = visualLen;
+          }
+        }
+      }
+      // Add safe 4-char padding and ensure at least 15 characters to accommodate 6+ digits
+      colWidths.push({ wch: Math.max(maxLen + 4, 15) });
+    }
+
+    worksheet['!cols'] = colWidths;
+  } catch (err) {
+    console.warn('Auto column width calculation skipped:', err);
+  }
+}
+
+/**
  * Export data to native Excel (.xlsx) with Arabic RTL view, real numbers, and Electron native save.
  * Supports:
  * - exportToExcel(dataArray, filename)
@@ -87,6 +120,9 @@ export async function exportToExcel(arg1, arg2, arg3) {
     if (!worksheet) {
       throw new Error('تعذر إنشاء ورقة البيانات للتصدير');
     }
+
+    // Automatically calculate generous column widths for 6+ digits & Arabic labels
+    applyAutoColumnWidths(worksheet);
 
     // Set right-to-left layout for Arabic
     if (!worksheet['!views']) worksheet['!views'] = [];

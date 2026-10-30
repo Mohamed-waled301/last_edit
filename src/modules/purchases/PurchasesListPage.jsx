@@ -235,7 +235,7 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                   <th className="p-3 text-center">شروط الدفع</th>
                   <th className="p-3 text-center">الاستحقاق / الأقساط</th>
                   <th className="p-3 text-center">البنود</th>
-                  <th className="p-3 text-left font-mono">الإجمالي الصافي</th>
+                  <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">الإجمالي الصافي</th>
                   <th className="p-3 text-center">الحالة</th>
                   <th className="p-3 text-center">الإجراءات</th>
                 </tr>
@@ -323,7 +323,7 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                           {itemsCount} أصناف
                         </td>
 
-                        <td className="p-3 text-left font-mono font-bold text-slate-900">
+                        <td className="p-3 text-left font-mono font-bold text-slate-900 whitespace-nowrap min-w-[130px]">
                           {formatCurrency(total)}
                         </td>
 

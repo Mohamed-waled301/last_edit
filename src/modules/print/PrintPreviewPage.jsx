@@ -1601,20 +1601,20 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             <table className="w-full max-w-full text-right text-xs border-collapse" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '16px', marginBottom: '16px', tableLayout: 'auto', boxSizing: 'border-box' }}>
               <colgroup>
                 <col style={{ width: '11%', minWidth: '85px' }} />
-                <col style={{ width: '39%', minWidth: '180px' }} />
+                <col style={{ width: '31%', minWidth: '150px' }} />
                 <col style={{ width: '12%', minWidth: '85px' }} />
-                <col style={{ width: '12%', minWidth: '85px' }} />
-                <col style={{ width: '12%', minWidth: '85px' }} />
-                <col style={{ width: '14%', minWidth: '105px' }} />
+                <col style={{ width: '15%', minWidth: '120px' }} />
+                <col style={{ width: '15%', minWidth: '120px' }} />
+                <col style={{ width: '16%', minWidth: '130px' }} />
               </colgroup>
               <thead>
                 <tr className="bg-[#1F3A5F] text-white font-bold" style={{ backgroundColor: '#1F3A5F', color: '#ffffff' }}>
                   <th className="border border-slate-300 text-center" style={{ padding: '8px 6px', border: '1px solid #94a3b8', width: '11%', minWidth: '85px', whiteSpace: 'nowrap', textAlign: 'center' }}>التاريخ</th>
-                  <th className="border border-slate-300" style={{ padding: '8px 10px', border: '1px solid #94a3b8', width: '39%', minWidth: '180px', textAlign: 'right' }}>نوع الحركة / المستند</th>
+                  <th className="border border-slate-300" style={{ padding: '8px 10px', border: '1px solid #94a3b8', width: '31%', minWidth: '150px', textAlign: 'right' }}>نوع الحركة / المستند</th>
                   <th className="border border-slate-300 text-center" style={{ padding: '8px 6px', border: '1px solid #94a3b8', width: '12%', minWidth: '85px', whiteSpace: 'nowrap', textAlign: 'center' }}>رقم المرجع</th>
-                  <th className="border border-slate-300 text-left font-mono" style={{ padding: '8px 6px', border: '1px solid #94a3b8', width: '12%', minWidth: '85px', whiteSpace: 'nowrap', textAlign: 'left' }}>مدين (+)</th>
-                  <th className="border border-slate-300 text-left font-mono" style={{ padding: '8px 6px', border: '1px solid #94a3b8', width: '12%', minWidth: '85px', whiteSpace: 'nowrap', textAlign: 'left' }}>دائن (-)</th>
-                  <th className="border border-slate-300 text-left font-mono" style={{ padding: '8px 8px', border: '1px solid #94a3b8', width: '14%', minWidth: '105px', whiteSpace: 'nowrap', textAlign: 'left' }}>الرصيد التراكمي</th>
+                  <th className="border border-slate-300 text-left font-mono" style={{ padding: '8px 6px', border: '1px solid #94a3b8', width: '15%', minWidth: '120px', whiteSpace: 'nowrap', textAlign: 'left' }}>مدين (+)</th>
+                  <th className="border border-slate-300 text-left font-mono" style={{ padding: '8px 6px', border: '1px solid #94a3b8', width: '15%', minWidth: '120px', whiteSpace: 'nowrap', textAlign: 'left' }}>دائن (-)</th>
+                  <th className="border border-slate-300 text-left font-mono" style={{ padding: '8px 8px', border: '1px solid #94a3b8', width: '16%', minWidth: '130px', whiteSpace: 'nowrap', textAlign: 'left' }}>الرصيد التراكمي</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -1736,20 +1736,20 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             <table className="w-full max-w-full text-right text-xs border-collapse" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'auto', boxSizing: 'border-box' }}>
               <colgroup>
                 <col style={{ width: '12%', minWidth: '85px' }} />
-                <col style={{ width: '36%', minWidth: '180px' }} />
+                <col style={{ width: '34%', minWidth: '160px' }} />
                 <col style={{ width: '14%', minWidth: '85px' }} />
-                <col style={{ width: '12%', minWidth: '75px' }} />
-                <col style={{ width: '12%', minWidth: '75px' }} />
-                <col style={{ width: '14%', minWidth: '95px' }} />
+                <col style={{ width: '13%', minWidth: '95px' }} />
+                <col style={{ width: '13%', minWidth: '95px' }} />
+                <col style={{ width: '14%', minWidth: '110px' }} />
               </colgroup>
               <thead>
                 <tr className="bg-[#1F3A5F] text-white border-b border-slate-300">
                   <th className="border border-slate-200 font-bold text-center" style={{ width: '12%', minWidth: '85px', whiteSpace: 'nowrap', padding: '8px 6px' }}>التاريخ</th>
-                  <th className="border border-slate-200 font-bold" style={{ width: '36%', minWidth: '180px', padding: '8px 10px' }}>نوع الحركة والبيان</th>
+                  <th className="border border-slate-200 font-bold" style={{ width: '34%', minWidth: '160px', padding: '8px 10px' }}>نوع الحركة والبيان</th>
                   <th className="border border-slate-200 font-bold text-center" style={{ width: '14%', minWidth: '85px', whiteSpace: 'nowrap', padding: '8px 6px' }}>رقم المستند</th>
-                  <th className="border border-slate-200 font-bold text-center" style={{ width: '12%', minWidth: '75px', whiteSpace: 'nowrap', padding: '8px 6px' }}>الوارد</th>
-                  <th className="border border-slate-200 font-bold text-center" style={{ width: '12%', minWidth: '75px', whiteSpace: 'nowrap', padding: '8px 6px' }}>المنصرف</th>
-                  <th className="border border-slate-200 font-bold text-center" style={{ width: '14%', minWidth: '95px', whiteSpace: 'nowrap', padding: '8px 8px' }}>الرصيد التراكمي</th>
+                  <th className="border border-slate-200 font-bold text-center" style={{ width: '13%', minWidth: '95px', whiteSpace: 'nowrap', padding: '8px 6px' }}>الوارد</th>
+                  <th className="border border-slate-200 font-bold text-center" style={{ width: '13%', minWidth: '95px', whiteSpace: 'nowrap', padding: '8px 6px' }}>المنصرف</th>
+                  <th className="border border-slate-200 font-bold text-center" style={{ width: '14%', minWidth: '110px', whiteSpace: 'nowrap', padding: '8px 8px' }}>الرصيد التراكمي</th>
                 </tr>
               </thead>
               <tbody>

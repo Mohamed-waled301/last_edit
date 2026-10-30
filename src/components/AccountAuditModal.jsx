@@ -221,10 +221,10 @@ export default function AccountAuditModal({ isOpen, onClose, onNotify, onRefresh
                             <th className="p-3 w-40">الطرف / الحساب</th>
                             <th className="p-3 w-28">نوع الحركة</th>
                             <th className="p-3 w-36 font-mono">رقم المستند</th>
-                            <th className="p-3 w-24 text-left font-mono">المبلغ</th>
+                            <th className="p-3 min-w-[120px] text-left font-mono whitespace-nowrap">المبلغ</th>
                             <th className="p-3">وصف الخلل والإجراء التصحيحي</th>
-                            <th className="p-3 w-28 text-left font-mono">الرصيد قبل</th>
-                            <th className="p-3 w-28 text-left font-mono">الرصيد بعد</th>
+                            <th className="p-3 min-w-[130px] text-left font-mono whitespace-nowrap">الرصيد قبل</th>
+                            <th className="p-3 min-w-[130px] text-left font-mono whitespace-nowrap">الرصيد بعد</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -246,13 +246,13 @@ export default function AccountAuditModal({ isOpen, onClose, onNotify, onRefresh
                                 <td className="p-3 font-bold text-slate-800">{anom.entity_name}</td>
                                 <td className="p-3 text-slate-600">{anom.doc_type}</td>
                                 <td className="p-3 font-mono font-bold text-slate-700">{anom.doc_number}</td>
-                                <td className="p-3 text-left font-mono font-bold text-rose-700">{formatCurrency(anom.amount)}</td>
+                                <td className="p-3 text-left font-mono font-bold text-rose-700 whitespace-nowrap min-w-[120px]">{formatCurrency(anom.amount)}</td>
                                 <td className="p-3">
                                   <span className="text-slate-700 block font-medium">{anom.issue_description}</span>
                                   <span className="text-[11px] text-blue-700 font-bold block mt-0.5">{anom.repair_action}</span>
                                 </td>
-                                <td className="p-3 text-left font-mono text-slate-500">{formatCurrency(anom.balance_before)}</td>
-                                <td className="p-3 text-left font-mono font-bold text-emerald-700">{formatCurrency(anom.balance_after)}</td>
+                                <td className="p-3 text-left font-mono text-slate-500 whitespace-nowrap min-w-[130px]">{formatCurrency(anom.balance_before)}</td>
+                                <td className="p-3 text-left font-mono font-bold text-emerald-700 whitespace-nowrap min-w-[130px]">{formatCurrency(anom.balance_after)}</td>
                               </tr>
                             );
                           })}

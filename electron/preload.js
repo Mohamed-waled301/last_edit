@@ -50,7 +50,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveExcel: (data) => ipcRenderer.invoke('excel:save', data),
   print: (options) => ipcRenderer.invoke('app:print', options),
   listPrinters: () => ipcRenderer.invoke('print:list-printers'),
-  printHtml: (params) => ipcRenderer.invoke('print:print-html', params),
+  printHtml: (params, options) => ipcRenderer.invoke('print:print-html', params, options),
   savePdf: (params) => ipcRenderer.invoke('print:save-pdf', params),
 
   // Single-device offline licensing IPC

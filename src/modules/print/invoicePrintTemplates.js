@@ -466,9 +466,9 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
           <col style="width: 13%; min-width: 85px;" />
           <col style="width: 40%; min-width: 180px;" />
           <col style="width: 10%; min-width: 65px;" />
-          <col style="width: 11%; min-width: 75px;" />
-          <col style="width: 9%; min-width: 60px;" />
-          <col style="width: 12%; min-width: 85px;" />
+          <col style="width: 11%; min-width: 90px;" />
+          <col style="width: 9%; min-width: 65px;" />
+          <col style="width: 12%; min-width: 95px;" />
         </colgroup>
         <thead>
           <tr style="background: #1e3a8a; color: #ffffff; font-weight: bold;">
@@ -476,9 +476,9 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
             <th style="padding: 8px 8px; text-align: right; width: 13%; min-width: 85px; white-space: nowrap;">كود الصنف</th>
             <th style="padding: 8px 12px; text-align: right; width: 40%; min-width: 180px;">بيان الصنف والمواصفات</th>
             <th style="padding: 8px 6px; text-align: center; width: 10%; min-width: 65px; white-space: nowrap;">الكمية</th>
-            <th style="padding: 8px 6px; text-align: left; width: 11%; min-width: 75px; white-space: nowrap;">سعر الوحدة</th>
-            <th style="padding: 8px 6px; text-align: center; width: 9%; min-width: 60px; white-space: nowrap;">الخصم</th>
-            <th style="padding: 8px 8px; text-align: left; width: 12%; min-width: 85px; white-space: nowrap;">الإجمالي</th>
+            <th style="padding: 8px 6px; text-align: left; width: 11%; min-width: 90px; white-space: nowrap;">سعر الوحدة</th>
+            <th style="padding: 8px 6px; text-align: center; width: 9%; min-width: 65px; white-space: nowrap;">الخصم</th>
+            <th style="padding: 8px 8px; text-align: left; width: 12%; min-width: 95px; white-space: nowrap;">الإجمالي</th>
           </tr>
         </thead>
         <tbody>
@@ -843,10 +843,10 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
           <col style="width: 13%; min-width: 80px;" />
           <col style="width: 34%; min-width: 160px;" />
           <col style="width: 9%; min-width: 60px;" />
-          <col style="width: 10%; min-width: 70px;" />
-          <col style="width: 8%; min-width: 55px;" />
-          <col style="width: 10%; min-width: 70px;" />
-          <col style="width: 11%; min-width: 75px;" />
+          <col style="width: 10%; min-width: 80px;" />
+          <col style="width: 8%; min-width: 60px;" />
+          <col style="width: 10%; min-width: 80px;" />
+          <col style="width: 12%; min-width: 95px;" />
         </colgroup>
         <thead>
           <tr style="background: #1e3a8a; color: #ffffff; font-weight: bold;">
@@ -854,10 +854,10 @@ export function generateSalesInvoiceHtml(invoice, settings = {}, paperSize = 'a4
             <th style="padding: 8px 8px; text-align: right; width: 13%; min-width: 80px; white-space: nowrap;">كود الصنف</th>
             <th style="padding: 8px 12px; text-align: right; width: 34%; min-width: 160px;">بيان الصنف والمقاس واللون</th>
             <th style="padding: 8px 6px; text-align: center; width: 9%; min-width: 60px; white-space: nowrap;">الكمية</th>
-            <th style="padding: 8px 6px; text-align: left; width: 10%; min-width: 70px; white-space: nowrap;">السعر قبل</th>
-            <th style="padding: 8px 6px; text-align: center; width: 8%; min-width: 55px; white-space: nowrap;">الخصم</th>
-            <th style="padding: 8px 6px; text-align: left; width: 10%; min-width: 70px; white-space: nowrap;">السعر بعد</th>
-            <th style="padding: 8px 8px; text-align: left; width: 11%; min-width: 75px; white-space: nowrap;">الإجمالي</th>
+            <th style="padding: 8px 6px; text-align: left; width: 10%; min-width: 80px; white-space: nowrap;">السعر قبل</th>
+            <th style="padding: 8px 6px; text-align: center; width: 8%; min-width: 60px; white-space: nowrap;">الخصم</th>
+            <th style="padding: 8px 6px; text-align: left; width: 10%; min-width: 80px; white-space: nowrap;">السعر بعد</th>
+            <th style="padding: 8px 8px; text-align: left; width: 12%; min-width: 95px; white-space: nowrap;">الإجمالي</th>
           </tr>
         </thead>
         <tbody>
@@ -1399,9 +1399,9 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
                 <th style="padding: 6px 12px; text-align: right; width: ${showFinancialRates ? '34%' : '40%'}; min-width: ${showFinancialRates ? '150px' : '160px'};">الورشة / المطبعة / مقاول الخدمة</th>
                 ${showFinancialRates ? `
                   <th style="padding: 6px 8px; text-align: center; width: 12%; min-width: 75px; white-space: nowrap;">طريقة المحاسبة</th>
-                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 80px; white-space: nowrap;">التكلفة الإجمالية</th>
-                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 75px; white-space: nowrap;">المسدد</th>
-                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 75px; white-space: nowrap;">المتبقي</th>
+                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 90px; white-space: nowrap;">التكلفة الإجمالية</th>
+                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 85px; white-space: nowrap;">المسدد</th>
+                  <th style="padding: 6px 8px; text-align: left; width: 12%; min-width: 85px; white-space: nowrap;">المتبقي</th>
                 ` : `
                   <th style="padding: 6px 12px; text-align: right; width: 35%; min-width: 150px;">تعليمات وملاحظات المرحلة</th>
                 `}

@@ -350,7 +350,7 @@ export default function DisbursementsListPage({ onNotify }) {
                 <th className="p-3">نوع الحركة</th>
                 <th className="p-3">الطرف / البيان</th>
                 <th className="p-3">الخزينة</th>
-                <th className="p-3 text-left font-mono">المبلغ</th>
+                <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المبلغ</th>
                 <th className="p-3">الحالة</th>
                 <th className="p-3">التاريخ</th>
                 <th className="p-3 text-center">الإجراءات</th>
@@ -407,7 +407,7 @@ export default function DisbursementsListPage({ onNotify }) {
                       {r.accountName}
                     </td>
 
-                    <td className="p-3 text-left font-mono font-bold">
+                    <td className="p-3 text-left font-mono font-bold whitespace-nowrap min-w-[130px]">
                       {r.direction === 'inflow' ? (
                         <span className="text-emerald-700">+{formatCurrency(r.amount)}</span>
                       ) : (

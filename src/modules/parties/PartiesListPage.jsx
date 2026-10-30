@@ -234,10 +234,10 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                   {effectiveMode === 'suppliers' ? 'رقم التواصل مع المورد' : (effectiveMode === 'customers' ? 'رقم الهاتف' : 'رقم التواصل مع المورد / الهاتف')}
                 </th>
                 <th className="p-3 text-center">الصفة</th>
-                <th className="p-3 text-left font-mono">رصيد المورد (له)</th>
-                <th className="p-3 text-left font-mono">رصيد العميل (عليه)</th>
-                <th className="p-3 text-center">صافي الرصيد</th>
-                <th className="p-3 text-left font-mono">الحد الائتماني</th>
+                <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">رصيد المورد (له)</th>
+                <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">رصيد العميل (عليه)</th>
+                <th className="p-3 text-center min-w-[130px] whitespace-nowrap">صافي الرصيد</th>
+                <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">الحد الائتماني</th>
                 <th className="p-3 text-center">إجراءات</th>
               </tr>
             </thead>
@@ -355,17 +355,17 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                       </td>
 
                       {/* Supplier Balance */}
-                      <td className="p-3 text-left font-mono font-bold text-gray-800">
+                      <td className="p-3 text-left font-mono font-bold text-gray-800 whitespace-nowrap min-w-[130px]">
                         {p.is_supplier ? formatCurrency(supBal) : '-'}
                       </td>
 
                       {/* Customer Balance */}
-                      <td className="p-3 text-left font-mono font-bold text-gray-800">
+                      <td className="p-3 text-left font-mono font-bold text-gray-800 whitespace-nowrap min-w-[130px]">
                         {p.is_customer ? formatCurrency(custBal) : '-'}
                       </td>
 
                       {/* Net Balance & Offset Button */}
-                      <td className="p-3 text-center">
+                      <td className="p-3 text-center whitespace-nowrap min-w-[130px]">
                         {isBoth ? (
                           <div className="space-y-1">
                             <span className={`inline-block font-mono font-bold px-2 py-0.5 rounded text-[11px] ${
@@ -399,7 +399,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                       </td>
 
                       {/* Customer Credit Limit & Available Credit */}
-                      <td className="p-3 text-left font-mono font-bold text-emerald-800">
+                      <td className="p-3 text-left font-mono font-bold text-emerald-800 whitespace-nowrap min-w-[130px]">
                         {p.is_customer && p.credit_limit > 0 ? (
                           <div className="flex flex-col items-start gap-0.5">
                             <span>{formatCurrency(p.credit_limit)}</span>
@@ -413,7 +413,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                       </td>
 
                       {/* Actions */}
-                      <td className="p-3 text-center">
+                      <td className="p-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             type="button"

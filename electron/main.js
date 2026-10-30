@@ -258,7 +258,11 @@ ipcMain.handle('print:list-printers', async () => {
     return [];
   }
   try {
-    const printers = await mainWindow.webContents.getPrintersAsync();
+    const printersPromise = mainWindow.webContents.getPrintersAsync();
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('انتهت مهلة استعلام قائمة الطابعات')), 5000)
+    );
+    const printers = await Promise.race([printersPromise, timeoutPromise]);
     return printers.map((p) => ({
       name: p.name,
       displayName: p.displayName || p.name,
@@ -272,16 +276,38 @@ ipcMain.handle('print:list-printers', async () => {
   }
 });
 
-ipcMain.handle('print:print-html', async (_event, params = {}) => {
-  const {
-    html = '',
-    deviceName = '',
-    pageSize = 'A4',
-    landscape = false,
-    margins = 'default',
-    copies = 1,
-    printBackground = true,
-  } = params;
+ipcMain.handle('print:print-html', async (_event, params = {}, options = {}) => {
+  // Normalize parameters whether called as printHtml(paramsObj) or printHtml(htmlStr, optionsObj)
+  let html = '';
+  let deviceName = '';
+  let pageSize = 'A4';
+  let landscape = false;
+  let margins = 'default';
+  let copies = 1;
+  let printBackground = true;
+
+  if (typeof params === 'string') {
+    html = params;
+    const opts = (options && typeof options === 'object') ? options : {};
+    deviceName = opts.deviceName || opts.printerName || '';
+    pageSize = opts.pageSize || opts.paperSize || 'A4';
+    landscape = Boolean(opts.landscape);
+    margins = opts.margins || 'default';
+    copies = Number(opts.copies) || 1;
+    printBackground = opts.printBackground !== false;
+  } else if (params && typeof params === 'object') {
+    html = params.html || '';
+    deviceName = params.deviceName || params.printerName || '';
+    pageSize = params.pageSize || params.paperSize || 'A4';
+    landscape = Boolean(params.landscape);
+    margins = params.margins || 'default';
+    copies = Number(params.copies) || 1;
+    printBackground = params.printBackground !== false;
+  }
+
+  if (!html || typeof html !== 'string' || !html.trim()) {
+    return { success: false, error: 'محتوى الطباعة فارغ أو غير صالح' };
+  }
 
   let hiddenWin = null;
   try {
@@ -298,11 +324,19 @@ ipcMain.handle('print:print-html', async (_event, params = {}) => {
       ? mainWindow.webContents.getURL()
       : undefined;
     const encoded = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-    await hiddenWin.loadURL(encoded, baseAppUrl ? { baseURLForDataURL: baseAppUrl } : undefined);
 
-    // Wait for fonts to finish rendering
+    // Page load with timeout safeguard
+    const loadPromise = hiddenWin.loadURL(encoded, baseAppUrl ? { baseURLForDataURL: baseAppUrl } : undefined);
+    const loadTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('انتهت مهلة تجهيز المستند للطباعة')), 10000)
+    );
+    await Promise.race([loadPromise, loadTimeout]);
+
+    // Fonts ready check with safe timeout
     try {
-      await hiddenWin.webContents.executeJavaScript('document.fonts ? document.fonts.ready : Promise.resolve()');
+      const fontPromise = hiddenWin.webContents.executeJavaScript('document.fonts ? document.fonts.ready : Promise.resolve()');
+      const fontTimeout = new Promise((resolve) => setTimeout(resolve, 2500));
+      await Promise.race([fontPromise, fontTimeout]);
     } catch {}
 
     // Map margin options
@@ -313,32 +347,61 @@ ipcMain.handle('print:print-html', async (_event, params = {}) => {
       marginConfig = { marginType: 'minimum' };
     }
 
+    // Force silent: true on hidden BrowserWindow to prevent native modal freeze
+    // Passing deviceName sends to specific printer; empty deviceName sends to OS default printer
+    const printOptions = {
+      silent: true,
+      deviceName: deviceName || '',
+      pageSize: pageSize === '80mm' ? { width: 80000, height: 297000 } : pageSize,
+      landscape: Boolean(landscape),
+      margins: marginConfig,
+      copies: Math.max(1, Number(copies) || 1),
+      printBackground: printBackground !== false,
+    };
+
     return await new Promise((resolve) => {
-      hiddenWin.webContents.print(
-        {
-          silent: Boolean(deviceName),
-          deviceName: deviceName || '',
-          pageSize: pageSize === '80mm' ? { width: 80000, height: 297000 } : pageSize,
-          landscape: Boolean(landscape),
-          margins: marginConfig,
-          copies: Math.max(1, Number(copies) || 1),
-          printBackground: printBackground !== false,
-        },
-        (success, failureReason) => {
-          if (success) {
-            resolve({ success: true });
-          } else {
-            resolve({ success: false, error: failureReason || 'فشلت الطباعة، تأكد من اتصال الطابعة' });
-          }
+      let finished = false;
+      const printTimer = setTimeout(() => {
+        if (!finished) {
+          finished = true;
+          resolve({
+            success: false,
+            error: 'انتهت مهلة استجابة الطابعة، يرجى التأكد من توصيل الطابعة وتشغيلها',
+          });
         }
-      );
+      }, 15000);
+
+      try {
+        hiddenWin.webContents.print(printOptions, (success, failureReason) => {
+          clearTimeout(printTimer);
+          if (!finished) {
+            finished = true;
+            if (success) {
+              resolve({ success: true });
+            } else {
+              resolve({
+                success: false,
+                error: failureReason || 'فشلت الطباعة، تأكد من توصيل الطابعة وصلاحية المنفذ',
+              });
+            }
+          }
+        });
+      } catch (err) {
+        clearTimeout(printTimer);
+        if (!finished) {
+          finished = true;
+          resolve({ success: false, error: err?.message || 'فشلت عملية الطباعة' });
+        }
+      }
     });
   } catch (err) {
     console.error('[print:print-html error]:', err);
     return { success: false, error: err?.message || 'فشلت عملية الطباعة' };
   } finally {
     if (hiddenWin && !hiddenWin.isDestroyed()) {
-      hiddenWin.destroy();
+      try {
+        hiddenWin.destroy();
+      } catch {}
     }
   }
 });
@@ -351,12 +414,27 @@ ipcMain.handle('print:save-pdf', async (_event, params = {}) => {
     landscape = false,
   } = params;
 
-  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-    title: 'حفظ كملف PDF',
-    defaultPath: filename,
-    filters: [{ name: 'ملفات PDF', extensions: ['pdf'] }],
-  });
+  if (!html || typeof html !== 'string' || !html.trim()) {
+    return { success: false, error: 'محتوى المستند فارغ' };
+  }
 
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { success: false, error: 'نافذة النظام الرئيسية غير متاحة' };
+  }
+
+  let showDialogResult;
+  try {
+    showDialogResult = await dialog.showSaveDialog(mainWindow, {
+      title: 'حفظ كملف PDF',
+      defaultPath: filename,
+      filters: [{ name: 'ملفات PDF', extensions: ['pdf'] }],
+    });
+  } catch (dialogErr) {
+    console.error('[save-pdf dialog error]:', dialogErr);
+    return { success: false, error: 'تعذر فتح نافذة تحديد مسار حفظ الملف' };
+  }
+
+  const { canceled, filePath } = showDialogResult || { canceled: true };
   if (canceled || !filePath) {
     return { canceled: true };
   }
@@ -376,17 +454,28 @@ ipcMain.handle('print:save-pdf', async (_event, params = {}) => {
       ? mainWindow.webContents.getURL()
       : undefined;
     const encoded = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-    await hiddenWin.loadURL(encoded, baseAppUrl ? { baseURLForDataURL: baseAppUrl } : undefined);
+
+    const loadPromise = hiddenWin.loadURL(encoded, baseAppUrl ? { baseURLForDataURL: baseAppUrl } : undefined);
+    const loadTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('انتهت مهلة تجهيز المستند لتصدير PDF')), 10000)
+    );
+    await Promise.race([loadPromise, loadTimeout]);
 
     try {
-      await hiddenWin.webContents.executeJavaScript('document.fonts ? document.fonts.ready : Promise.resolve()');
+      const fontPromise = hiddenWin.webContents.executeJavaScript('document.fonts ? document.fonts.ready : Promise.resolve()');
+      const fontTimeout = new Promise((resolve) => setTimeout(resolve, 2500));
+      await Promise.race([fontPromise, fontTimeout]);
     } catch {}
 
-    const pdfData = await hiddenWin.webContents.printToPDF({
+    const pdfPromise = hiddenWin.webContents.printToPDF({
       pageSize: pageSize === '80mm' ? { width: 80000, height: 297000 } : pageSize,
       landscape: Boolean(landscape),
       printBackground: true,
     });
+    const pdfTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('انتهت مهلة توليد ملف PDF')), 15000)
+    );
+    const pdfData = await Promise.race([pdfPromise, pdfTimeout]);
 
     await fs.promises.writeFile(filePath, pdfData);
     return { success: true, filePath };
@@ -395,7 +484,9 @@ ipcMain.handle('print:save-pdf', async (_event, params = {}) => {
     return { success: false, error: err?.message || 'فشل حفظ ملف PDF' };
   } finally {
     if (hiddenWin && !hiddenWin.isDestroyed()) {
-      hiddenWin.destroy();
+      try {
+        hiddenWin.destroy();
+      } catch {}
     }
   }
 });
@@ -406,18 +497,38 @@ ipcMain.handle('app:print', async (_event, options = {}) => {
     return { success: false, error: 'النافذة غير متاحة' };
   }
   return new Promise((resolve) => {
-    mainWindow.webContents.print(
-      {
-        silent: options.silent || false,
-        printBackground: options.printBackground !== false,
-        deviceName: options.deviceName || '',
-        margins: options.margins || { marginType: 'none' },
-        pageSize: options.pageSize || undefined,
-      },
-      (success, failureReason) => {
-        resolve({ success, failureReason });
+    let finished = false;
+    const printTimer = setTimeout(() => {
+      if (!finished) {
+        finished = true;
+        resolve({ success: false, failureReason: 'انتهت مهلة استجابة نافذة الطباعة' });
       }
-    );
+    }, 15000);
+
+    try {
+      mainWindow.webContents.print(
+        {
+          silent: options.silent || false,
+          printBackground: options.printBackground !== false,
+          deviceName: options.deviceName || '',
+          margins: options.margins || { marginType: 'none' },
+          pageSize: options.pageSize || undefined,
+        },
+        (success, failureReason) => {
+          clearTimeout(printTimer);
+          if (!finished) {
+            finished = true;
+            resolve({ success, failureReason });
+          }
+        }
+      );
+    } catch (err) {
+      clearTimeout(printTimer);
+      if (!finished) {
+        finished = true;
+        resolve({ success: false, failureReason: err?.message || 'فشل أمر الطباعة' });
+      }
+    }
   });
 });
 
