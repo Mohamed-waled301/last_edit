@@ -5,16 +5,10 @@ import {
   Trash2, 
   DollarSign, 
   Calendar, 
-  Percent, 
-  AlertCircle,
-  Truck,
   ArrowRight,
   Save,
   Package,
-  Layers,
-  FolderTree,
   CheckCircle2,
-  Clock,
   Info,
   X,
   Filter
@@ -27,7 +21,7 @@ import MoneyInput, { NumberInput } from '../../components/MoneyInput';
 import { navigationGuard } from '../../utils/navigationGuard';
 import { api } from '../../services/api';
 import { formatCurrency, formatNumber, getTodayDateString } from '../../utils/formatters';
-import { Validators, FieldError } from '../../utils/validation';
+import { FieldError } from '../../utils/validation';
 import { handleFormKeyDown } from '../../utils/formNavigation';
 import { calculatePurchaseOrderTotals } from '../../logic/purchaseOrderCalculations';
 import { generatePurchaseInvoiceHtml } from '../print/invoicePrintTemplates';
@@ -111,7 +105,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     } else if (onCancel) {
       onCancel();
     } else {
-      window.location.hash = '#/purchases';
+      window.location.assign('#/purchases');
     }
   };
 
@@ -119,9 +113,9 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
   useEffect(() => {
     const unregister = navigationGuard.register(() => {
       if (isSavedRef.current) return false;
-      if (Boolean(form.supplier_id)) return true;
-      if (Boolean(form.notes?.trim())) return true;
-      if (Boolean(form.po_number?.trim())) return true;
+      if (form.supplier_id) return true;
+      if (form.notes?.trim()) return true;
+      if (form.po_number?.trim()) return true;
       if (form.items.some((it) => Boolean(it.material_id) || (it.quantity_ordered && it.quantity_ordered !== '1') || Boolean(it.unit_price))) {
         return true;
       }
@@ -287,7 +281,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
       }
     }
     loadData();
-  }, [orderId]);
+  }, [orderId, today]);
 
   // Selected supplier details
   const selectedSupplier = suppliers.find((s) => s.id === form.supplier_id);

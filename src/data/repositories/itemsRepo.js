@@ -467,6 +467,8 @@ export const itemsRepo = {
       updated.opening_cost = openingCost;
       if (variants.length === 0) {
         updated.current_stock = newOpen;
+      } else {
+        updated.current_stock = totalStock;
       }
 
       // Update the opening balance stock movement
@@ -811,7 +813,7 @@ export const itemsRepo = {
       ];
       try {
         await db.item_units.bulkPut(defaults);
-      } catch (e) {}
+      } catch {}
       return defaults;
     }
     return units;

@@ -249,8 +249,33 @@ export const api = {
     return { success: true, data: list, parties: list };
   },
   getParty: async (id) => {
-    const party = await partiesRepo.getById(id);
-    return { success: true, data: party, party };
+    if (!id) return { success: false, data: null };
+    let party = await partiesRepo.getById(id);
+    if (!party && db.customers) {
+      const cust = await db.customers.get(id);
+      if (cust) {
+        party = {
+          ...cust,
+          is_customer: 1,
+          is_supplier: 0,
+          customer_balance: cust.balance_due || cust.current_balance || 0,
+          balance_due: cust.balance_due || cust.current_balance || 0,
+        };
+      }
+    }
+    if (!party && db.suppliers) {
+      const sup = await db.suppliers.get(id);
+      if (sup) {
+        party = {
+          ...sup,
+          is_customer: 0,
+          is_supplier: 1,
+          supplier_balance: sup.balance_due || sup.current_balance || 0,
+          balance_due: sup.balance_due || sup.current_balance || 0,
+        };
+      }
+    }
+    return { success: Boolean(party), data: party, party };
   },
   createParty: async (data) => {
     const res = await partiesRepo.create(data, currentUserId);
@@ -454,6 +479,10 @@ export const api = {
   getPurchaseOrders: async () => {
     const list = await suppliersRepo.getPurchaseOrders();
     return { success: true, data: list, purchase_orders: list };
+  },
+  getPurchaseOrder: async (id) => {
+    const po = await suppliersRepo.getPurchaseOrder(id);
+    return { success: Boolean(po), data: po, purchase_order: po };
   },
   createPurchaseOrder: async (data) => {
     const res = await suppliersRepo.createPurchaseOrder(data, currentUserId);
@@ -740,6 +769,10 @@ export const api = {
     const list = await salesRepo.getSalesInvoices(userOutletId);
     return { success: true, data: list, invoices: list };
   },
+  getSalesInvoice: async (id) => {
+    const inv = await salesRepo.getSalesInvoice(id);
+    return { success: Boolean(inv), data: inv, invoice: inv };
+  },
   getSalesReport: async (filters = {}) => {
     const res = await salesRepo.getSalesReport(filters);
     return { success: true, data: res.customerRows, ...res };
@@ -821,8 +854,8 @@ export const api = {
     syncPush('treasury_accounts', 'insert', a);
     return { success: true, data: a, account: a, message: 'تم إضافة الحساب المالي' };
   },
-  getTransactions: async (params = '') => {
-    const list = await cashRepo.getTransactions();
+  getTransactions: async (filters = {}) => {
+    const list = await cashRepo.getTransactions(filters);
     return { success: true, data: list, transactions: list };
   },
   recordCashTransaction: async (data) => {
@@ -942,72 +975,7 @@ export const api = {
     return { success: true, data: enriched, receipt: enriched };
   },
 
-  // Sales Invoices & Reports
-  getSalesInvoices: async (outletId = null) => {
-    const list = await salesRepo.getSalesInvoices(outletId);
-    return { success: true, data: list, invoices: list };
-  },
-  getSalesInvoice: async (id) => {
-    const inv = await salesRepo.getSalesInvoice(id);
-    return { success: Boolean(inv), data: inv, invoice: inv };
-  },
-  getSalesReport: async (filters = {}) => {
-    const res = await salesRepo.getSalesReport(filters);
-    return { success: true, data: res, report: res };
-  },
 
-  // Purchase Orders & Invoices
-  getPurchaseOrders: async () => {
-    const list = await suppliersRepo.getPurchaseOrders();
-    return { success: true, data: list, purchase_orders: list };
-  },
-  getPurchaseOrder: async (id) => {
-    const po = await suppliersRepo.getPurchaseOrder(id);
-    return { success: Boolean(po), data: po, purchase_order: po };
-  },
-
-  // Parties & Statements
-  getParties: async () => {
-    const list = await partiesRepo.getAll();
-    return { success: true, data: list, parties: list };
-  },
-  getParty: async (id) => {
-    if (!id) return { success: false, data: null };
-    let party = await partiesRepo.getById(id);
-    if (!party && db.customers) {
-      const cust = await db.customers.get(id);
-      if (cust) {
-        party = {
-          ...cust,
-          is_customer: 1,
-          is_supplier: 0,
-          customer_balance: cust.balance_due || cust.current_balance || 0,
-          balance_due: cust.balance_due || cust.current_balance || 0,
-        };
-      }
-    }
-    if (!party && db.suppliers) {
-      const sup = await db.suppliers.get(id);
-      if (sup) {
-        party = {
-          ...sup,
-          is_customer: 0,
-          is_supplier: 1,
-          supplier_balance: sup.balance_due || sup.current_balance || 0,
-          balance_due: sup.balance_due || sup.current_balance || 0,
-        };
-      }
-    }
-    return { success: Boolean(party), data: party, party };
-  },
-  getCustomerStatement: async (customerId) => {
-    const res = await salesRepo.getCustomerStatement(customerId);
-    return { success: true, data: res, ...res };
-  },
-  getSupplierStatement: async (supplierId) => {
-    const res = await suppliersRepo.getStatement(supplierId);
-    return { success: true, data: res, ...res };
-  },
 
 
   // Reports & Dashboard

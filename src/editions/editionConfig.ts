@@ -8,6 +8,9 @@
 
 export type EditionId = 'cutting' | 'standard';
 
+declare const __EDITION__: EditionId | undefined;
+declare const process: { env?: Record<string, string | undefined> } | undefined;
+
 export interface EditionFeatures {
   cutting: boolean;
   stages: boolean;

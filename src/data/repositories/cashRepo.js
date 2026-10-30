@@ -1,6 +1,7 @@
 import db from '../db';
 import auditRepo from './auditRepo';
 import { validateNotPastDate } from '../../utils/formatters';
+import { partiesRepo } from './partiesRepo';
 
 export const cashRepo = {
   async getAccounts() {
@@ -221,8 +222,7 @@ export const cashRepo = {
     const party = await db.parties.get(supplier_id);
     if (!party || !party.is_supplier) throw new Error('المورد المحدد غير موجود بالنظام');
 
-    const { partiesRepo } = await import('./partiesRepo');
-    const fullParty = await partiesRepo.getById(supplier_id);
+        const fullParty = await partiesRepo.getById(supplier_id);
     const owedBalance = Number(fullParty?.supplier_balance) || 0;
 
     if (!data.production_order_id && !data.allowAdvance && payAmount > owedBalance) {
@@ -344,8 +344,7 @@ export const cashRepo = {
     const party = await db.parties.get(customer_id);
     if (!party || !party.is_customer) throw new Error('العميل المحدد غير موجود بالنظام');
 
-    const { partiesRepo } = await import('./partiesRepo');
-    const fullParty = await partiesRepo.getById(customer_id);
+        const fullParty = await partiesRepo.getById(customer_id);
     const owedBalance = Number(fullParty?.customer_balance) || 0;
 
     if (recAmount > owedBalance) {

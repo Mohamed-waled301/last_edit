@@ -7,16 +7,13 @@ import { toPiasters, fromPiasters, distributeCostLargestRemainder } from '../../
 import {
   calculateMaterialLineCost,
   calculateTotalMaterialsCost,
-  calculateTotalAdditionalCosts,
-  calculateTotalProductCost,
-  calculateUnitCost
+  calculateTotalAdditionalCosts
 } from '../../logic/productionOrderCalculations';
 import {
   CUT_ORDER_SIZES,
   validateAndCleanMatrix,
   distributeMatrixCostLargestRemainder,
-  computeColumnTotals,
-  computeGrandTotal
+  computeColumnTotals
 } from '../../logic/cutOrderMatrixCalculations';
 
 export const STAGE_CONFIGS = {
@@ -242,7 +239,7 @@ export const manufacturingRepo = {
         parsedSizeQuantities = typeof order.size_quantities === 'string'
           ? JSON.parse(order.size_quantities)
           : order.size_quantities;
-      } catch (e) {
+      } catch {
         parsedSizeQuantities = {};
       }
     }
@@ -354,7 +351,7 @@ export const manufacturingRepo = {
     // Parse size quantities map
     let sizesMap = {};
     if (typeof sizeQuantities === 'string') {
-      try { sizesMap = JSON.parse(sizeQuantities); } catch (e) { sizesMap = {}; }
+      try { sizesMap = JSON.parse(sizeQuantities); } catch { sizesMap = {}; }
     } else if (sizeQuantities && typeof sizeQuantities === 'object') {
       sizesMap = sizeQuantities;
     }
@@ -463,7 +460,6 @@ export const manufacturingRepo = {
     }
 
     const id = data.id || `po-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-    const orderNumber = cuttingNumber;
     const now = new Date().toISOString();
     const today = (data.start_date || now.split('T')[0]);
 
@@ -726,7 +722,7 @@ export const manufacturingRepo = {
         if (typeof rawSizes === 'string') {
           try {
             legacySizesMap = JSON.parse(rawSizes);
-          } catch (e) {
+          } catch {
             legacySizesMap = {};
           }
         } else if (typeof rawSizes === 'object' && rawSizes !== null) {
@@ -1451,7 +1447,7 @@ export const manufacturingRepo = {
     return await this.addStagePayment(data.production_order_id, 'printing', data, userId);
   },
 
-  async updatePrintingPayment(id, data, userId = 'usr-production') {
+  async updatePrintingPayment(id, data, _userId = 'usr-production') {
     const existing = await db.payments.get(id);
     if (existing) {
       const updateFields = {};
