@@ -52,6 +52,13 @@ export const MoneyInput = forwardRef(function MoneyInput(
     }
   }, [value]);
 
+  // Clean up focus lock on unmount
+  useEffect(() => {
+    return () => {
+      isFocusedRef.current = false;
+    };
+  }, []);
+
   const sanitize = (raw) => {
     if (raw === null || raw === undefined) return '';
     let text = normalizeDigits(String(raw));

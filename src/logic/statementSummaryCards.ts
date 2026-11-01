@@ -180,7 +180,7 @@ export function calculateStatementSummaryCards(options: {
       subtitleClass = 'text-slate-400';
       valueClass = 'text-slate-200';
     } else {
-      subtitle = 'رصيد دائن / دافع زيادات (له)';
+      subtitle = 'رصيد دائن / دفعات مقدمة (له)';
       subtitleClass = 'text-rose-400';
       valueClass = 'text-rose-400';
     }

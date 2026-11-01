@@ -1355,9 +1355,7 @@ export const manufacturingRepo = {
     }
 
     const remaining = Number(stage.remaining) || 0;
-    if (amount > remaining) {
-      throw new Error(`مبلغ الدفعة (${amount} ج.م) لا يمكن أن يتجاوز المبلغ المتبقي لمرحلة ${STAGE_CONFIGS[stageKey]?.title} (${remaining} ج.م)`);
-    }
+    const isAdvance = remaining <= 0 || amount > remaining;
 
     // Call cashRepo.recordSupplierPayment to reduce treasury and supplier balance in shared ledger
     const res = await cashRepo.recordSupplierPayment({
@@ -1366,10 +1364,10 @@ export const manufacturingRepo = {
       payment_date: paymentData.payment_date || getTodayDateString(),
       payment_method: paymentData.payment_method || 'نقداً',
       account_id: paymentData.account_id,
-      notes: paymentData.notes || `دفعة مرحلة ${STAGE_CONFIGS[stageKey]?.title} لأمر القص ${order.cutting_number}`,
+      notes: paymentData.notes || `دفعة ${isAdvance ? 'مقدمة ' : ''}مرحلة ${STAGE_CONFIGS[stageKey]?.title} لأمر القص ${order.cutting_number}`,
       production_order_id: orderId,
       stage_type: stageKey,
-      max_allowed: remaining
+      allowAdvance: true
     }, userId);
 
     return res;

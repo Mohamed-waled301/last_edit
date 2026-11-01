@@ -879,10 +879,7 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
       return;
     }
 
-    if (amt > stComputed.remaining) {
-      setPaymentError(`مبلغ الدفعة (${amt} ج.م) لا يمكن أن يتجاوز المبلغ المتبقي للمرحلة (${stComputed.remaining} ج.م)`);
-      return;
-    }
+    // Allow advance payments for stage and workshop without blocking
 
     try {
       setPaymentSubmitting(true);

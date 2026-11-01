@@ -184,7 +184,7 @@ describe('Statement of Account (كشف الحساب) Summary Cards & Calculation
       ]
     });
     expect(custCards.finalBalance).toBe(-300);
-    expect(custCards.subtitle).toBe('رصيد دائن / دافع زيادات (له)');
+    expect(custCards.subtitle).toBe('رصيد دائن / دفعات مقدمة (له)');
     expect(custCards.valueClass).toBe('text-rose-400');
     expect(custCards.subtitleClass).toBe('text-rose-400');
 

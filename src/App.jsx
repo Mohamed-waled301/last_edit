@@ -205,9 +205,14 @@ export default function App() {
     // Full-Page SPA Safe Hash Routing Sync with unsaved changes guard
     const handleHashChange = () => {
       const newHash = window.location.hash || '';
+      if (newHash === currentHashRef.current) return;
       if (!bypassGuardRef.current && navigationGuard.hasUnsavedChanges()) {
         const target = newHash;
+        bypassGuardRef.current = true;
         window.location.hash = currentHashRef.current;
+        setTimeout(() => {
+          bypassGuardRef.current = false;
+        }, 80);
         setUnsavedModal({ isOpen: true, pendingNav: target });
         return;
       }
@@ -828,7 +833,7 @@ export default function App() {
 
         {/* Dynamic Screen View wrapped with ErrorBoundary */}
         <main className="flex-1 p-3 sm:p-5 lg:p-6 w-full max-w-[1700px] mx-auto min-w-0 overflow-y-auto overflow-x-hidden">
-          <ErrorBoundary>
+          <ErrorBoundary key={route.raw || 'main-view'}>
             {renderScreen()}
           </ErrorBoundary>
         </main>

@@ -224,14 +224,7 @@ export const cashRepo = {
 
         const fullParty = await partiesRepo.getById(supplier_id);
     const owedBalance = Number(fullParty?.supplier_balance) || 0;
-
-    if (!data.production_order_id && !data.allowAdvance && payAmount > owedBalance) {
-      throw new Error(`مبلغ دفعة المورد (${payAmount} ج.م) لا يمكن أن يتجاوز رصيد المديونية المستحق له (${owedBalance} ج.م)`);
-    }
-
-    if (data.max_allowed !== undefined && payAmount > Number(data.max_allowed)) {
-      throw new Error(`مبلغ الدفعة (${payAmount} ج.م) لا يمكن أن يتجاوز المبلغ المتبقي للمرحلة (${data.max_allowed} ج.م)`);
-    }
+    const isAdvance = owedBalance <= 0 || payAmount > owedBalance;
 
     // Default to main treasury if not provided
     let targetAccId = account_id;
@@ -288,7 +281,8 @@ export const cashRepo = {
         amount: payAmount,
         payment_date: payment_date || now.split('T')[0],
         payment_method: payment_method || 'نقداً',
-        notes: notes || '',
+        notes: notes || (isAdvance ? (owedBalance <= 0 ? 'دفعة مقدمة تحت الحساب' : 'سداد رصيد مع دفعة مقدمة تحت الحساب') : ''),
+        is_advance: isAdvance ? 1 : 0,
         status: 'issued',
         created_by: userId,
         created_at: now
@@ -305,7 +299,7 @@ export const cashRepo = {
         balance_after: finalAccBal,
         reference_type: 'SUPPLIER_PAYMENT',
         reference_id: paymentId,
-        description: `سداد دفعة للمورد: ${party.name}${notes ? ' - ' + notes : ''}`,
+        description: `سداد دفعة للمورد: ${party.name}${notes ? ' - ' + notes : (isAdvance ? ' (دفعة مقدمة تحت الحساب)' : '')}`,
         created_by: userId,
         created_at: now
       });
@@ -325,7 +319,9 @@ export const cashRepo = {
       paymentNumber,
       amount: data.amount,
       txNumber,
-      treasuryBalanceAfter: finalAccBal
+      treasuryBalanceAfter: finalAccBal,
+      isAdvance,
+      owedBalanceBefore: owedBalance
     };
   },
 
@@ -346,10 +342,7 @@ export const cashRepo = {
 
         const fullParty = await partiesRepo.getById(customer_id);
     const owedBalance = Number(fullParty?.customer_balance) || 0;
-
-    if (recAmount > owedBalance) {
-      throw new Error(`قيمة الدفعة (${recAmount} ج.م) لا يمكن أن تتجاوز رصيد المديونية المستحق على العميل (${owedBalance} ج.م)`);
-    }
+    const isAdvance = owedBalance <= 0 || recAmount > owedBalance;
 
     // Default to main treasury if not provided
     let targetAccId = account_id;
@@ -403,7 +396,8 @@ export const cashRepo = {
         amount: recAmount,
         payment_date: payment_date || now.split('T')[0],
         payment_method: payment_method || 'نقداً',
-        notes: notes || '',
+        notes: notes || (isAdvance ? (owedBalance <= 0 ? 'دفعة مقدمة تحت الحساب' : 'سداد رصيد مع دفعة مقدمة تحت الحساب') : ''),
+        is_advance: isAdvance ? 1 : 0,
         status: 'issued',
         created_by: userId,
         created_at: now
@@ -420,7 +414,7 @@ export const cashRepo = {
         balance_after: finalAccBal,
         reference_type: 'CUSTOMER_RECEIPT',
         reference_id: receiptId,
-        description: `استلام دفعة نقدية من العميل: ${party.name}${notes ? ' - ' + notes : ''}`,
+        description: `استلام دفعة نقدية من العميل: ${party.name}${notes ? ' - ' + notes : (isAdvance ? ' (دفعة مقدمة تحت الحساب)' : '')}`,
         created_by: userId,
         created_at: now
       });
@@ -440,7 +434,9 @@ export const cashRepo = {
       receiptNumber,
       amount: data.amount,
       txNumber,
-      treasuryBalanceAfter: finalAccBal
+      treasuryBalanceAfter: finalAccBal,
+      isAdvance,
+      owedBalanceBefore: owedBalance
     };
   },
 

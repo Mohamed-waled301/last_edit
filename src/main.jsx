@@ -33,16 +33,14 @@ if (typeof window !== 'undefined') {
     return _origAlert.apply(this, arguments);
   };
 
+  // Safe global unhandled rejection & error listeners to prevent Electron UI freezes
   window.addEventListener('unhandledrejection', (event) => {
-    const reasonStr = String(event.reason || '');
-    if (
-      reasonStr.includes('objectStore') ||
-      reasonStr.includes('IDBTransaction') ||
-      reasonStr.includes('NotFoundError')
-    ) {
-      event.preventDefault();
-      console.warn('Silently handled unhandled IDB error:', event.reason);
-    }
+    event.preventDefault();
+    console.warn('Safely intercepted unhandled promise rejection in renderer:', event.reason);
+  });
+
+  window.addEventListener('error', (event) => {
+    console.warn('Safely intercepted global window error in renderer:', event.error || event.message);
   });
 }
 

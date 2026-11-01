@@ -110,10 +110,10 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         cashRepo.recordSupplierPayment({ supplier_id: sup.id, amount: -50 })
       ).rejects.toThrow(/مبلغ .* يجب أن يكون رقماً أكبر من صفر/);
 
-      // Exceeds balance (1500 > 1000)
-      await expect(
-        cashRepo.recordSupplierPayment({ supplier_id: sup.id, amount: 1500 })
-      ).rejects.toThrow(/لا يمكن أن يتجاوز رصيد المديونية المستحق/);
+      // Advance payment exceeding balance (1500 > 1000) now succeeds seamlessly
+      const advPay = await cashRepo.recordSupplierPayment({ supplier_id: sup.id, amount: 1500 });
+      expect(advPay.success).toBe(true);
+      expect(advPay.isAdvance).toBe(true);
     });
 
     it('cancels supplier payment via reversing entries (never deleted)', async () => {
