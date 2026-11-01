@@ -312,7 +312,10 @@ export default function App() {
       return;
     }
     currentHashRef.current = formatted;
-    window.location.hash = formatted;
+    setRoute(parseHash(formatted));
+    if (window.location.hash !== formatted) {
+      window.location.hash = formatted;
+    }
     setSidebarOpen(false);
   };
 
