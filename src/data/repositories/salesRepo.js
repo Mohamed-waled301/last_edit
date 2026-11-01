@@ -26,7 +26,8 @@ export const salesRepo = {
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       // Current Balance = Opening Balance + Credit Sales - Cash In / Receipts
       const opening = resolveOpeningBalance(c, 'customer');
-      const bal = BalanceCalculator.calculateCustomerBalance(custInvoices, custReturns, opening, unlinkedPayments);
+      const openingType = resolveOpeningType(c, 'customer');
+      const bal = BalanceCalculator.calculateCustomerBalance(custInvoices, custReturns, opening, unlinkedPayments, openingType);
 
       return {
         ...c,
@@ -85,13 +86,14 @@ export const salesRepo = {
 
     // Opening balance row (رصيد أول المدة) comes first chronologically
     if (opening > 0) {
+      const isCredit = openingType === 'credit';
       transactions.push({
         date: customer.created_at ? String(customer.created_at).split('T')[0] : '',
         type: 'رصيد أول المدة',
         reference: 'OPENING',
-        description: `رصيد افتتاحي (${openingType === 'credit' ? 'دائن' : 'مدين'})`,
-        debit: opening,
-        credit: 0,
+        description: `رصيد افتتاحي (${isCredit ? 'دائن - دفعة مقدمة' : 'مدين - مستحق'})`,
+        debit: isCredit ? 0 : opening,
+        credit: isCredit ? opening : 0,
         raw_date: '0000-00-00T00:00:00.000Z',
         is_opening: true,
       });
@@ -153,7 +155,7 @@ export const salesRepo = {
       .filter(p => !p.invoice_id)
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-    const bal = BalanceCalculator.calculateCustomerBalance(activeInvoices, activeReturns, opening, unlinkedCustPaid);
+    const bal = BalanceCalculator.calculateCustomerBalance(activeInvoices, activeReturns, opening, unlinkedCustPaid, openingType);
 
     return {
       customer: { ...customer, opening_balance: opening, opening_balance_type: openingType, ...bal },

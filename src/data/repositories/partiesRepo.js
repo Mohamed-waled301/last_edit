@@ -62,8 +62,8 @@ function normalizePartyOpenings(data = {}, current = null) {
 
 /**
  * Compute final ledger balances for a party:
- * Supplier Balance (له) = amounts we owe them (Opening + Purchases - Payments)
- * Customer Balance (عليه) = amounts they owe us (Opening + Sales - Receipts)
+ * Supplier Balance (له / مقدماً) = amounts we owe them (Opening + Purchases - Payments)
+ * Customer Balance (عليه / مقدماً) = amounts they owe us (Opening + Sales - Receipts)
  * Net Balance (الصافي) = Customer Balance - Supplier Balance (عليه - له)
  */
 import { computeAvailableCredit, toPiasters, fromPiasters } from '../../utils/money';
@@ -71,10 +71,11 @@ import { computeAvailableCredit, toPiasters, fromPiasters } from '../../utils/mo
 function withComputedBalances(party, bal) {
   const supplierOpening = resolveOpeningBalance(party, 'supplier');
   const customerOpening = resolveOpeningBalance(party, 'customer');
-  const finalSup = normalizeOpeningBalance(bal.supplierBalance);
-  const finalCust = normalizeOpeningBalance(bal.customerBalance);
+  // Preserve signed balances for advance payments (negative = advances)
+  const finalSup = Number(bal.supplierBalance) || 0;
+  const finalCust = Number(bal.customerBalance) || 0;
   const finalNet = fromPiasters(toPiasters(finalCust) - toPiasters(finalSup));
-  const finalMaxOffset = Math.max(0, fromPiasters(Math.min(toPiasters(finalSup), toPiasters(finalCust))));
+  const finalMaxOffset = Math.max(0, fromPiasters(Math.min(Math.max(0, toPiasters(finalSup)), Math.max(0, toPiasters(finalCust)))));
   const creditLimitVal = party.credit_limit !== undefined ? Number(party.credit_limit) || 0 : 0;
   const availCredit = computeAvailableCredit(creditLimitVal, finalCust);
 
@@ -88,11 +89,11 @@ function withComputedBalances(party, bal) {
     opening_balance_type: party.opening_balance_type || (party.is_supplier && !party.is_customer
       ? resolveOpeningType(party, 'supplier')
       : resolveOpeningType(party, 'customer')),
-    supplier_balance: finalSup, // له
-    customer_balance: finalCust, // عليه
+    supplier_balance: finalSup, // له (إذا كان موجباً مستحق له، إذا كان سالباً دفعة مقدمة لنا)
+    customer_balance: finalCust, // عليه (إذا كان موجباً مستحق عليه، إذا كان سالباً دفعة مقدمة له)
     balance_due: party.is_supplier && !party.is_customer ? finalSup : finalCust,
     current_balance: party.is_supplier && !party.is_customer ? finalSup : (party.is_customer && !party.is_supplier ? finalCust : finalNet),
-    net_balance: finalNet, // الصافي = عليه - له
+    net_balance: finalNet, // الصافي = عليه - له (موجب = لنا، سالب = له)
     max_offset_amount: finalMaxOffset,
     available_credit: availCredit.availableEGP,
     is_credit_limit_exceeded: availCredit.isExceeded,
@@ -128,6 +129,8 @@ export const partiesRepo = {
 
       const supOpening = resolveOpeningBalance(party, 'supplier');
       const custOpening = resolveOpeningBalance(party, 'customer');
+      const supOpeningType = resolveOpeningType(party, 'supplier');
+      const custOpeningType = resolveOpeningType(party, 'customer');
 
       const bal = BalanceCalculator.calculateUnifiedPartyBalance(
         pSupInvoices,
@@ -137,7 +140,9 @@ export const partiesRepo = {
         supOpening,
         custOpening,
         unlinkedSupPaid,
-        unlinkedCustPaid
+        unlinkedCustPaid,
+        supOpeningType,
+        custOpeningType
       );
 
       return withComputedBalances(party, bal);
@@ -174,6 +179,8 @@ export const partiesRepo = {
 
     const supOpening = resolveOpeningBalance(party, 'supplier');
     const custOpening = resolveOpeningBalance(party, 'customer');
+    const supOpeningType = resolveOpeningType(party, 'supplier');
+    const custOpeningType = resolveOpeningType(party, 'customer');
 
     const bal = BalanceCalculator.calculateUnifiedPartyBalance(
       supInvoices,
@@ -183,7 +190,9 @@ export const partiesRepo = {
       supOpening,
       custOpening,
       unlinkedSupPaid,
-      unlinkedCustPaid
+      unlinkedCustPaid,
+      supOpeningType,
+      custOpeningType
     );
 
     return withComputedBalances(party, bal);

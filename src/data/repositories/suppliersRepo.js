@@ -25,7 +25,8 @@ export const suppliersRepo = {
         .filter(p => p.supplier_id === s.id && !p.invoice_id)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       const opening = resolveOpeningBalance(s, 'supplier');
-      const bal = BalanceCalculator.calculateSupplierBalance(supInvoices, supReturns, opening, unlinkedPayments);
+      const openingType = resolveOpeningType(s, 'supplier');
+      const bal = BalanceCalculator.calculateSupplierBalance(supInvoices, supReturns, opening, unlinkedPayments, openingType);
 
       return {
         ...s,
@@ -53,7 +54,8 @@ export const suppliersRepo = {
       .filter(p => !p.invoice_id)
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const opening = resolveOpeningBalance(s, 'supplier');
-    const bal = BalanceCalculator.calculateSupplierBalance(invoices, returns, opening, unlinkedPayments);
+    const openingType = resolveOpeningType(s, 'supplier');
+    const bal = BalanceCalculator.calculateSupplierBalance(invoices, returns, opening, unlinkedPayments, openingType);
     return {
       ...s,
       opening_balance: opening,
@@ -141,13 +143,14 @@ export const suppliersRepo = {
     const transactions = [];
 
     if (opening > 0) {
+      const isDebit = openingType === 'debit';
       transactions.push({
         date: supplier.created_at ? String(supplier.created_at).split('T')[0] : '',
         type: 'رصيد أول المدة',
         reference: 'OPENING',
-        description: `رصيد افتتاحي (${openingType === 'credit' ? 'دائن' : 'مدين'})`,
-        debit: 0,
-        credit: opening,
+        description: `رصيد افتتاحي (${isDebit ? 'مدين - دفعة مقدمة' : 'دائن - مستحق'})`,
+        debit: isDebit ? opening : 0,
+        credit: isDebit ? 0 : opening,
         raw_date: '0000-00-00T00:00:00.000Z',
         is_opening: true,
       });
@@ -231,8 +234,9 @@ export const suppliersRepo = {
         total_purchases: totalPurchases,
         total_paid: totalPaid,
         total_returns: totalReturns,
-        remaining_balance: Math.max(0, finalBalance),
-        balance_due: Math.max(0, finalBalance),
+        remaining_balance: finalBalance,
+        balance_due: finalBalance,
+        is_advance: finalBalance < 0,
       },
       total_invoiced: totalPurchases,
       total_purchases: totalPurchases,

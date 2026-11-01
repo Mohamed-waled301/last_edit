@@ -3,21 +3,17 @@ import {
   Plus, 
   Search, 
   Users, 
-  Truck, 
   ArrowLeftRight, 
   Download, 
   Edit, 
-  CheckCircle2, 
   AlertTriangle,
-  CreditCard,
-  ShieldCheck,
   Trash2,
   FileText,
   X
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
-import { formatCurrency, formatNumber } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 import { exportToExcel } from '../../utils/exportExcel';
 import { isValidPhoneForWhatsApp, isValidEgyptianMobile, openWhatsAppChat } from '../../utils/phone';
 import { MoneyInput } from '../../components/MoneyInput';
@@ -87,7 +83,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
 
   const handleOpenOffset = (party) => {
     setOffsetModalParty(party);
-    setOffsetAmount(String(party.max_offset_amount || Math.min(party.supplier_balance || 0, party.customer_balance || 0)));
+    setOffsetAmount(String(party.max_offset_amount || Math.min(Math.max(0, party.supplier_balance || 0), Math.max(0, party.customer_balance || 0))));
     setOffsetNotes(`تسوية مقاصة متبادلة لحساب ${party.name}`);
   };
 
@@ -134,8 +130,8 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
 
   const pageTitle = effectiveMode === 'customers' ? 'دليل العملاء' : 'دليل الموردين وجهات التعامل';
   const pageSubtitle = effectiveMode === 'customers' 
-    ? 'إدارة حسابات العملاء، الحدود الائتمانية، وأرصدة المديونية'
-    : 'إدارة الموردين، حسابات التشغيل الخارجي، المقاصة وتسوية الأرصدة المشتركة';
+    ? 'إدارة حسابات العملاء، الدفعات المقدمة، الحدود الائتمانية، وأرصدة المديونية'
+    : 'إدارة الموردين والورش، الدفعات المقدمة، المقاصة وتسوية الأرصدة المشتركة';
 
   return (
     <PageContainer
@@ -200,7 +196,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                 filterRole === 'suppliers' ? 'bg-white text-[#1F3A5F] shadow-xs' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              الموردين ({(Array.isArray(parties) ? parties : []).filter(p => p.is_supplier).length})
+              الموردين ({(Array.isArray(parties) ? parties : []).filter(p => Boolean(p.is_supplier)).length})
             </button>
             <button
               onClick={() => setFilterRole('customers')}
@@ -208,7 +204,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                 filterRole === 'customers' ? 'bg-white text-[#1F3A5F] shadow-xs' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              العملاء ({(Array.isArray(parties) ? parties : []).filter(p => p.is_customer).length})
+              العملاء ({(Array.isArray(parties) ? parties : []).filter(p => Boolean(p.is_customer)).length})
             </button>
             <button
               onClick={() => setFilterRole('both')}
@@ -216,7 +212,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                 filterRole === 'both' ? 'bg-white text-[#1F3A5F] shadow-xs' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              مورد وعميل معاً ({(Array.isArray(parties) ? parties : []).filter(p => p.is_supplier && p.is_customer).length})
+              مورد وعميل معاً ({(Array.isArray(parties) ? parties : []).filter(p => Boolean(p.is_supplier && p.is_customer)).length})
             </button>
           </div>
         </div>
@@ -271,7 +267,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
                   const supBal = Number(p.supplier_balance) || 0;
                   const custBal = Number(p.customer_balance) || 0;
                   const netBal = Number(p.net_balance) || 0;
-                  const maxOffset = Number(p.max_offset_amount) || Math.min(supBal, custBal);
+                  const maxOffset = Number(p.max_offset_amount) || Math.min(Math.max(0, supBal), Math.max(0, custBal));
 
                   return (
                     <tr 
@@ -284,7 +280,7 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
 
                       <td className="p-3 font-bold text-gray-900">
                         <div>{p.name}</div>
-                        {p.is_supplier === 1 && p.supplier_type && (
+                        {Boolean(p.is_supplier === 1 && p.supplier_type) && (
                           <span className="text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 inline-block mt-0.5">
                             {p.supplier_type === 'service'
                               ? 'خدمات تشغيل لدى الغير'
@@ -340,75 +336,113 @@ export default function PartiesListPage({ mode = 'suppliers', defaultTab = null,
 
                       {/* Role Badges */}
                       <td className="p-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          {p.is_supplier && (
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full font-bold text-[10px]">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {Boolean(p.is_supplier) ? (
+                            <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-full font-bold text-[10px] border border-blue-200">
                               مورد
                             </span>
-                          )}
-                          {p.is_customer && (
-                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-bold text-[10px]">
+                          ) : null}
+                          {Boolean(p.is_customer) ? (
+                            <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-bold text-[10px] border border-emerald-200">
                               عميل
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </td>
 
                       {/* Supplier Balance */}
-                      <td className="p-3 text-left font-mono font-bold text-gray-800 whitespace-nowrap min-w-[130px]">
-                        {p.is_supplier ? formatCurrency(supBal) : '-'}
+                      <td className="p-3 text-left font-mono whitespace-nowrap min-w-[130px]">
+                        {Boolean(p.is_supplier) ? (
+                          supBal > 0.001 ? (
+                            <div className="flex flex-col items-start gap-0.5">
+                              <span className="font-bold text-slate-900 text-xs">{formatCurrency(supBal)}</span>
+                              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                                مستحق له (علينا)
+                              </span>
+                            </div>
+                          ) : supBal < -0.001 ? (
+                            <div className="flex flex-col items-start gap-0.5">
+                              <span className="font-bold text-amber-700 text-xs">{formatCurrency(Math.abs(supBal))}</span>
+                              <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-300">
+                                دفعة مقدمة (لنا)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="font-semibold text-slate-400">0.00 ج.م</span>
+                          )
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
                       </td>
 
                       {/* Customer Balance */}
-                      <td className="p-3 text-left font-mono font-bold text-gray-800 whitespace-nowrap min-w-[130px]">
-                        {p.is_customer ? formatCurrency(custBal) : '-'}
+                      <td className="p-3 text-left font-mono whitespace-nowrap min-w-[130px]">
+                        {Boolean(p.is_customer) ? (
+                          custBal > 0.001 ? (
+                            <div className="flex flex-col items-start gap-0.5">
+                              <span className="font-bold text-slate-900 text-xs">{formatCurrency(custBal)}</span>
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                مستحق عليه (لنا)
+                              </span>
+                            </div>
+                          ) : custBal < -0.001 ? (
+                            <div className="flex flex-col items-start gap-0.5">
+                              <span className="font-bold text-rose-700 text-xs">{formatCurrency(Math.abs(custBal))}</span>
+                              <span className="text-[10px] font-bold text-rose-800 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-300">
+                                دفعة مقدمة (له)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="font-semibold text-slate-400">0.00 ج.م</span>
+                          )
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
                       </td>
 
                       {/* Net Balance & Offset Button */}
                       <td className="p-3 text-center whitespace-nowrap min-w-[130px]">
-                        {isBoth ? (
-                          <div className="space-y-1">
-                            <span className={`inline-block font-mono font-bold px-2 py-0.5 rounded text-[11px] ${
-                              netBal > 0 
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                                : netBal < 0 
-                                  ? 'bg-rose-100 text-rose-800 border border-rose-200' 
-                                  : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              {netBal === 0 ? 'رصيد متوازن (0)' : netBal > 0 ? `لنا: ${formatCurrency(netBal)}` : `علينا: ${formatCurrency(Math.abs(netBal))}`}
-                            </span>
-                            {maxOffset > 0 && (
-                              <div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenOffset(p)}
-                                  className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                                  title="إجراء مقاصة بين رصيد التوريد ورصيد البيع"
-                                >
-                                  <ArrowLeftRight className="w-3 h-3" />
-                                  <span>مقاصة ({formatCurrency(maxOffset)})</span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 font-mono text-[11px]">
-                            {p.is_customer ? formatCurrency(custBal) : formatCurrency(supBal)}
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          <span className={`inline-block font-mono font-bold px-2 py-0.5 rounded text-xs ${
+                            netBal > 0.001
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                              : netBal < -0.001 
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200' 
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}>
+                            {Math.abs(netBal) <= 0.001
+                              ? 'متزن (0.00 ج.م)' 
+                              : netBal > 0 
+                                ? `لنا: ${formatCurrency(netBal)}` 
+                                : `له: ${formatCurrency(Math.abs(netBal))}`}
                           </span>
-                        )}
+                          {isBoth && maxOffset > 0 && (
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenOffset(p)}
+                                className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                                title="إجراء مقاصة بين رصيد التوريد ورصيد البيع"
+                              >
+                                <ArrowLeftRight className="w-3 h-3" />
+                                <span>مقاصة ({formatCurrency(maxOffset)})</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Customer Credit Limit & Available Credit */}
-                      <td className="p-3 text-left font-mono font-bold text-emerald-800 whitespace-nowrap min-w-[130px]">
-                        {p.is_customer && p.credit_limit > 0 ? (
+                      <td className="p-3 text-left font-mono font-bold whitespace-nowrap min-w-[130px]">
+                        {Boolean(p.is_customer) && Number(p.credit_limit) > 0 ? (
                           <div className="flex flex-col items-start gap-0.5">
-                            <span>{formatCurrency(p.credit_limit)}</span>
+                            <span className="text-emerald-800">{formatCurrency(p.credit_limit)}</span>
                             <span className={`text-[10px] font-bold ${Number(p.available_credit ?? (p.credit_limit - custBal)) < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
                               (المتاح: {formatCurrency(p.available_credit ?? (p.credit_limit - custBal))})
                             </span>
                           </div>
                         ) : (
-                          p.is_customer ? <span className="text-gray-400">غير محدد</span> : '-'
+                          Boolean(p.is_customer) ? <span className="text-gray-400 font-normal">غير محدد</span> : <span className="text-slate-300">-</span>
                         )}
                       </td>
 

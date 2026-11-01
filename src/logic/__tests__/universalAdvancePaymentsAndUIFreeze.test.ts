@@ -1,5 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import { db } from '../../data/db';
 import { cashRepo } from '../../data/repositories/cashRepo';
 import { partiesRepo } from '../../data/repositories/partiesRepo';
@@ -59,6 +61,11 @@ describe('Universal Advance Payments & Credit/Debit Support (الدفعات ال
     expect(payRecord).toBeDefined();
     expect(payRecord.is_advance).toBe(1);
     expect(payRecord.amount).toBe(5000);
+
+    // Verify party repository reflects advance payment balance
+    const updatedParty = await partiesRepo.getById(party.id);
+    expect(updatedParty.supplier_balance).toBe(-5000); // Advance payment to supplier (-5000)
+    expect(updatedParty.net_balance).toBe(5000); // Net in our favor (+5000)
   });
 
   it('allows recording cash receipt from a new customer with 0.00 balance (دفعة مقدمة وعربون من عميل جديد)', async () => {
@@ -91,6 +98,11 @@ describe('Universal Advance Payments & Credit/Debit Support (الدفعات ال
     expect(recRecord).toBeDefined();
     expect(recRecord.is_advance).toBe(1);
     expect(recRecord.amount).toBe(12000);
+
+    // Verify party repository reflects advance receipt balance
+    const updatedCust = await partiesRepo.getById(cust.id);
+    expect(updatedCust.customer_balance).toBe(-12000); // Advance prepayment from customer (-12000)
+    expect(updatedCust.net_balance).toBe(-12000); // Net in customer favor (-12000)
   });
 
   it('allows payment to contractor / workshop with zero balance or exceeding balance (دفعة مقدمة للورش والمطابع)', async () => {
@@ -117,6 +129,60 @@ describe('Universal Advance Payments & Credit/Debit Support (الدفعات ال
     const payRecord = await db.payments.get(res.id);
     expect(payRecord.supplier_id).toBe(workshop.id);
     expect(payRecord.is_advance).toBe(1);
+
+    const updatedWks = await partiesRepo.getById(workshop.id);
+    expect(updatedWks.supplier_balance).toBe(-3500);
+    expect(updatedWks.net_balance).toBe(3500);
+  });
+
+  it('correctly calculates party balances with advance opening balances', async () => {
+    // 1. Customer with credit opening balance (دفعة مقدمة منه)
+    const advCustomer = await partiesRepo.create({
+      code: 'CUST-ADV-01',
+      name: 'عميل مقدم مسبق',
+      is_customer: 1,
+      is_supplier: 0,
+      customer_opening_balance: 500,
+      customer_opening_type: 'credit'
+    });
+
+    const loadedCust = await partiesRepo.getById(advCustomer.id);
+    expect(loadedCust.customer_balance).toBe(-500);
+    expect(loadedCust.net_balance).toBe(-500);
+
+    // 2. Supplier with debit opening balance (دفعة مقدمة له)
+    const advSupplier = await partiesRepo.create({
+      code: 'SUP-ADV-01',
+      name: 'مورد مقدم مسبق',
+      is_supplier: 1,
+      is_customer: 0,
+      supplier_opening_balance: 400,
+      supplier_opening_type: 'debit'
+    });
+
+    const loadedSup = await partiesRepo.getById(advSupplier.id);
+    expect(loadedSup.supplier_balance).toBe(-400);
+    expect(loadedSup.net_balance).toBe(400);
+  });
+
+  it('verifies PartiesListPage uses Boolean checks to prevent 0 text rendering in role badges', () => {
+    const listPath = path.resolve(__dirname, '../../modules/parties/PartiesListPage.jsx');
+    const code = fs.readFileSync(listPath, 'utf8');
+
+    // Must NOT contain direct un-coerced {p.is_supplier && ( or {p.is_customer && ( in role badge cell
+    expect(code).not.toContain('{p.is_supplier && (\n                            <span className="px-2 py-0.5 bg-blue-100');
+    expect(code).not.toContain('{p.is_customer && (\n                            <span className="px-2 py-0.5 bg-emerald-100');
+
+    // Must use Boolean guard or ternary check
+    expect(code).toContain('Boolean(p.is_supplier)');
+    expect(code).toContain('Boolean(p.is_customer)');
+
+    // Must contain clear advance indicators in list
+    expect(code).toContain('دفعة مقدمة (لنا)');
+    expect(code).toContain('دفعة مقدمة (له)');
+    expect(code).toContain('رصيد المورد (له)');
+    expect(code).toContain('رصيد العميل (عليه)');
+    expect(code).toContain('صافي الرصيد');
   });
 
   it('correctly calculates statement running balance and summary cards for advance payments', () => {

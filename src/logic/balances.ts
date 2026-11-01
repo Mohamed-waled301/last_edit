@@ -25,8 +25,8 @@ export interface BalanceSummary {
 }
 
 export interface PartyBalanceSummary {
-  supplierBalance: number; // فلوس علينا للمورد
-  customerBalance: number; // فلوس لينا عند العميل
+  supplierBalance: number; // فلوس علينا للمورد (أو دفعة مقدمة لنا إذا كان سالباً)
+  customerBalance: number; // فلوس لينا عند العميل (أو دفعة مقدمة له إذا كان سالباً)
   netBalance: number;      // الصافي (إيجابي = لنا عند العميل، سلبي = علينا للمورد)
   maxOffsetAmount: number; // أقصى مبلغ ممكن إجراء مقاصة به = min(supplierBalance, customerBalance)
 }
@@ -102,14 +102,17 @@ import { toPiasters, fromPiasters } from '../utils/money';
 
 export class BalanceCalculator {
   /**
-   * 1. Calculate Supplier Balance (حساب رصيد المورد المستحق - فلوس علينا)
+   * 1. Calculate Supplier Balance (حساب رصيد المورد المستحق - فلوس علينا أو دفعة مقدمة لنا)
    * Computed using exact integer piasters to eliminate floating-point drift.
+   * Positive = money owed to supplier (مستحق له).
+   * Negative = advance payment / money supplier owes us (دفعة مقدمة لصالحنا).
    */
   static calculateSupplierBalance(
     invoices: InvoiceRecord[] = [],
     returns: ReturnRecord[] = [],
     openingBalance: number = 0,
-    unlinkedPayments: number = 0
+    unlinkedPayments: number = 0,
+    openingType: AccountNature = DEFAULT_SUPPLIER_OPENING_TYPE
   ): BalanceSummary {
     let totalInvoicedPiasters = 0;
     let totalPaidPiasters = 0;
@@ -131,11 +134,14 @@ export class BalanceCalculator {
     }
 
     const unlinkedPiasters = Math.max(0, toPiasters(unlinkedPayments));
-    const openingPiasters = Math.max(0, toPiasters(openingBalance));
-    const balanceDuePiasters = Math.max(
-      0,
-      openingPiasters + totalInvoicedPiasters - totalPaidPiasters - totalReturnsPiasters - unlinkedPiasters
-    );
+    const rawOpeningPiasters = toPiasters(Math.abs(Number(openingBalance) || 0));
+    // Supplier normal balance is credit (+). If debit, it is an advance payment (-).
+    const openingPiasters = (Number(openingBalance) < 0 || openingType === 'debit')
+      ? -rawOpeningPiasters
+      : rawOpeningPiasters;
+
+    const balanceDuePiasters =
+      openingPiasters + totalInvoicedPiasters - totalPaidPiasters - totalReturnsPiasters - unlinkedPiasters;
 
     return {
       totalInvoiced: fromPiasters(totalInvoicedPiasters),
@@ -146,14 +152,17 @@ export class BalanceCalculator {
   }
 
   /**
-   * 2. Calculate Customer Balance (حساب رصيد العميل المستحق - فلوس لينا بره)
+   * 2. Calculate Customer Balance (حساب رصيد العميل المستحق - فلوس لينا بره أو دفعة مقدمة له)
    * Computed using exact integer piasters to eliminate floating-point drift.
+   * Positive = money owed by customer (مستحق عليه).
+   * Negative = customer prepayment / advance deposit (دفعة مقدمة للعميل أمانة طرفنا).
    */
   static calculateCustomerBalance(
     invoices: InvoiceRecord[] = [],
     returns: ReturnRecord[] = [],
     openingBalance: number = 0,
-    unlinkedPayments: number = 0
+    unlinkedPayments: number = 0,
+    openingType: AccountNature = DEFAULT_CUSTOMER_OPENING_TYPE
   ): BalanceSummary {
     let totalInvoicedPiasters = 0;
     let totalPaidPiasters = 0;
@@ -175,11 +184,14 @@ export class BalanceCalculator {
     }
 
     const unlinkedPiasters = Math.max(0, toPiasters(unlinkedPayments));
-    const openingPiasters = Math.max(0, toPiasters(openingBalance));
-    const balanceDuePiasters = Math.max(
-      0,
-      openingPiasters + totalInvoicedPiasters - totalPaidPiasters - totalReturnsPiasters - unlinkedPiasters
-    );
+    const rawOpeningPiasters = toPiasters(Math.abs(Number(openingBalance) || 0));
+    // Customer normal balance is debit (+). If credit, it is an advance prepayment (-).
+    const openingPiasters = (Number(openingBalance) < 0 || openingType === 'credit')
+      ? -rawOpeningPiasters
+      : rawOpeningPiasters;
+
+    const balanceDuePiasters =
+      openingPiasters + totalInvoicedPiasters - totalPaidPiasters - totalReturnsPiasters - unlinkedPiasters;
 
     return {
       totalInvoiced: fromPiasters(totalInvoicedPiasters),
@@ -191,7 +203,7 @@ export class BalanceCalculator {
 
   /**
    * 3. Calculate Unified Party Balances, Net Balance & Offset (حساب رصيد الجهة الموحدة والمقاصة)
-   * Each side includes its own opening balance (رصيد أول المدة).
+   * Each side includes its own opening balance and advances.
    */
   static calculateUnifiedPartyBalance(
     supplierInvoices: InvoiceRecord[] = [],
@@ -201,15 +213,30 @@ export class BalanceCalculator {
     supplierOpening: number = 0,
     customerOpening: number = 0,
     supplierUnlinkedPayments: number = 0,
-    customerUnlinkedPayments: number = 0
+    customerUnlinkedPayments: number = 0,
+    supplierOpeningType: AccountNature = DEFAULT_SUPPLIER_OPENING_TYPE,
+    customerOpeningType: AccountNature = DEFAULT_CUSTOMER_OPENING_TYPE
   ): PartyBalanceSummary {
-    const supBal = this.calculateSupplierBalance(supplierInvoices, supplierReturns, supplierOpening, supplierUnlinkedPayments);
-    const custBal = this.calculateCustomerBalance(customerInvoices, customerReturns, customerOpening, customerUnlinkedPayments);
+    const supBal = this.calculateSupplierBalance(
+      supplierInvoices,
+      supplierReturns,
+      supplierOpening,
+      supplierUnlinkedPayments,
+      supplierOpeningType
+    );
+    const custBal = this.calculateCustomerBalance(
+      customerInvoices,
+      customerReturns,
+      customerOpening,
+      customerUnlinkedPayments,
+      customerOpeningType
+    );
 
     const supPiasters = toPiasters(supBal.balanceDue);
     const custPiasters = toPiasters(custBal.balanceDue);
     const netPiasters = custPiasters - supPiasters;
-    const maxOffsetPiasters = Math.max(0, Math.min(supPiasters, custPiasters));
+    // Offset is only possible between positive mutual liabilities
+    const maxOffsetPiasters = Math.max(0, Math.min(Math.max(0, supPiasters), Math.max(0, custPiasters)));
 
     return {
       supplierBalance: fromPiasters(supPiasters),
