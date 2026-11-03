@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { RotateCcw, Search, CheckCircle2, AlertCircle, DollarSign, Package } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
@@ -6,8 +6,10 @@ import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import { handleFormKeyDown } from '../../utils/formNavigation';
 import { MoneyInput, NumberInput } from '../../components/MoneyInput';
+import { navigationGuard } from '../../utils/navigationGuard';
 
 export default function SalesReturnFormPage({ onSaved, onNotify }) {
+  const isSavedRef = useRef(false);
   const [returnMode, setReturnMode] = useState('against_invoice'); // 'against_invoice' | 'free_return'
   const [invoices, setInvoices] = useState([]);
   const [products, setProducts] = useState([]);
@@ -54,6 +56,14 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
     }
     loadData();
   }, []);
+
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      return Boolean(form.customer_id || form.product_id || (form.quantity && Number(form.quantity) > 1) || form.reason.trim());
+    });
+    return unregister;
+  }, [form]);
 
   // When an invoice is selected
   const handleInvoiceSelect = (invId) => {
@@ -135,6 +145,9 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
         reason: form.reason || (returnMode === 'against_invoice' ? 'مرتجع مرتبط بالفاتورة' : 'مرتجع حر'),
         return_date: form.return_date
       });
+
+      isSavedRef.current = true;
+      navigationGuard.unregister();
 
       if (onNotify) onNotify('تم تسجيل مرتجع المبيعات واسترجاع البضاعة للمخزن بنجاح');
 

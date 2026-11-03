@@ -129,7 +129,7 @@ export default function TreasuriesListPage({ onNotify }) {
               <tr>
                 <th className="p-3">اسم الخزينة</th>
                 <th className="p-3">المنفذ / المعرض التابع</th>
-                <th className="p-3 text-left font-mono">الرصيد النقدي الحالي</th>
+                <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">الرصيد النقدي الحالي</th>
                 <th className="p-3 text-center">الحالة</th>
                 <th className="p-3 text-center">إجراء توريد</th>
               </tr>
@@ -155,7 +155,7 @@ export default function TreasuriesListPage({ onNotify }) {
                       <span>{t.name}</span>
                     </td>
                     <td className="p-3 text-gray-700 font-semibold">{t.outlet_name || 'معرض مبيعات'}</td>
-                    <td className="p-3 text-left font-mono font-bold text-green-700">{formatCurrency(t.current_balance)}</td>
+                    <td className="p-3 text-left font-mono font-bold text-green-700 whitespace-nowrap min-w-[130px]">{formatCurrency(t.current_balance)}</td>
                     <td className="p-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
                         نشطة

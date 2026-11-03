@@ -22,6 +22,7 @@ import BackButton from '../components/BackButton';
 import { api } from '../services/api';
 import { formatCurrency, formatNumber, formatDate, getTodayDateString } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
+import { triggerPrint } from '../utils/print';
 import { FieldError, validators, Validators } from '../utils/validation';
 import {
   DEFAULT_PHONE_VALUE,
@@ -1264,7 +1265,7 @@ export default function SalesModule({ onBack, onNotify }) {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => triggerPrint()}
                   className="h-9 px-4 bg-[#1F3A5F] hover:bg-[#172c48] text-white rounded font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm"
                 >
                   <Printer className="w-4 h-4" />
@@ -1373,10 +1374,10 @@ export default function SalesModule({ onBack, onNotify }) {
                     <div key={idx} className="flex justify-between items-center text-[11px]">
                       <div>
                         <div>{it.product_name}</div>
-                        <div className="text-[9px] text-gray-500">{it.quantity} × {it.price_after_discount || it.unit_selling_price} ج</div>
+                        <div className="text-[9px] text-gray-500">{it.quantity} × {it.price_after_discount || it.unit_selling_price} ج.م</div>
                       </div>
                       <div className="font-bold">
-                        {it.line_total || (it.quantity * (it.price_after_discount || it.unit_selling_price || 0))} ج
+                        {it.line_total || (it.quantity * (it.price_after_discount || it.unit_selling_price || 0))} ج.م
                       </div>
                     </div>
                   ))}

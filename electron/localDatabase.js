@@ -1,15 +1,61 @@
 const fs = require('fs');
 const path = require('path');
 
+function resolveNativeBinding() {
+  const isAsar = __dirname.includes('app.asar');
+  const unpackedDir = __dirname.replace('app.asar', 'app.asar.unpacked');
+
+  const candidates = [
+    // 1. Unpacked asar path beside file (standard electron-builder unpacked)
+    path.join(unpackedDir, 'better_sqlite3.node'),
+    // 2. Direct beside file (dev mode or unpacked)
+    !isAsar ? path.join(__dirname, 'better_sqlite3.node') : null,
+    // 3. process.resourcesPath unpacked locations
+    process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'electron', 'better_sqlite3.node') : null,
+    process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'better-sqlite3', 'build', 'Release', 'better_sqlite3.node') : null,
+    // 4. Relative build/Release (dev mode fallback)
+    path.join(__dirname, '..', 'build', 'Release', 'better_sqlite3.node'),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (!candidate.includes('app.asar') && fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  // 5. If inside asar and not found unpacked, extract it to a physical location so dlopen/LoadLibrary can load it
+  const insideAsar = path.join(__dirname, 'better_sqlite3.node');
+  if (fs.existsSync(insideAsar)) {
+    try {
+      if (!fs.existsSync(unpackedDir)) fs.mkdirSync(unpackedDir, { recursive: true });
+      const targetUnpacked = path.join(unpackedDir, 'better_sqlite3.node');
+      fs.copyFileSync(insideAsar, targetUnpacked);
+      if (fs.existsSync(targetUnpacked)) return targetUnpacked;
+    } catch {}
+
+    try {
+      const os = require('os');
+      const tempDir = path.join(os.tmpdir(), 'code-systems-native');
+      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+      const targetTemp = path.join(tempDir, 'better_sqlite3.node');
+      if (!fs.existsSync(targetTemp) || fs.statSync(targetTemp).size !== fs.statSync(insideAsar).size) {
+        fs.copyFileSync(insideAsar, targetTemp);
+      }
+      if (fs.existsSync(targetTemp)) return targetTemp;
+    } catch {}
+  }
+
+  return null;
+}
+
 function createSqliteConnection(dbPath, customOptions = {}) {
-  const electronBinding = path.join(__dirname, 'better_sqlite3.node');
-  const bindingExists = fs.existsSync(electronBinding);
+  const nativeBinding = resolveNativeBinding();
 
   try {
     const BetterSqlite3 = require('better-sqlite3');
     const opts = { ...customOptions };
-    if (process.versions.electron && bindingExists && !opts.nativeBinding && !electronBinding.includes('app.asar')) {
-      opts.nativeBinding = electronBinding;
+    if (nativeBinding && !opts.nativeBinding) {
+      opts.nativeBinding = nativeBinding;
     }
     try {
       return new BetterSqlite3(dbPath, opts);

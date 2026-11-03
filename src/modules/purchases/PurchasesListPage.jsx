@@ -13,7 +13,8 @@ import {
   X,
   FileText,
   Trash2,
-  Printer
+  Printer,
+  Edit
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
@@ -234,7 +235,7 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                   <th className="p-3 text-center">شروط الدفع</th>
                   <th className="p-3 text-center">الاستحقاق / الأقساط</th>
                   <th className="p-3 text-center">البنود</th>
-                  <th className="p-3 text-left font-mono">الإجمالي الصافي</th>
+                  <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">الإجمالي الصافي</th>
                   <th className="p-3 text-center">الحالة</th>
                   <th className="p-3 text-center">الإجراءات</th>
                 </tr>
@@ -322,7 +323,7 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
                           {itemsCount} أصناف
                         </td>
 
-                        <td className="p-3 text-left font-mono font-bold text-slate-900">
+                        <td className="p-3 text-left font-mono font-bold text-slate-900 whitespace-nowrap min-w-[130px]">
                           {formatCurrency(total)}
                         </td>
 
@@ -332,14 +333,35 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
 
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            <a
-                              href={`#/print-preview?type=purchase_invoice&id=${o.id}&returnUrl=${encodeURIComponent('#/purchases')}`}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  sessionStorage.setItem('print_preview_payload', JSON.stringify({ ...o, type: 'purchase_invoice' }));
+                                } catch {}
+                                window.location.hash = `#/print-preview?type=purchase_invoice&id=${o.id}&returnUrl=${encodeURIComponent('#/purchases')}`;
+                              }}
                               className="px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 rounded-md font-semibold transition-colors inline-flex items-center gap-1 border border-slate-200 cursor-pointer"
                               title="طباعة / معاينة فاتورة الشراء"
                             >
                               <Printer className="w-3.5 h-3.5" />
                               <span>طباعة</span>
-                            </a>
+                            </button>
+
+                            {o.status !== 'cancelled' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (onNavigate) onNavigate(`purchases/${o.id}/edit`);
+                                  else window.location.hash = `#/purchases/${o.id}/edit`;
+                                }}
+                                className="px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 rounded-md font-semibold transition-colors inline-flex items-center gap-1 border border-slate-200 cursor-pointer"
+                                title="تعديل فاتورة الشراء"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                                <span>تعديل</span>
+                              </button>
+                            )}
 
                             {canCancel && (
                               <button

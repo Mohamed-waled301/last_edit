@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Save,
   ArrowRight,
@@ -11,6 +11,8 @@ import {
 import PageContainer from '../../components/PageContainer';
 import { api, getActiveUser } from '../../services/api';
 import { TABLE_METADATA, COLUMN_LABELS } from '../../data/repositories/dataManagementRepo';
+import { handleFormKeyDown } from '../../utils/formNavigation';
+import { navigationGuard } from '../../utils/navigationGuard';
 
 export default function DataRecordFormPage({ tableName, recordId, onBack, onNotify }) {
   const [currentUser] = useState(() => getActiveUser());
@@ -21,6 +23,7 @@ export default function DataRecordFormPage({ tableName, recordId, onBack, onNoti
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const isSavedRef = useRef(false);
 
   const isEdit = Boolean(recordId && recordId !== 'new');
   const isCeo = currentUser?.role === 'owner';
@@ -29,6 +32,15 @@ export default function DataRecordFormPage({ tableName, recordId, onBack, onNoti
   useEffect(() => {
     loadRecordData();
   }, [tableName, recordId]);
+
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      if (!originalRecord) return Object.keys(formData).length > 2;
+      return JSON.stringify(formData) !== JSON.stringify(originalRecord);
+    });
+    return unregister;
+  }, [formData, originalRecord]);
 
   const loadRecordData = async () => {
     try {
@@ -130,9 +142,13 @@ export default function DataRecordFormPage({ tableName, recordId, onBack, onNoti
 
       if (isEdit) {
         await api.updateDataRecord(tableName, recordId, formData, reason || 'تعديل مباشر عبر إدارة البيانات');
+        isSavedRef.current = true;
+        navigationGuard.unregister();
         if (onNotify) onNotify('تم تحديث بيانات السجل بنجاح وإعادة احتساب الأرصدة');
       } else {
         await api.createDataRecord(tableName, formData, reason || 'إضافة مباشرة عبر إدارة البيانات');
+        isSavedRef.current = true;
+        navigationGuard.unregister();
         if (onNotify) onNotify('تمت إضافة السجل بنجاح وإعادة احتساب الأرصدة');
       }
 
@@ -179,7 +195,7 @@ export default function DataRecordFormPage({ tableName, recordId, onBack, onNoti
       isSaving={isSaving}
       saveText="حفظ وتأكيد السجل"
     >
-      <form onSubmit={handleTriggerSave} className="space-y-6 max-w-4xl mx-auto">
+      <form onSubmit={handleTriggerSave} onKeyDown={handleFormKeyDown} className="space-y-6 max-w-4xl mx-auto">
         {error && (
           <div className="p-4 bg-red-50 border border-red-300 rounded-md text-sm text-red-800 font-semibold flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 shrink-0 text-red-600" />

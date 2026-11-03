@@ -133,7 +133,8 @@ export default function ItemsListPage({ onNavigate, onNotify }) {
         <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
           <button
             type="button"
-            className="px-4 py-2 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs flex items-center gap-1.5 border border-blue-200"
+            onClick={() => onNavigate ? onNavigate('items') : (window.location.hash = '#/items')}
+            className="px-4 py-2 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs flex items-center gap-1.5 border border-blue-200 cursor-pointer"
           >
             <Layers className="w-4 h-4" />
             <span>الأصناف ({items.length})</span>

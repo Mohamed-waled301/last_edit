@@ -134,11 +134,12 @@ export default function HomeScreen({ onNavigate, userRole }) {
       key: 'remaining_amount',
       header: 'المتبقي',
       align: 'left',
+      minWidth: '130px',
       render: (val, row) => {
         const remaining = val != null ? val : (row.total_amount - (row.paid_amount || 0));
         return (
           <span
-            className="tabular-nums font-bold text-red-600 font-sans"
+            className="tabular-nums font-bold text-red-600 font-sans whitespace-nowrap min-w-[120px] inline-block"
             style={{ direction: 'ltr', unicodeBidi: 'isolate' }}
             title={formatCurrency(remaining)}
           >

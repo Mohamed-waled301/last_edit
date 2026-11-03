@@ -20,6 +20,10 @@ import { api } from '../../services/api';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
 import { exportToExcel } from '../../utils/exportExcel';
 import { isValidPhoneForWhatsApp, openWhatsAppChat } from '../../utils/phone';
+import {
+  calculateStatementSummaryCards,
+  computeMovementsWithRunningBalance
+} from '../../logic/statementSummaryCards';
 
 export default function VendorStatementPage({ vendorId = null, onBack, onNotify }) {
   const [vendor, setVendor] = useState(null);
@@ -37,6 +41,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchDoc, setSearchDoc] = useState('');
+  const [txTypeFilter, setTxTypeFilter] = useState('all');
   const [stageFilter, setStageFilter] = useState('all');
 
   useEffect(() => {
@@ -60,52 +65,121 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
 
         // Fetch statement data
         let statementMovements = [];
-        let openBal = Number(vData?.supplier_opening_balance ?? vData?.opening_balance ?? 0);
-        let openType = vData?.supplier_opening_type || vData?.opening_balance_type || 'credit';
+        const isCustomer = Boolean(vData?.is_customer);
+        const isSupplier = Boolean(vData?.is_supplier !== 0);
+        const isCustomerOnly = Boolean(isCustomer && !isSupplier);
 
-        try {
-          const stmtRes = await api.getSupplierStatement(vendorId);
-          if (stmtRes?.data) {
-            const d = stmtRes.data;
-            if (d.summary) {
-              openBal = Number(d.summary.opening_balance || openBal);
-              openType = d.summary.opening_balance_type || openType;
+        let openBal = Number(
+          isCustomerOnly
+            ? (vData?.customer_opening_balance ?? vData?.opening_balance ?? 0)
+            : (vData?.supplier_opening_balance ?? vData?.opening_balance ?? 0)
+        );
+        let openType = isCustomerOnly
+          ? (vData?.customer_opening_type || vData?.opening_balance_type || 'debit')
+          : (vData?.supplier_opening_type || vData?.opening_balance_type || 'credit');
+
+        // 1. Fetch Customer movements if party has customer role
+        if (isCustomer) {
+          try {
+            const stmtRes = await api.getCustomerStatement(vendorId);
+            if (stmtRes?.data || stmtRes?.statement || stmtRes?.movements) {
+              const d = stmtRes.data || stmtRes;
+              if (isCustomerOnly && d.summary) {
+                openBal = Number(d.summary.opening_balance || openBal);
+                openType = d.summary.opening_balance_type || openType;
+              }
+              const list = Array.isArray(d.statement) ? d.statement : (Array.isArray(d.movements) ? d.movements : []);
+              for (const m of list) {
+                if (m.is_opening || m.reference === 'OPENING') continue;
+                const isReceipt = m.type === 'سند تحصيل' || m.credit > 0;
+                const isRet = m.type === 'مرتجع مبيعات';
+                statementMovements.push({
+                  id: m.id || `cust-${m.date}-${m.reference}`,
+                  date: m.date,
+                  doc_number: m.reference || m.doc_number || '---',
+                  stage: m.type || (isReceipt ? 'سند تحصيل' : isRet ? 'مرتجع مبيعات' : 'فاتورة مبيعات'),
+                  category: isReceipt ? 'receipts' : isRet ? 'returns' : 'sales',
+                  description: m.description || (isReceipt ? 'سداد دفعة نقدية' : isRet ? 'رد بضاعة' : 'فاتورة مبيعات'),
+                  debit: Number(m.debit || 0), // Customer owes us (increases balance)
+                  credit: Number(m.credit || 0), // Customer paid us (decreases balance)
+                  cut_order_id: null,
+                  po_id: null
+                });
+              }
             }
-            if (Array.isArray(d.statement)) {
-              statementMovements = d.statement.map(m => ({
-                id: m.id || `${m.date}-${m.ref_number}`,
-                date: m.date,
-                doc_number: m.doc_number || m.invoice_number || m.ref_number || '---',
-                stage: m.stage || (m.type === 'invoice' ? 'فاتورة توريد' : 'صرف نقدية'),
-                description: m.description || m.notes || (m.type === 'invoice' ? 'فاتورة شراء خامات' : 'سند صرف دفعة'),
-                debit: Number(m.debit || (m.type === 'invoice' ? m.amount : 0) || 0),
-                credit: Number(m.credit || (m.type === 'payment' ? m.amount : 0) || 0),
-                cut_order_id: m.cut_order_id || null,
-                po_id: m.po_id || null
-              }));
-            }
+          } catch (e) {
+            console.warn('Customer statement fetch warning:', e);
           }
-        } catch (err) {
-          console.warn('Failed to load supplier statement movements:', err);
         }
 
-        // Also check production order stage allocations for workshops
+        // 2. Fetch Supplier movements if party has supplier role
+        if (isSupplier) {
+          try {
+            const stmtRes = await api.getSupplierStatement(vendorId);
+            if (stmtRes?.data || stmtRes?.statement || stmtRes?.movements) {
+              const d = stmtRes.data || stmtRes;
+              if (!isCustomerOnly && d.summary) {
+                openBal = Number(d.summary.opening_balance || openBal);
+                openType = d.summary.opening_balance_type || openType;
+              }
+              const list = Array.isArray(d.statement) ? d.statement : (Array.isArray(d.movements) ? d.movements : []);
+              for (const m of list) {
+                if (m.is_opening || m.reference === 'OPENING') continue;
+                const isPay = m.type === 'سند صرف' || m.reference?.startsWith('PAY-');
+                const isSet = m.type === 'تسوية مقاصة' || m.reference?.startsWith('SET-');
+                const isRet = m.type === 'مرتجع خامات' || m.reference?.startsWith('RET-');
+                const isCut = m.reference_type === 'CUTTING_ORDER' || m.reference?.startsWith('INV-CUT-') || String(m.type).includes('تشغيل');
+                const isInv = m.type === 'فاتورة توريد' || m.reference?.startsWith('INV-') || isCut;
+
+                const owedAmount = isInv ? Number(m.credit || m.amount || 0) : 0;
+                const paidAmount = (isPay || isSet || isRet) ? Number(m.debit || m.amount || 0) : 0;
+
+                statementMovements.push({
+                  id: m.id || `sup-${m.date}-${m.reference}`,
+                  date: m.date,
+                  doc_number: m.reference || m.doc_number || '---',
+                  stage: isCut ? (m.type || 'تشغيل') : (m.type || (isInv ? 'فاتورة توريد' : isPay ? 'سند صرف' : isSet ? 'تسوية مقاصة' : 'مرتجع خامات')),
+                  category: isCut ? 'manufacturing' : (isInv ? 'purchases' : isPay ? 'payments' : isSet ? 'settlements' : isRet ? 'returns' : 'purchases'),
+                  description: m.description || (isCut ? 'تشغيل مرحلة أمر قص' : (isInv ? 'فاتورة توريد خامات' : isPay ? 'سداد دفعة نقدية' : isSet ? 'تسوية مقاصة' : 'رد خامات')),
+                  debit: owedAmount,
+                  credit: paidAmount,
+                  cut_order_id: m.cut_order_id || null,
+                  po_id: m.po_id || null
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('Supplier statement fetch warning:', e);
+          }
+        }
+
+        // 3. Also check production order stage allocations for workshops (fallback/deduplicated)
         try {
           const prodRes = await api.getProductionOrders().catch(() => ({ data: [] }));
           const pOrders = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.production_orders || []);
+          const safeStmtMovements = Array.isArray(statementMovements) ? statementMovements : [];
+          const existingCutKeys = new Set(safeStmtMovements.filter(m => m && m.cut_order_id).map(m => `${m.cut_order_id}`));
+
           for (const order of pOrders) {
-            if (Array.isArray(order.stages)) {
-              for (const stg of order.stages) {
-                if (String(stg.workshop_id || stg.party_id) === String(vendorId)) {
-                  // Stage movement
-                  const stageName = stg.stage_name || (stg.stage_key === 'printing' ? 'طباعة' : stg.stage_key === 'embroidery' ? 'تطريز' : stg.stage_key === 'sewing' ? 'حياكة' : 'تشغيل');
+            if (existingCutKeys.has(String(order.id))) continue;
+            const stagesObj = order.stages || {};
+            const stageKeys = Object.keys(stagesObj);
+            for (const sKey of stageKeys) {
+              const stg = stagesObj[sKey];
+              if (!stg) continue;
+              const vId = stg.vendor_id || stg.workshop_id || stg.party_id;
+              if (String(vId) === String(vendorId)) {
+                const stageName = sKey === 'printing' ? 'طباعة' : sKey === 'embroidery' ? 'تطريز' : sKey === 'sewing' ? 'حياكة' : 'تشغيل';
+                const cost = Number(stg.stage_cost || stg.total_cost || 0);
+                if (cost > 0) {
                   statementMovements.push({
-                    id: `stg-${order.id}-${stg.stage_key}`,
-                    date: order.created_at || new Date().toISOString(),
+                    id: `stg-${order.id}-${sKey}`,
+                    date: order.created_at || order.start_date || new Date().toISOString(),
                     doc_number: order.cutting_number || order.order_number || `قصة #${order.id}`,
-                    stage: stageName,
+                    stage: `تشغيل ${stageName}`,
+                    category: 'manufacturing',
                     description: `تشغيل مرحلة ${stageName} لأمر القص [${order.cutting_number || order.order_number}]`,
-                    debit: Number(stg.stage_cost || stg.total_cost || 0),
+                    debit: cost,
                     credit: 0,
                     cut_order_id: order.id
                   });
@@ -138,58 +212,79 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
     loadStatement();
   }, [vendorId]);
 
-  // Compute filtered movements with exact running balance
+  // Compute movements with exact cumulative running balance
   const computedMovements = useMemo(() => {
-    let running = summary.opening_type === 'debit' ? -summary.opening_balance : summary.opening_balance;
-    let totDebit = 0;
-    let totCredit = 0;
+    const isCust = Boolean(vendor?.is_customer && !vendor?.is_supplier);
+    const openBal = Math.abs(Number(summary.opening_balance) || 0);
+    const resolvedType = summary.opening_type || (isCust ? 'debit' : 'credit');
+    const signedOpening = isCust
+      ? (resolvedType === 'credit' ? -openBal : openBal)
+      : (resolvedType === 'debit' ? -openBal : openBal);
 
-    const listWithBal = rawMovements.map((m) => {
-      // In supplier ledger: Debit (له / المستحق له) increases balance; Credit (المسدد له) decreases balance
-      running = running + m.debit - m.credit;
-      totDebit += m.debit;
-      totCredit += m.credit;
-      return {
-        ...m,
-        running_balance: running
-      };
-    });
+    return computeMovementsWithRunningBalance(rawMovements, signedOpening);
+  }, [rawMovements, summary.opening_balance, summary.opening_type, vendor]);
 
-    return {
-      items: listWithBal,
-      total_debit: totDebit,
-      total_credit: totCredit,
-      closing_balance: running
-    };
-  }, [rawMovements, summary.opening_balance, summary.opening_type]);
+  // Helper to parse dd/mm/yyyy or yyyy-mm-dd to comparable YYYY-MM-DD
+  const parseToIso = (val) => {
+    if (!val) return '';
+    const clean = String(val).trim();
+    const dmy = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dmy) {
+      return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(clean)) return clean.slice(0, 10);
+    return clean;
+  };
 
-  // Filtered rows by user criteria
+  // Filtered rows by user criteria (preserving authentic running balances)
   const filteredRows = useMemo(() => {
-    return computedMovements.items.filter((row) => {
-      if (startDate && row.date && row.date.slice(0, 10) < startDate) return false;
-      if (endDate && row.date && row.date.slice(0, 10) > endDate) return false;
+    if (txTypeFilter === 'opening') return [];
+    const startIso = parseToIso(startDate);
+    const endIso = parseToIso(endDate);
+
+    const items = Array.isArray(computedMovements?.items) ? computedMovements.items : [];
+    return items.filter((row) => {
+      const rowIso = row.date ? String(row.date).slice(0, 10) : '';
+      if (startIso && rowIso && rowIso < startIso) return false;
+      if (endIso && rowIso && rowIso > endIso) return false;
       if (searchDoc) {
         const term = searchDoc.trim().toLowerCase();
         const matchesDoc = (row.doc_number || '').toLowerCase().includes(term);
         const matchesDesc = (row.description || '').toLowerCase().includes(term);
         if (!matchesDoc && !matchesDesc) return false;
       }
+      if (txTypeFilter !== 'all') {
+        if (row.category !== txTypeFilter) return false;
+      }
       if (stageFilter !== 'all') {
         if (!row.stage || !row.stage.includes(stageFilter)) return false;
       }
       return true;
     });
-  }, [computedMovements, startDate, endDate, searchDoc, stageFilter]);
+  }, [computedMovements, startDate, endDate, searchDoc, txTypeFilter, stageFilter]);
+
+  // Calculate the 4 summary cards dynamically based on active filters and party nature
+  const cardSummary = useMemo(() => {
+    return calculateStatementSummaryCards({
+      party: vendor,
+      openingBalance: summary.opening_balance,
+      openingType: summary.opening_type,
+      filteredRows,
+      allMovements: computedMovements.items,
+      txTypeFilter
+    });
+  }, [vendor, summary.opening_balance, summary.opening_type, filteredRows, computedMovements.items, txTypeFilter]);
 
   const handleExportExcel = () => {
     if (!vendor) return;
+    const isCust = Boolean(vendor?.is_customer && !vendor?.is_supplier);
     const exportData = filteredRows.map((r, idx) => ({
       'م': idx + 1,
       'التاريخ': formatDate(r.date),
       'رقم المستند / أمر القص': r.doc_number,
       'المرحلة': r.stage,
       'البيان': r.description,
-      'المستحق (له)': r.debit,
+      [isCust ? 'المستحق (عليه)' : 'المستحق (له)']: r.debit,
       'المسدد (منه)': r.credit,
       'الرصيد التراكمي': r.running_balance
     }));
@@ -198,6 +293,27 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
   };
 
   const handleOpenPrintPreview = () => {
+    try {
+      sessionStorage.setItem('print_preview_payload', JSON.stringify({
+        type: 'statement',
+        id: vendorId,
+        party: vendor,
+        statementData: {
+          statement: filteredRows,
+          movements: filteredRows,
+          transactions: filteredRows,
+          balance_due: cardSummary.finalBalance,
+          remaining_balance: cardSummary.finalBalance,
+          summary: {
+            opening_balance: cardSummary.openingBalance,
+            opening_balance_type: cardSummary.openingNature,
+            period_invoices: cardSummary.periodInvoices,
+            period_paid: cardSummary.periodPaid,
+            balance_due: cardSummary.finalBalance
+          }
+        }
+      }));
+    } catch {}
     window.location.hash = `#/print-preview?type=statement&id=${vendorId}`;
   };
 
@@ -273,7 +389,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
           >
             <Download className="w-4 h-4 text-emerald-600" />
-            <span>تصدير Excel</span>
+            <span>تصدير إكسيل</span>
           </button>
           <button
             type="button"
@@ -313,7 +429,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                   {isValidPhoneForWhatsApp(vendor.phone) && (
                     <button
                       type="button"
-                      onClick={() => openWhatsAppChat(vendor.phone, `السلام عليكم ورحمة الله، مرفق كشف حسابكم طرفنا برصيد: ${formatCurrency(computedMovements.closing_balance)}.`)}
+                      onClick={() => openWhatsAppChat(vendor.phone, `السلام عليكم ورحمة الله، مرفق كشف حسابكم طرفنا برصيد: ${formatCurrency(cardSummary.finalBalance)}.`)}
                       className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 cursor-pointer"
                       title="مراسلة عبر واتساب"
                     >
@@ -325,41 +441,45 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
             </div>
           </div>
 
-          {/* Metric Cards */}
+          {/* Metric Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
+            {/* Card #1: Opening Balance */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
               <span className="text-xs font-bold text-slate-500 block mb-1">رصيد أول المدة</span>
-              <span className="text-lg font-bold font-mono text-slate-800 block">
-                {formatCurrency(summary.opening_balance)}
+              <span className="text-lg font-bold font-mono text-slate-800 block whitespace-nowrap">
+                {formatCurrency(cardSummary.openingBalance)}
               </span>
               <span className="text-[11px] text-slate-500 font-semibold block mt-1">
-                الطبيعة: {summary.opening_type === 'credit' ? 'دائن (مستحق له)' : 'مدين (دفعة مقدمة)'}
+                الطبيعة: {cardSummary.openingNatureText}
               </span>
             </div>
 
+            {/* Card #2: Period Invoices & Services */}
             <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-4">
-              <span className="text-xs font-bold text-blue-700 block mb-1">إجمالي المستحق / التكلفة</span>
-              <span className="text-lg font-bold font-mono text-blue-900 block">
-                {formatCurrency(computedMovements.total_debit)}
+              <span className="text-xs font-bold text-blue-700 block mb-1">إجمالي الفواتير والتوريدات</span>
+              <span className="text-lg font-bold font-mono text-blue-900 block whitespace-nowrap">
+                {formatCurrency(cardSummary.periodInvoices)}
               </span>
-              <span className="text-[11px] text-blue-600 block mt-1">إجمالي التوريدات ومراحل الشغل</span>
+              <span className="text-[11px] text-blue-600 block mt-1">الفواتير وتكلفة المراحل للفترة</span>
             </div>
 
+            {/* Card #3: Total Paid / Settled */}
             <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-4">
               <span className="text-xs font-bold text-emerald-700 block mb-1">إجمالي المسدد</span>
-              <span className="text-lg font-bold font-mono text-emerald-900 block">
-                {formatCurrency(computedMovements.total_credit)}
+              <span className="text-lg font-bold font-mono text-emerald-900 block whitespace-nowrap">
+                {formatCurrency(cardSummary.periodPaid)}
               </span>
               <span className="text-[11px] text-emerald-600 block mt-1">سندات الصرف والدفعات المعتمدة</span>
             </div>
 
+            {/* Card #4: Final Remaining Cumulative Balance */}
             <div className="bg-slate-900 text-white rounded-xl p-4">
               <span className="text-xs font-bold text-slate-300 block mb-1">الرصيد المتبقي الحالي</span>
-              <span className="text-xl font-bold font-mono text-emerald-400 block">
-                {formatCurrency(computedMovements.closing_balance)}
+              <span className={`text-xl font-bold font-mono block whitespace-nowrap ${cardSummary.valueClass}`}>
+                {formatCurrency(cardSummary.finalBalance)}
               </span>
-              <span className="text-[11px] text-slate-400 block mt-1">
-                {computedMovements.closing_balance > 0 ? 'مستحق للجهة (له)' : computedMovements.closing_balance < 0 ? 'مستحق على الجهة (لنا)' : 'حساب مسوى بالكامل'}
+              <span className={`text-[11px] block mt-1 font-medium ${cardSummary.subtitleClass}`}>
+                {cardSummary.subtitle}
               </span>
             </div>
           </div>
@@ -367,7 +487,7 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
 
         {/* Filters Card */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-center">
             {/* Search by doc or cut order */}
             <div>
               <label className="block text-[11px] font-bold text-slate-600 mb-1">بحث برقم المستند أو القصة</label>
@@ -383,15 +503,35 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
               </div>
             </div>
 
+            {/* Transaction Type Filter */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">نوع الحركة المالية</label>
+              <select
+                value={txTypeFilter}
+                onChange={(e) => setTxTypeFilter(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 font-bold focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
+              >
+                <option value="all">كافة الحركات المالية</option>
+                <option value="opening">رصيد أول المدة فقط</option>
+                <option value="sales">فواتير المبيعات</option>
+                <option value="purchases">فواتير المشتريات والتوريد</option>
+                <option value="receipts">سندات التحصيل والقبض</option>
+                <option value="payments">سندات الصرف والدفع</option>
+                <option value="returns">المرتجعات (مبيعات ومشتريات)</option>
+                <option value="manufacturing">مراحل تشغيل الإنتاج والقص</option>
+                <option value="settlements">تسويات ومقاصات</option>
+              </select>
+            </div>
+
             {/* Stage filter */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">تصفية حسب المرحلة</label>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">تصفية مرحلة التشغيل</label>
               <select
                 value={stageFilter}
                 onChange={(e) => setStageFilter(e.target.value)}
                 className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 font-bold focus:outline-hidden focus:ring-2 focus:ring-[#1F3A5F]"
               >
-                <option value="all">جميع المراحل والتوريدات</option>
+                <option value="all">كافة المراحل والتوريدات</option>
                 <option value="طباعة">طباعة</option>
                 <option value="تطريز">تطريز</option>
                 <option value="حياكة">حياكة</option>
@@ -401,23 +541,27 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
 
             {/* From Date */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">من تاريخ</label>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">من تاريخ (يوم/شهر/سنة)</label>
               <input
-                type="date"
+                type="text"
+                title="dd/mm/yyyy"
+                aria-label="من تاريخ يوم شهر سنة"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 font-mono"
+                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 font-mono text-center"
               />
             </div>
 
             {/* To Date */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">إلى تاريخ</label>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">إلى تاريخ (يوم/شهر/سنة)</label>
               <input
-                type="date"
+                type="text"
+                title="dd/mm/yyyy"
+                aria-label="إلى تاريخ يوم شهر سنة"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 font-mono"
+                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 font-mono text-center"
               />
             </div>
           </div>
@@ -434,25 +578,39 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                   <th className="p-3 w-36 font-mono">رقم المستند / أمر القص</th>
                   <th className="p-3 w-28">المرحلة</th>
                   <th className="p-3">البيان والتفاصيل</th>
-                  <th className="p-3 w-28 text-left font-mono">المستحق (له)</th>
-                  <th className="p-3 w-28 text-left font-mono">المسدد (منه)</th>
-                  <th className="p-3 w-32 text-left font-mono">الرصيد التراكمي</th>
+                  <th className="p-3 min-w-[130px] text-left font-mono whitespace-nowrap">
+                    {vendor?.is_customer && !vendor?.is_supplier ? 'المستحق (عليه)' : 'المستحق (له)'}
+                  </th>
+                  <th className="p-3 min-w-[130px] text-left font-mono whitespace-nowrap">المسدد (منه)</th>
+                  <th className="p-3 min-w-[140px] text-left font-mono whitespace-nowrap">الرصيد التراكمي</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {/* Initial opening balance row */}
-                <tr className="bg-slate-50/80 font-bold text-slate-800">
-                  <td className="p-3 text-center text-slate-400">-</td>
-                  <td className="p-3 font-mono text-slate-500">رصيد أول المدة</td>
-                  <td className="p-3 font-mono text-slate-400">---</td>
-                  <td className="p-3 text-slate-500">افتتاحي</td>
-                  <td className="p-3">رصيد افتتاحي مسجل بدفتر الأستاذ ({summary.opening_type === 'credit' ? 'دائن' : 'مدين'})</td>
-                  <td className="p-3 text-left font-mono">{summary.opening_type === 'credit' ? formatCurrency(summary.opening_balance) : '-'}</td>
-                  <td className="p-3 text-left font-mono">{summary.opening_type === 'debit' ? formatCurrency(summary.opening_balance) : '-'}</td>
-                  <td className="p-3 text-left font-mono text-[#1F3A5F]">
-                    {formatCurrency(summary.opening_type === 'debit' ? -summary.opening_balance : summary.opening_balance)}
-                  </td>
-                </tr>
+                {(txTypeFilter === 'all' || txTypeFilter === 'opening') && (
+                  <tr className="bg-slate-50/80 font-bold text-slate-800">
+                    <td className="p-3 text-center text-slate-400">-</td>
+                    <td className="p-3 font-mono text-slate-500">رصيد أول المدة</td>
+                    <td className="p-3 font-mono text-slate-400">---</td>
+                    <td className="p-3 text-slate-500">افتتاحي</td>
+                    <td className="p-3">
+                      رصيد افتتاحي مسجل بدفتر الأستاذ ({cardSummary.openingNatureText})
+                    </td>
+                    <td className="p-3 text-left font-mono whitespace-nowrap">
+                      {vendor?.is_customer && !vendor?.is_supplier
+                        ? (summary.opening_type === 'debit' ? formatCurrency(summary.opening_balance) : '-')
+                        : (summary.opening_type === 'credit' ? formatCurrency(summary.opening_balance) : '-')}
+                    </td>
+                    <td className="p-3 text-left font-mono whitespace-nowrap">
+                      {vendor?.is_customer && !vendor?.is_supplier
+                        ? (summary.opening_type === 'credit' ? formatCurrency(summary.opening_balance) : '-')
+                        : (summary.opening_type === 'debit' ? formatCurrency(summary.opening_balance) : '-')}
+                    </td>
+                    <td className="p-3 text-left font-mono text-[#1F3A5F] whitespace-nowrap">
+                      {formatCurrency(cardSummary.signedOpening)}
+                    </td>
+                  </tr>
+                )}
 
                 {filteredRows.length === 0 ? (
                   <tr>
@@ -485,13 +643,13 @@ export default function VendorStatementPage({ vendorId = null, onBack, onNotify 
                         </span>
                       </td>
                       <td className="p-3 text-slate-800 font-medium">{row.description}</td>
-                      <td className="p-3 text-left font-mono font-bold text-blue-900">
+                      <td className="p-3 text-left font-mono font-bold text-blue-900 whitespace-nowrap">
                         {row.debit > 0 ? formatCurrency(row.debit) : '-'}
                       </td>
-                      <td className="p-3 text-left font-mono font-bold text-emerald-700">
+                      <td className="p-3 text-left font-mono font-bold text-emerald-700 whitespace-nowrap">
                         {row.credit > 0 ? formatCurrency(row.credit) : '-'}
                       </td>
-                      <td className={`p-3 text-left font-mono font-bold ${row.running_balance >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>
+                      <td className={`p-3 text-left font-mono font-bold whitespace-nowrap ${row.running_balance >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>
                         {formatCurrency(row.running_balance)}
                       </td>
                     </tr>

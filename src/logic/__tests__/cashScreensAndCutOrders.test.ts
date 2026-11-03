@@ -8,6 +8,7 @@ import { treasuriesRepo } from '../../data/repositories/treasuriesRepo';
 import { manufacturingRepo } from '../../data/repositories/manufacturingRepo';
 import { auditRepo } from '../../data/repositories/auditRepo';
 import { isFeatureEnabled } from '../../editions/editionConfig';
+import { getTodayDateString } from '../../utils/formatters';
 
 describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens, Shared Supplier Payments, and Cut Order Overhaul', () => {
   beforeEach(async () => {
@@ -67,7 +68,7 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         supplier_id: sup.id,
         account_id: trs.id,
         amount: 800,
-        payment_date: new Date().toISOString().split('T')[0],
+        payment_date: getTodayDateString(),
         payment_method: 'نقداً',
         notes: 'سداد دفعة نقدية'
       }, 'usr-accountant');
@@ -109,10 +110,10 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         cashRepo.recordSupplierPayment({ supplier_id: sup.id, amount: -50 })
       ).rejects.toThrow(/مبلغ .* يجب أن يكون رقماً أكبر من صفر/);
 
-      // Exceeds balance (1500 > 1000)
-      await expect(
-        cashRepo.recordSupplierPayment({ supplier_id: sup.id, amount: 1500 })
-      ).rejects.toThrow(/لا يمكن أن يتجاوز رصيد المديونية المستحق/);
+      // Advance payment exceeding balance (1500 > 1000) now succeeds seamlessly
+      const advPay = await cashRepo.recordSupplierPayment({ supplier_id: sup.id, amount: 1500 });
+      expect(advPay.success).toBe(true);
+      expect(advPay.isAdvance).toBe(true);
     });
 
     it('cancels supplier payment via reversing entries (never deleted)', async () => {
@@ -134,7 +135,7 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         supplier_id: sup.id,
         account_id: trs.id,
         amount: 300,
-        payment_date: new Date().toISOString().split('T')[0]
+        payment_date: getTodayDateString()
       });
 
       // Balances after payment
@@ -184,7 +185,7 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         customer_id: cust.id,
         account_id: trs.id,
         amount: 1500,
-        payment_date: new Date().toISOString().split('T')[0],
+        payment_date: getTodayDateString(),
         payment_method: 'نقداً',
         notes: 'دفعة حساب'
       });
@@ -218,7 +219,7 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         customer_id: cust.id,
         account_id: trs.id,
         amount: 800,
-        payment_date: new Date().toISOString().split('T')[0]
+        payment_date: getTodayDateString()
       });
 
       expect((await db.treasury_accounts.get(trs.id)).current_balance).toBe(1800);
@@ -397,8 +398,8 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
         is_supplier: 1,
         supplier_type: 'service',
         service_stage: 'printing',
-        opening_balance: 1500,
-        supplier_opening_balance: 1500
+        opening_balance: 0,
+        supplier_opening_balance: 0
       });
 
       const embroideryShop = await partiesRepo.create({
@@ -475,9 +476,8 @@ describe.skipIf(!isFeatureEnabled('cutting'))('Requirements 2 & 4: Cash Screens,
       // Total stages cost: 1500 + 2000 + 2500 = 6000 EGP
       expect(fetched.total_stages_cost).toBe(6000);
 
-      // 5. Record stage payment of 600 EGP to printing stage via addStagePayment
-      // First update printShop balance to acknowledge stage debt
-      await db.parties.update(printShop.id, { supplier_balance: 1500 });
+      // 5. Verify stage debt was posted automatically to printShop balance (1500 EGP)
+      expect((await partiesRepo.getById(printShop.id)).supplier_balance).toBe(1500);
 
       const payStageRes = await manufacturingRepo.addStagePayment(order.id, 'printing', {
         amount: 600,

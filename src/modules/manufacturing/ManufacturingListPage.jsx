@@ -109,7 +109,7 @@ export default function ManufacturingListPage({ onNotify }) {
       const stages = o.stages || {};
       for (const [stKey, stData] of Object.entries(stages)) {
         if (!stData) continue;
-        const stTitle = stKey === 'printing' ? 'الطباعة' : stKey === 'embroidery' ? 'التطريز' : 'الحياكة';
+        const stTitle = stKey === 'printing' ? 'الطباعة' : stKey === 'embroidery' ? 'التطريز' : stKey === 'sewing' ? 'الحياكة' : 'التشغيل';
         if (stageFilter !== 'all' && stageFilter !== stKey) continue;
         if (vendorFilter !== 'all' && stData.vendor_id !== vendorFilter && stData.vendor_name !== vendorFilter) continue;
 
@@ -145,7 +145,8 @@ export default function ManufacturingListPage({ onNotify }) {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ar'));
   }, [orders]);
 
-  const filteredOrders = orders.filter(o => {
+  const safeOrders = Array.isArray(orders) ? orders : [];
+  const filteredOrders = safeOrders.filter(o => {
     // 1. Search term
     const term = searchTerm.trim().toLowerCase();
     if (term) {
@@ -295,7 +296,7 @@ export default function ManufacturingListPage({ onNotify }) {
         cutting_number: o.cutting_number || o.order_number,
         cutting_name: o.cutting_name || o.product_name,
         stageKey: stKey,
-        stageTitle: stKey === 'printing' ? 'الطباعة' : stKey === 'embroidery' ? 'التطريز' : 'الحياكة',
+        stageTitle: stKey === 'printing' ? 'الطباعة' : stKey === 'embroidery' ? 'التطريز' : stKey === 'sewing' ? 'الحياكة' : 'التشغيل',
         vendor_id: stData.vendor_id,
         vendor_name: stData.vendor_name || 'غير محدد',
         pricing_type: stData.pricing_type,
@@ -816,6 +817,7 @@ export default function ManufacturingListPage({ onNotify }) {
                   <option value="printing">مرحلة الطباعة</option>
                   <option value="embroidery">مرحلة التطريز</option>
                   <option value="sewing">مرحلة الحياكة</option>
+                  <option value="operation">مرحلة التشغيل</option>
                 </select>
               </div>
 
@@ -951,7 +953,7 @@ export default function ManufacturingListPage({ onNotify }) {
                         <td className="p-3 font-mono font-bold text-[#1F3A5F]">{w.code || '---'}</td>
                         <td className="p-3 font-bold text-slate-900">{w.name}</td>
                         <td className="p-3 font-semibold text-slate-700">
-                          {w.service_stage === 'printing' ? 'مطبعة' : w.service_stage === 'embroidery' ? 'ورشة تطريز' : w.service_stage === 'sewing' ? 'ورشة حياكة' : 'مورد خدمات'}
+                          {w.service_stage === 'printing' ? 'مطبعة' : w.service_stage === 'embroidery' ? 'ورشة تطريز' : w.service_stage === 'sewing' ? 'ورشة حياكة' : w.service_stage === 'operation' ? 'ورشة تشغيل' : 'مورد خدمات'}
                         </td>
                         <td className="p-3 font-mono text-slate-700">
                           <span className="flex items-center gap-1">

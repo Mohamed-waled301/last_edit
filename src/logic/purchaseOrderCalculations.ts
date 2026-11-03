@@ -53,9 +53,10 @@ export function calculatePurchaseOrderTotals(input: PurchaseOrderTotalsInput): P
     discountValue = Number(((subtotal * discountPercent) / 100).toFixed(2));
   }
 
-  // Required Formula: Final net = items subtotal - discount value - additional expenses
-  const rawNet = Number((subtotal - discountValue - additionalExpenses).toFixed(2));
-  const isValid = rawNet >= 0;
+  // Required Formula: Final net = (items subtotal - discount value) + additional expenses.
+  const discountedSubtotal = subtotal - discountValue;
+  const rawNet = Number((discountedSubtotal + additionalExpenses).toFixed(2));
+  const isValid = rawNet >= 0 && discountedSubtotal >= 0;
   const finalNet = Math.max(0, rawNet);
 
   return {
@@ -66,6 +67,7 @@ export function calculatePurchaseOrderTotals(input: PurchaseOrderTotalsInput): P
     rawNet,
     finalNet,
     isValid,
-    errorMessage: isValid ? '' : 'الصافي النهائي لا يمكن أن يكون أقل من صفر'
+    errorMessage: isValid ? '' : 'الصافي النهائي لا يمكن أن يكون أقل من صفر أو الخصم أكبر من الإجمالي'
   };
 }
+

@@ -3,6 +3,7 @@ import { MapPin, Plus, Edit, CheckCircle2, Building, Store } from 'lucide-react'
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { Validators, FieldError } from '../../utils/validation';
+import { handleFormKeyDown } from '../../utils/formNavigation';
 
 export default function StorageLocationsPage({ onNotify }) {
   const [locations, setLocations] = useState([]);
@@ -99,7 +100,7 @@ export default function StorageLocationsPage({ onNotify }) {
             {editingId ? 'تعديل موقع تخزين' : 'إضافة موقع تخزين جديد'}
           </h2>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-3">
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 كود الموقع

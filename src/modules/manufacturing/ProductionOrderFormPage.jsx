@@ -51,7 +51,8 @@ import {
 const STAGE_KEYS = [
   { key: 'printing', title: 'الطباعة', icon: Printer, color: 'blue' },
   { key: 'embroidery', title: 'التطريز', icon: Sparkles, color: 'purple' },
-  { key: 'sewing', title: 'الحياكة', icon: Cog, color: 'emerald' }
+  { key: 'sewing', title: 'الحياكة', icon: Cog, color: 'emerald' },
+  { key: 'operation', title: 'التشغيل', icon: Layers, color: 'amber' }
 ];
 
 /**
@@ -77,7 +78,8 @@ function SearchableMaterialSelect({ items, value, onChange }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredItems = items.filter((item) => {
+  const safeItems = Array.isArray(items) ? items : [];
+  const filteredItems = safeItems.filter((item) => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.trim().toLowerCase();
     const codeMatch = String(item.code || '').toLowerCase().includes(query);
@@ -256,6 +258,18 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
       total_cost: 0,
       paid: 0,
       remaining: 0
+    },
+    operation: {
+      vendor_id: '',
+      vendor_name: '',
+      pricing_type: 'fixed',
+      price_per_piece: '',
+      fixed_total: '',
+      batches: [],
+      notes: '',
+      total_cost: 0,
+      paid: 0,
+      remaining: 0
     }
   });
 
@@ -420,6 +434,12 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
                   ...(o.stages.sewing || {}),
                   price_per_piece: String(o.stages.sewing?.price_per_piece ?? ''),
                   fixed_total: String(o.stages.sewing?.fixed_total ?? o.stages.sewing?.total_cost ?? '')
+                },
+                operation: {
+                  ...prev.operation,
+                  ...(o.stages.operation || {}),
+                  price_per_piece: String(o.stages.operation?.price_per_piece ?? ''),
+                  fixed_total: String(o.stages.operation?.fixed_total ?? o.stages.operation?.total_cost ?? '')
                 }
               }));
             } else {
@@ -715,7 +735,8 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
       const stageActivityMap = {
         printing: 'طباعة',
         embroidery: 'تطريز',
-        sewing: 'حياكة'
+        sewing: 'حياكة',
+        operation: 'تشغيل'
       };
       const newParty = await api.createParty({
         name: inlineVendorState.name.trim(),
@@ -785,7 +806,8 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
     }
 
     // Payments for this stage
-    const stPayments = stagePayments.filter(p => (p.stage_type === key || (!p.stage_type && key === 'printing')) && p.status !== 'cancelled');
+    const safeStagePayments = Array.isArray(stagePayments) ? stagePayments : [];
+    const stPayments = safeStagePayments.filter(p => (p.stage_type === key || (!p.stage_type && key === 'printing')) && p.status !== 'cancelled');
     const paid = stPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const remaining = Math.max(0, Number((cost - paid).toFixed(2)));
 
@@ -857,10 +879,7 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
       return;
     }
 
-    if (amt > stComputed.remaining) {
-      setPaymentError(`مبلغ الدفعة (${amt} ج.م) لا يمكن أن يتجاوز المبلغ المتبقي للمرحلة (${stComputed.remaining} ج.م)`);
-      return;
-    }
+    // Allow advance payments for stage and workshop without blocking
 
     try {
       setPaymentSubmitting(true);
@@ -1679,7 +1698,8 @@ export default function ProductionOrderFormPage({ orderId = null, onSaved, onNot
                             const stageActivities = {
                               printing: ['طباعة', 'الطباعة', 'printing', 'service_printing'],
                               embroidery: ['تطريز', 'التطريز', 'embroidery', 'service_embroidery'],
-                              sewing: ['حياكة', 'الحياكة', 'sewing', 'service_sewing']
+                              sewing: ['حياكة', 'الحياكة', 'sewing', 'service_sewing'],
+                              operation: ['تشغيل', 'التشغيل', 'operation', 'service_operation', 'processing', 'service_processing']
                             };
                             const matchActs = stageActivities[k] || [];
                             if (matchActs.includes(w.supplier_type)) return true;

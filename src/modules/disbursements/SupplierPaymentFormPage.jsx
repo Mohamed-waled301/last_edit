@@ -7,6 +7,7 @@ import { api } from '../../services/api';
 import { formatCurrency, getTodayDateString, formatDate } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import { navigationGuard } from '../../utils/navigationGuard';
+import { handleFormKeyDown } from '../../utils/formNavigation';
 
 export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
   const today = getTodayDateString();
@@ -110,15 +111,14 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
   const currentTreasuryBal = Number(selectedTreasury?.current_balance) || 0;
   const numAmount = Number(form.amount) || 0;
   const projectedTreasuryBal = Number((currentTreasuryBal - numAmount).toFixed(2));
-  const projectedSupplierBal = Math.max(0, Number((supplierBalance - numAmount).toFixed(2)));
+  const projectedSupplierBal = Number((supplierBalance - numAmount).toFixed(2));
+  const isAdvancePayment = supplierBalance <= 0 || numAmount > supplierBalance;
 
   const validate = () => {
     const errs = {};
-    if (!form.supplier_id) errs.supplier_id = 'يرجى اختيار المورد';
+    if (!form.supplier_id) errs.supplier_id = 'يرجى اختيار المورد أو الورشة';
     if (!numAmount || numAmount <= 0) {
       errs.amount = 'دفعة المورد يجب أن تكون أكبر من صفر';
-    } else if (numAmount > supplierBalance) {
-      errs.amount = `مبلغ دفعة المورد (${formatCurrency(numAmount)}) لا يمكن أن يتجاوز رصيد المديونية المستحق له (${formatCurrency(supplierBalance)})`;
     }
     if (!form.account_id) errs.account_id = 'يرجى اختيار الخزينة المنصرف منها';
     if (!form.payment_date) errs.payment_date = 'تاريخ السند مطلوب';
@@ -146,6 +146,7 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
       });
 
       isSavedRef.current = true;
+      navigationGuard.unregister();
       if (onNotify) {
         onNotify(`تم إصدار سند سداد دفعة المورد برقم (${res.paymentNumber}) بنجاح`);
       }
@@ -156,7 +157,12 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
         window.location.hash = '#/disbursements';
       }
     } catch (err) {
-      alert(err.message || 'فشل في إصدار سند سداد دفعة المورد');
+      if (onNotify) {
+        onNotify(err.message || 'فشل في إصدار سند سداد دفعة المورد', 'error');
+      } else {
+        alert(err.message || 'فشل في إصدار سند سداد دفعة المورد');
+      }
+      setErrors(prev => ({ ...prev, general: err.message || 'فشل في إصدار سند سداد دفعة المورد' }));
     } finally {
       setSaving(false);
       setShowConfirmModal(false);
@@ -168,7 +174,8 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
     else window.location.hash = '#/disbursements';
   };
 
-  const isFormValid = Boolean(form.supplier_id && numAmount > 0 && numAmount <= supplierBalance && form.account_id);
+  // Zero-balance and advance payments are fully valid as long as supplier, amount > 0, and account are selected
+  const isFormValid = Boolean(form.supplier_id && numAmount > 0 && form.account_id);
 
   // Filtered suppliers for quick select
   const filteredSuppliers = suppliers.filter(s => {
@@ -180,7 +187,7 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
   return (
     <PageContainer
       title="مدفوعات مورد جديدة"
-      subtitle="سداد دفعة نقدية لمورد من الخزينة لتخفيض رصيد المديونية المستحق له في قيد واحد"
+      subtitle="سداد دفعة نقدية أو دفعة مقدمة تحت الحساب لمورد أو ورشة من الخزينة لتسوية الحساب في قيد واحد"
       breadcrumbs={[
         { label: 'صرف النقدية', href: '#/disbursements' },
         { label: 'مدفوعات مورد' }
@@ -192,15 +199,27 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
       saveDisabled={!isFormValid || saving}
       saveText="إصدار"
       extraBottomContent={
-        <div className="flex items-center gap-4 text-xs font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200">
-          <span>المورد: <strong className="text-[#1F3A5F]">{selectedSupplier?.name || '-'}</strong></span>
+        <div className="flex items-center gap-4 text-xs font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200 flex-wrap">
+          <span>المورد/الورشة: <strong className="text-[#1F3A5F]">{selectedSupplier?.name || '-'}</strong></span>
           <span className="text-gray-300">|</span>
-          <span>المديونية: <span className="font-mono text-blue-700">{formatCurrency(supplierBalance)}</span></span>
+          <span>الرصيد المستحق: <span className="font-mono text-blue-700">{formatCurrency(supplierBalance)}</span></span>
           <span className="text-gray-300">|</span>
           <span>الدفعة: <span className="font-mono text-rose-700 text-sm font-bold">{formatCurrency(numAmount)}</span></span>
           <span className="text-gray-300">|</span>
           <span>
-            رصيد الخزينة بعدها: 
+            {projectedSupplierBal < 0 ? (
+              <span className="text-amber-700 font-bold">
+                دفعة مقدمة له: <span className="font-mono">{formatCurrency(Math.abs(projectedSupplierBal))}</span>
+              </span>
+            ) : (
+              <span>
+                المتبقي له: <span className="font-mono text-blue-700 font-bold">{formatCurrency(projectedSupplierBal)}</span>
+              </span>
+            )}
+          </span>
+          <span className="text-gray-300">|</span>
+          <span>
+            رصيد الخزينة: 
             <span className={`font-mono mr-1 ${projectedTreasuryBal < 0 ? 'text-red-600 font-bold' : 'text-emerald-700 font-bold'}`}>
               {formatCurrency(projectedTreasuryBal)}
             </span>
@@ -208,7 +227,13 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
         </div>
       }
     >
-      <form onSubmit={handleIssueClick} className="space-y-6">
+      <form onSubmit={handleIssueClick} onKeyDown={handleFormKeyDown} className="space-y-6">
+        {errors.general && (
+          <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-xs font-bold">
+            {errors.general}
+          </div>
+        )}
+
         {/* Main Card */}
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-5">
           <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2.5 flex items-center gap-2">
@@ -221,7 +246,7 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
             <div className="md:col-span-2">
               <div className="flex items-center justify-between mb-1">
                 <label htmlFor="payment-supplier-select" className="block text-xs font-bold text-gray-700">
-                  اختيار المورد *
+                  اختيار المورد أو الورشة *
                 </label>
                 {selectedSupplier && (
                   <div className="text-xs font-bold text-blue-800 bg-blue-50 px-2.5 py-1 rounded border border-blue-200 font-mono">
@@ -239,10 +264,10 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white font-bold text-[#1F3A5F] focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                     required
                   >
-                    <option value="">-- اختر المورد --</option>
+                    <option value="">-- اختر المورد أو الورشة --</option>
                     {filteredSuppliers.map(s => (
                       <option key={s.id} value={s.id}>
-                        [{s.code}] {s.name} (مستحق له: {formatCurrency(s.supplier_balance || 0)})
+                        [{s.code}] {s.name} (الرصيد: {formatCurrency(s.supplier_balance || 0)})
                       </option>
                     ))}
                   </select>
@@ -257,6 +282,11 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
                   <span className="text-base font-bold text-blue-700 font-mono">
                     {formatCurrency(supplierBalance)}
                   </span>
+                  {supplierBalance <= 0 && (
+                    <span className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                      متاح تسجيل دفعات مقدمة تحت الحساب
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -280,7 +310,7 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
                 required
               />
               <span className="text-[11px] text-gray-500 mt-1 block">
-                اكتب القيمة يدوياً. يجب أن تكون أكبر من 0 ولا تتجاوز الرصيد المستحق ({formatCurrency(supplierBalance)}).
+                اكتب القيمة يدوياً. يمكن صرف دفعات عادية أو دفعات مقدمة تحت الحساب حتى مع وجود رصيد 0.00 ج.م.
               </span>
               <FieldError error={errors.amount} />
             </div>
@@ -368,7 +398,7 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
         </div>
       </form>
 
-      {/* Confirmation Summary Modal (Requirement 2.1) */}
+      {/* Confirmation Summary Modal */}
       <DocumentConfirmModal
         isOpen={showConfirmModal}
         title="تأكيد إصدار سند سداد دفعة المورد"
@@ -380,11 +410,13 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
         onCancel={() => setShowConfirmModal(false)}
         isSubmitting={saving}
         summaryData={{
-          'اسم المورد': selectedSupplier?.name || '-',
-          'كود المورد': selectedSupplier?.code || '-',
+          'اسم المورد / الورشة': selectedSupplier?.name || '-',
+          'كود الحساب': selectedSupplier?.code || '-',
           'الرصيد المستحق قبل السداد': formatCurrency(supplierBalance),
           'مبلغ دفعة المورد': formatCurrency(numAmount),
-          'الرصيد المتبقي للمورد بعد السداد': formatCurrency(projectedSupplierBal),
+          'حالة الرصيد بعد الصرف': projectedSupplierBal < 0
+            ? `دفعة مقدمة لصالحنا (${formatCurrency(Math.abs(projectedSupplierBal))})`
+            : (projectedSupplierBal === 0 ? 'الحساب متزن (0.00 ج.م)' : `متبقي له (${formatCurrency(projectedSupplierBal)})`),
           'الخزينة المنصرف منها': selectedTreasury?.name || '-',
           'رصيد الخزينة قبل السداد': formatCurrency(currentTreasuryBal),
           'رصيد الخزينة بعد السداد': formatCurrency(projectedTreasuryBal),

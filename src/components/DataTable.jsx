@@ -160,7 +160,7 @@ export default function DataTable({
                     className={`py-3 px-3.5 whitespace-nowrap ${alignClass} ${
                       isSortable ? 'cursor-pointer hover:bg-[#162a45] transition-colors' : ''
                     } ${col.width || ''}`}
-                    style={col.minWidth ? { minWidth: col.minWidth } : {}}
+                    style={col.minWidth ? { minWidth: col.minWidth } : ((col.type === 'number' || col.type === 'currency') ? { minWidth: '120px' } : {})}
                   >
                     <div
                       className={`inline-flex items-center gap-1.5 ${
@@ -249,7 +249,7 @@ export default function DataTable({
                       } else if (col.type === 'number' || col.type === 'currency') {
                         content = (
                           <span
-                            className="font-mono tabular-nums font-semibold"
+                            className="font-mono tabular-nums font-semibold whitespace-nowrap min-w-[120px] inline-block"
                             style={{ direction: 'ltr', unicodeBidi: 'isolate' }}
                           >
                             {rawVal != null ? rawVal : '-'}
@@ -296,11 +296,11 @@ export default function DataTable({
       {/* Pagination Bar (When > pageSize) */}
       {shouldPaginate && (
         <div className="p-3 border-t border-gray-200 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600 bg-gray-50/50">
-          <div className="font-semibold" style={{ direction: 'ltr', unicodeBidi: 'isolate' }}>
-            {`Showing ${(currentPage - 1) * pageSize + 1} - ${Math.min(
+          <div className="font-semibold text-slate-700">
+            {`عرض ${(currentPage - 1) * pageSize + 1} - ${Math.min(
               currentPage * pageSize,
               sortedData.length
-            )} of ${sortedData.length} records`}
+            )} من إجمالي ${sortedData.length} سجل`}
           </div>
 
           <div className="flex items-center gap-1.5">

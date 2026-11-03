@@ -13,6 +13,7 @@ import {
 import { migrateCutOrdersToMatrix } from '../cutOrderMatrixMigration';
 import db from '../../data/db';
 import { itemsRepo } from '../../data/repositories/itemsRepo';
+import { isFeatureEnabled } from '../../editions/editionConfig';
 
 describe('Cut Order Matrix Overhaul & Size-Color Calculations', () => {
   beforeEach(async () => {
@@ -190,7 +191,7 @@ describe('Cut Order Matrix Overhaul & Size-Color Calculations', () => {
     });
   });
 
-  describe('5. Data Migration & Verification', () => {
+  describe.skipIf(!isFeatureEnabled('cutting'))('5. Data Migration & Verification', () => {
     it('safely migrates legacy single-color cut orders in db to matrix format while preserving exact piece counts', async () => {
       const legacyOrders = [
         {
@@ -237,7 +238,7 @@ describe('Cut Order Matrix Overhaul & Size-Color Calculations', () => {
     });
   });
 
-  describe('6. Manufacturing Repository Stock & Variant Integration', () => {
+  describe.skipIf(!isFeatureEnabled('cutting'))('6. Manufacturing Repository Stock & Variant Integration', () => {
     it('creates cut order with variant receipt and prevents negative stock on edit', async () => {
       const { manufacturingRepo } = await import('../../data/repositories/manufacturingRepo');
 

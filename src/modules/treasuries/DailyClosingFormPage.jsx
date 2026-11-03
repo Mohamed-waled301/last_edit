@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Clock, CheckCircle2, AlertTriangle, Store, DollarSign, Plus } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api, getActiveUser } from '../../services/api';
@@ -6,8 +6,11 @@ import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import QuickOutletModal from '../outlets/QuickOutletModal';
 import { MoneyInput } from '../../components/MoneyInput';
+import { handleFormKeyDown } from '../../utils/formNavigation';
+import { navigationGuard } from '../../utils/navigationGuard';
 
 export default function DailyClosingFormPage({ onSaved, onNotify }) {
+  const isSavedRef = useRef(false);
   const activeUser = getActiveUser();
   const [outlets, setOutlets] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -41,6 +44,15 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
     }
     loadData();
   }, []);
+
+  // Unsaved changes protection
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      return Boolean((form.actual_cash_counted && Number(form.actual_cash_counted) > 0) || form.notes?.trim());
+    });
+    return unregister;
+  }, [form]);
 
   const handleOutletCreated = async (newOutlet) => {
     try {
@@ -89,6 +101,9 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
         notes: form.notes
       });
 
+      isSavedRef.current = true;
+      navigationGuard.unregister();
+
       if (onNotify) onNotify('تم اعتماد تقفيل الوردية اليومية بنجاح');
 
       if (onSaved) {
@@ -129,7 +144,7 @@ export default function DailyClosingFormPage({ onSaved, onNotify }) {
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} onKeyDown={handleFormKeyDown} className="space-y-6">
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
             <Clock className="w-5 h-5 text-[#1F3A5F]" />

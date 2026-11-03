@@ -135,16 +135,36 @@ export default function StockCardPage({ initialItemId = null, onNavigate, onNoti
   };
 
   const handlePrint = () => {
+    if (!cardData) return;
+    const entries = Array.isArray(cardData.entries) ? cardData.entries : [];
+    const formattedMovements = entries.map((entry) => ({
+      date: entry.date,
+      movement_type_ar: getMovementLabel(entry.movement_type),
+      type: getMovementLabel(entry.movement_type),
+      document_number: entry.document_id || entry.reference_id || entry.document_number || '-',
+      quantity_in: entry.direction === 'in' ? entry.quantity : 0,
+      quantity_out: entry.direction === 'out' ? entry.quantity : 0,
+      running_balance: entry.running_balance,
+      unit_cost: entry.unit_cost || 0,
+      notes: entry.notes || '-'
+    }));
+
+    const payload = {
+      id: selectedItemId,
+      type: 'stock_card',
+      item: selectedItem || { id: selectedItemId, name: 'الصنف', code: '', unit: 'قطعة' },
+      movements: formattedMovements,
+      currentStock: cardData.closing_balance ?? cardData.current_balance ?? 0,
+      totalIn: cardData.total_in ?? 0,
+      totalOut: cardData.total_out ?? 0,
+      openingBalance: cardData.opening_balance ?? 0
+    };
+
     try {
-      sessionStorage.setItem('print_preview_payload', JSON.stringify({
-        type: 'stock_card',
-        item: selectedItem,
-        movements: sortedMovements,
-        currentStock,
-        totalIn,
-        totalOut,
-      }));
-    } catch {}
+      sessionStorage.setItem('print_preview_payload', JSON.stringify(payload));
+    } catch (e) {
+      console.warn('Failed to store print payload in sessionStorage:', e);
+    }
     window.location.hash = `#/print-preview?type=stock_card&id=${selectedItemId}&returnUrl=${encodeURIComponent('#/stock-card')}`;
   };
 

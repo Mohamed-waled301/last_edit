@@ -20,6 +20,7 @@ import { api, getActiveUser } from '../../services/api';
 import { exportToExcel } from '../../utils/exportExcel';
 import { formatDate } from '../../utils/formatters';
 import { TABLE_METADATA, COLUMN_LABELS } from '../../data/repositories/dataManagementRepo';
+import AccountAuditModal from '../../components/AccountAuditModal';
 
 export default function DataManagementPage({ initialTable = 'items', onNavigate, onNotify }) {
   const [currentUser] = useState(() => getActiveUser());
@@ -31,6 +32,7 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
   const [deleteReason, setDeleteReason] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [refError, setRefError] = useState(null);
+  const [showAuditModal, setShowAuditModal] = useState(false);
 
   // Audit Log Filter States
   const [auditFilters, setAuditFilters] = useState({
@@ -307,6 +309,16 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
 
           <button
             type="button"
+            onClick={() => setShowAuditModal(true)}
+            className="px-3.5 py-2 rounded-md border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+            title="فحص وتدقيق الحسابات والمدفوعات وكشف أي قيود وهمية أو تكرار"
+          >
+            <Shield className="w-4 h-4 text-amber-600" />
+            <span>فحص الحسابات</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleExport}
             className="px-3.5 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
             title="تصدير السجلات الحالية إلى ملف إكسيل"
@@ -555,6 +567,17 @@ export default function DataManagementPage({ initialTable = 'items', onNavigate,
           </div>
         </div>
       )}
+
+      {/* Account Audit & Repair Modal */}
+      <AccountAuditModal
+        isOpen={showAuditModal}
+        onClose={() => setShowAuditModal(false)}
+        onNotify={onNotify}
+        onRefresh={() => {
+          if (activeTab) loadTableData(activeTab);
+          loadTables();
+        }}
+      />
     </PageContainer>
   );
 }

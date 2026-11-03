@@ -16,13 +16,18 @@ export const salesRepo = {
     const list = await db.customers.toArray();
     const invoices = await db.sales_invoices.toArray();
     const returns = await db.customer_returns.toArray();
+    const payments = await db.customer_payments.toArray();
 
     return list.map(c => {
       const custInvoices = invoices.filter(i => i.customer_id === c.id);
       const custReturns = returns.filter(r => r.customer_id === c.id);
+      const unlinkedPayments = payments
+        .filter(p => p.customer_id === c.id && !p.invoice_id)
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       // Current Balance = Opening Balance + Credit Sales - Cash In / Receipts
       const opening = resolveOpeningBalance(c, 'customer');
-      const bal = BalanceCalculator.calculateCustomerBalance(custInvoices, custReturns, opening);
+      const openingType = resolveOpeningType(c, 'customer');
+      const bal = BalanceCalculator.calculateCustomerBalance(custInvoices, custReturns, opening, unlinkedPayments, openingType);
 
       return {
         ...c,
@@ -65,7 +70,10 @@ export const salesRepo = {
   },
 
   async getCustomerStatement(id) {
-    const customer = await db.customers.get(id);
+    let customer = await db.customers.get(id);
+    if (!customer && db.parties) {
+      customer = await db.parties.get(id);
+    }
     if (!customer) throw new Error('العميل غير موجود');
 
     const invoices = await db.sales_invoices.where('customer_id').equals(id).toArray();
@@ -78,13 +86,14 @@ export const salesRepo = {
 
     // Opening balance row (رصيد أول المدة) comes first chronologically
     if (opening > 0) {
+      const isCredit = openingType === 'credit';
       transactions.push({
         date: customer.created_at ? String(customer.created_at).split('T')[0] : '',
         type: 'رصيد أول المدة',
         reference: 'OPENING',
-        description: `رصيد افتتاحي (${openingType === 'credit' ? 'دائن' : 'مدين'})`,
-        debit: opening,
-        credit: 0,
+        description: `رصيد افتتاحي (${isCredit ? 'دائن - دفعة مقدمة' : 'مدين - مستحق'})`,
+        debit: isCredit ? 0 : opening,
+        credit: isCredit ? opening : 0,
         raw_date: '0000-00-00T00:00:00.000Z',
         is_opening: true,
       });
@@ -130,7 +139,7 @@ export const salesRepo = {
 
     transactions.sort((a, b) => new Date(a.raw_date).getTime() - new Date(b.raw_date).getTime());
 
-    let runningBalance = opening;
+    let runningBalance = 0;
     const ledger = transactions.map(tx => {
       runningBalance = runningBalance + tx.debit - tx.credit;
       return {
@@ -139,11 +148,21 @@ export const salesRepo = {
       };
     });
 
-    const bal = BalanceCalculator.calculateCustomerBalance(invoices, returns, opening);
+    const activeInvoices = invoices.filter(i => i.status !== 'cancelled');
+    const activeReturns = returns.filter(r => r.status !== 'cancelled');
+    const activePayments = payments.filter(p => p.status !== 'cancelled');
+    const unlinkedCustPaid = activePayments
+      .filter(p => !p.invoice_id)
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    const bal = BalanceCalculator.calculateCustomerBalance(activeInvoices, activeReturns, opening, unlinkedCustPaid, openingType);
 
     return {
       customer: { ...customer, opening_balance: opening, opening_balance_type: openingType, ...bal },
       statement: ledger,
+      movements: ledger,
+      opening_balance: opening,
+      opening_balance_type: openingType,
       invoices,
       payments,
       summary: {
@@ -349,6 +368,74 @@ export const salesRepo = {
     });
   },
 
+  async getSalesInvoice(id) {
+    if (!id) return null;
+    let inv = await db.sales_invoices.get(id);
+    if (!inv && !isNaN(Number(id))) {
+      inv = await db.sales_invoices.get(Number(id));
+    }
+    if (!inv) {
+      inv = await db.sales_invoices.where('invoice_number').equals(String(id)).first();
+    }
+    if (!inv) {
+      const all = await db.sales_invoices.toArray();
+      inv = all.find(i => String(i.id) === String(id) || String(i.invoice_number) === String(id));
+    }
+    if (!inv) return null;
+
+    let customer = await db.customers.get(inv.customer_id);
+    if (!customer && db.parties) {
+      customer = await db.parties.get(inv.customer_id);
+    }
+
+    let outlet = null;
+    if (inv.outlet_id && db.sales_outlets) {
+      outlet = await db.sales_outlets.get(inv.outlet_id);
+    }
+
+    let items = [];
+    if (db.sales_invoice_items) {
+      items = await db.sales_invoice_items.where('invoice_id').equals(inv.id).toArray();
+      if (items.length === 0 && !isNaN(Number(inv.id))) {
+        items = await db.sales_invoice_items.where('invoice_id').equals(Number(inv.id)).toArray();
+      }
+    }
+    const products = db.products ? await db.products.toArray() : [];
+    const prodMap = new Map(products.map(p => [p.id, p]));
+    const itemMasterList = db.items ? await db.items.toArray() : [];
+    const itemMap = new Map(itemMasterList.map(i => [i.id, i]));
+
+    const populatedItems = items.map(it => {
+      const prod = prodMap.get(it.product_id) || itemMap.get(it.product_id);
+      return {
+        ...it,
+        product_name: prod ? prod.name : (it.product_name || it.product_id),
+        product_code: prod ? (prod.code || prod.sku) : (it.product_code || ''),
+        unit: prod?.unit || it.unit || 'قطعة',
+        quantity: Number(it.quantity) || 0,
+        unit_price: Number(it.unit_price) || 0,
+        total_price: Number(it.total_price) || (Number(it.quantity || 0) * Number(it.unit_price || 0)),
+      };
+    });
+
+    const totalAmount = Number(inv.total_invoice_amount ?? inv.total_amount ?? 0);
+    const paidAmount = Number(inv.paid_amount ?? (inv.payment_terms === 'credit' ? 0 : totalAmount));
+    const remainingAmount = Math.max(0, Number((totalAmount - paidAmount).toFixed(2)));
+
+    return {
+      ...inv,
+      customer_name: customer?.name || inv.customer_name || inv.customer_id,
+      customer_code: customer?.code || inv.customer_code || '',
+      customer_phone: customer?.phone || inv.customer_phone || '',
+      outlet_name: outlet?.name || (inv.outlet_id ? 'المعرض الرئيسي' : 'بدون منفذ'),
+      items: populatedItems.length > 0 ? populatedItems : (Array.isArray(inv.items) ? inv.items : []),
+      total_amount: totalAmount,
+      total_invoice_amount: totalAmount,
+      paid_amount: paidAmount,
+      remaining_amount: remainingAmount,
+    };
+  },
+
   /**
    * Sales Report (تقرير المبيعات المعتمدة وتجميع مبيعات العملاء)
    * Strictly includes ONLY customers who actually have issued sales invoices
@@ -479,11 +566,39 @@ export const salesRepo = {
     };
   },
 
+  async getNextInvoiceNumber(year = new Date().getFullYear()) {
+    const prefix = `INV-SLS-${year}-`;
+    const invoices = await db.sales_invoices.toArray();
+    const existingNumbers = new Set(invoices.map(i => i.invoice_number));
+
+    let maxSeq = 0;
+    for (const inv of invoices) {
+      if (inv.invoice_number && inv.invoice_number.startsWith(prefix)) {
+        const suffix = inv.invoice_number.substring(prefix.length);
+        const num = parseInt(suffix, 10);
+        if (!isNaN(num)) {
+          if (num <= Math.max(500, invoices.length * 2)) {
+            if (num > maxSeq) {
+              maxSeq = num;
+            }
+          }
+        }
+      }
+    }
+
+    let nextNum = maxSeq + 1;
+    while (existingNumbers.has(`${prefix}${String(nextNum).padStart(4, '0')}`)) {
+      nextNum++;
+    }
+
+    return `${prefix}${String(nextNum).padStart(4, '0')}`;
+  },
+
   async createSalesInvoice(data, userId = 'usr-accountant') {
     if (data.invoice_date) validateNotPastDate(data.invoice_date, 'تاريخ فاتورة المبيعات');
     if (data.due_date && data.payment_terms === 'credit') validateNotPastDate(data.due_date, 'تاريخ استحقاق الفاتورة');
     const id = `sinv-${Date.now()}`;
-    const invoiceNumber = data.invoice_number || `INV-SLS-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+    const invoiceNumber = data.invoice_number || (await this.getNextInvoiceNumber(new Date().getFullYear()));
     const now = new Date().toISOString();
 
     const paymentTerms = data.payment_terms || 'cash';

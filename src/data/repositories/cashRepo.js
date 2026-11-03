@@ -1,6 +1,7 @@
 import db from '../db';
 import auditRepo from './auditRepo';
 import { validateNotPastDate } from '../../utils/formatters';
+import { partiesRepo } from './partiesRepo';
 
 export const cashRepo = {
   async getAccounts() {
@@ -221,17 +222,9 @@ export const cashRepo = {
     const party = await db.parties.get(supplier_id);
     if (!party || !party.is_supplier) throw new Error('المورد المحدد غير موجود بالنظام');
 
-    const { partiesRepo } = await import('./partiesRepo');
-    const fullParty = await partiesRepo.getById(supplier_id);
+        const fullParty = await partiesRepo.getById(supplier_id);
     const owedBalance = Number(fullParty?.supplier_balance) || 0;
-
-    if (!data.production_order_id && !data.allowAdvance && payAmount > owedBalance) {
-      throw new Error(`مبلغ دفعة المورد (${payAmount} ج.م) لا يمكن أن يتجاوز رصيد المديونية المستحق له (${owedBalance} ج.م)`);
-    }
-
-    if (data.max_allowed !== undefined && payAmount > Number(data.max_allowed)) {
-      throw new Error(`مبلغ الدفعة (${payAmount} ج.م) لا يمكن أن يتجاوز المبلغ المتبقي للمرحلة (${data.max_allowed} ج.م)`);
-    }
+    const isAdvance = owedBalance <= 0 || payAmount > owedBalance;
 
     // Default to main treasury if not provided
     let targetAccId = account_id;
@@ -288,7 +281,8 @@ export const cashRepo = {
         amount: payAmount,
         payment_date: payment_date || now.split('T')[0],
         payment_method: payment_method || 'نقداً',
-        notes: notes || '',
+        notes: notes || (isAdvance ? (owedBalance <= 0 ? 'دفعة مقدمة تحت الحساب' : 'سداد رصيد مع دفعة مقدمة تحت الحساب') : ''),
+        is_advance: isAdvance ? 1 : 0,
         status: 'issued',
         created_by: userId,
         created_at: now
@@ -305,7 +299,7 @@ export const cashRepo = {
         balance_after: finalAccBal,
         reference_type: 'SUPPLIER_PAYMENT',
         reference_id: paymentId,
-        description: `سداد دفعة للمورد: ${party.name}${notes ? ' - ' + notes : ''}`,
+        description: `سداد دفعة للمورد: ${party.name}${notes ? ' - ' + notes : (isAdvance ? ' (دفعة مقدمة تحت الحساب)' : '')}`,
         created_by: userId,
         created_at: now
       });
@@ -325,7 +319,9 @@ export const cashRepo = {
       paymentNumber,
       amount: data.amount,
       txNumber,
-      treasuryBalanceAfter: finalAccBal
+      treasuryBalanceAfter: finalAccBal,
+      isAdvance,
+      owedBalanceBefore: owedBalance
     };
   },
 
@@ -344,13 +340,9 @@ export const cashRepo = {
     const party = await db.parties.get(customer_id);
     if (!party || !party.is_customer) throw new Error('العميل المحدد غير موجود بالنظام');
 
-    const { partiesRepo } = await import('./partiesRepo');
-    const fullParty = await partiesRepo.getById(customer_id);
+        const fullParty = await partiesRepo.getById(customer_id);
     const owedBalance = Number(fullParty?.customer_balance) || 0;
-
-    if (recAmount > owedBalance) {
-      throw new Error(`قيمة الدفعة (${recAmount} ج.م) لا يمكن أن تتجاوز رصيد المديونية المستحق على العميل (${owedBalance} ج.م)`);
-    }
+    const isAdvance = owedBalance <= 0 || recAmount > owedBalance;
 
     // Default to main treasury if not provided
     let targetAccId = account_id;
@@ -404,7 +396,8 @@ export const cashRepo = {
         amount: recAmount,
         payment_date: payment_date || now.split('T')[0],
         payment_method: payment_method || 'نقداً',
-        notes: notes || '',
+        notes: notes || (isAdvance ? (owedBalance <= 0 ? 'دفعة مقدمة تحت الحساب' : 'سداد رصيد مع دفعة مقدمة تحت الحساب') : ''),
+        is_advance: isAdvance ? 1 : 0,
         status: 'issued',
         created_by: userId,
         created_at: now
@@ -421,7 +414,7 @@ export const cashRepo = {
         balance_after: finalAccBal,
         reference_type: 'CUSTOMER_RECEIPT',
         reference_id: receiptId,
-        description: `استلام دفعة نقدية من العميل: ${party.name}${notes ? ' - ' + notes : ''}`,
+        description: `استلام دفعة نقدية من العميل: ${party.name}${notes ? ' - ' + notes : (isAdvance ? ' (دفعة مقدمة تحت الحساب)' : '')}`,
         created_by: userId,
         created_at: now
       });
@@ -441,7 +434,9 @@ export const cashRepo = {
       receiptNumber,
       amount: data.amount,
       txNumber,
-      treasuryBalanceAfter: finalAccBal
+      treasuryBalanceAfter: finalAccBal,
+      isAdvance,
+      owedBalanceBefore: owedBalance
     };
   },
 
@@ -551,6 +546,114 @@ export const cashRepo = {
 
     await auditRepo.log(userId, 'CANCEL_CUSTOMER_RECEIPT', 'customer_payments', receiptId, receipt, { status: 'cancelled', reason });
     return { success: true };
+  },
+
+  /**
+   * Update Supplier Payment (تعديل سند صرف دفعة مورد)
+   * Adjusts treasury balance by delta and updates payment record and cash transaction atomically.
+   */
+  async updateSupplierPayment(paymentId, updateData, userId = 'usr-accountant') {
+    const payment = await db.payments.get(paymentId);
+    if (!payment) throw new Error('سند صرف دفعة المورد غير موجود');
+    if (payment.status === 'cancelled') throw new Error('لا يمكن تعديل سند صرف ملغي');
+
+    const oldAmount = Number(payment.amount) || 0;
+    const newAmount = updateData.amount !== undefined ? Math.max(0, Number(updateData.amount) || 0) : oldAmount;
+    if (newAmount <= 0) throw new Error('مبلغ الدفعة المعدل يجب أن يكون رقماً أكبر من صفر');
+
+    const delta = Number((newAmount - oldAmount).toFixed(2));
+    const targetAccId = updateData.account_id || payment.account_id;
+    const now = new Date().toISOString();
+
+    await db.transaction('rw', [
+      db.payments,
+      db.treasury_accounts,
+      db.cash_transactions
+    ], async () => {
+      // 1. Adjust treasury balance (if delta > 0 more paid so treasury decreases; if delta < 0 less paid so treasury increases)
+      const account = await db.treasury_accounts.get(targetAccId);
+      if (account && delta !== 0) {
+        const curBal = Number(account.current_balance) || 0;
+        const newBal = Number((curBal - delta).toFixed(2));
+        await db.treasury_accounts.update(targetAccId, { current_balance: newBal });
+      }
+
+      // 2. Update payment record
+      await db.payments.update(paymentId, {
+        amount: newAmount,
+        payment_date: updateData.payment_date || payment.payment_date,
+        notes: updateData.notes !== undefined ? updateData.notes : payment.notes,
+        updated_at: now,
+        updated_by: userId
+      });
+
+      // 3. Update related cash transaction
+      const relatedTx = await db.cash_transactions.where('reference_id').equals(paymentId).first();
+      if (relatedTx) {
+        await db.cash_transactions.update(relatedTx.id, {
+          amount: newAmount,
+          description: `تعديل سند صرف المورد ${payment.payment_number}`,
+          updated_at: now
+        });
+      }
+    });
+
+    await auditRepo.log(userId, 'UPDATE_SUPPLIER_PAYMENT', 'payments', paymentId, payment, { amount: newAmount, delta });
+    return { success: true, paymentId, oldAmount, newAmount, delta };
+  },
+
+  /**
+   * Update Customer Receipt (تعديل سند تحصيل نقدية عميل)
+   * Adjusts treasury balance by delta and updates receipt record and cash transaction atomically.
+   */
+  async updateCustomerReceipt(receiptId, updateData, userId = 'usr-accountant') {
+    const receipt = await db.customer_payments.get(receiptId);
+    if (!receipt) throw new Error('سند استلام النقدية غير موجود');
+    if (receipt.status === 'cancelled') throw new Error('لا يمكن تعديل سند استلام ملغي');
+
+    const oldAmount = Number(receipt.amount) || 0;
+    const newAmount = updateData.amount !== undefined ? Math.max(0, Number(updateData.amount) || 0) : oldAmount;
+    if (newAmount <= 0) throw new Error('قيمة الدفعة المستلمة يجب أن تكون أكبر من صفر');
+
+    const delta = Number((newAmount - oldAmount).toFixed(2));
+    const targetAccId = updateData.account_id || receipt.account_id;
+    const now = new Date().toISOString();
+
+    await db.transaction('rw', [
+      db.customer_payments,
+      db.treasury_accounts,
+      db.cash_transactions
+    ], async () => {
+      // 1. Adjust treasury balance (if delta > 0 more received so treasury increases; if delta < 0 less received so treasury decreases)
+      const account = await db.treasury_accounts.get(targetAccId);
+      if (account && delta !== 0) {
+        const curBal = Number(account.current_balance) || 0;
+        const newBal = Number((curBal + delta).toFixed(2));
+        await db.treasury_accounts.update(targetAccId, { current_balance: newBal });
+      }
+
+      // 2. Update receipt record
+      await db.customer_payments.update(receiptId, {
+        amount: newAmount,
+        payment_date: updateData.payment_date || receipt.payment_date,
+        notes: updateData.notes !== undefined ? updateData.notes : receipt.notes,
+        updated_at: now,
+        updated_by: userId
+      });
+
+      // 3. Update related cash transaction
+      const relatedTx = await db.cash_transactions.where('reference_id').equals(receiptId).first();
+      if (relatedTx) {
+        await db.cash_transactions.update(relatedTx.id, {
+          amount: newAmount,
+          description: `تعديل سند استلام النقدية ${receipt.receipt_number}`,
+          updated_at: now
+        });
+      }
+    });
+
+    await auditRepo.log(userId, 'UPDATE_CUSTOMER_RECEIPT', 'customer_payments', receiptId, receipt, { amount: newAmount, delta });
+    return { success: true, receiptId, oldAmount, newAmount, delta };
   }
 };
 

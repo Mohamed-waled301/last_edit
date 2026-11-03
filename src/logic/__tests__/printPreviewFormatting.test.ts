@@ -90,7 +90,7 @@ describe('Print Preview Formatting & Paper Sizing Verification', () => {
 
       expect(html).toContain('dir="rtl"');
       expect(html).toContain('PO-2026-7777');
-      expect(html).toContain('أمر تشغيل وقص ملابس (Cut Order)');
+      expect(html).toContain('أمر تشغيل وتفصيل وقص ملابس');
       expect(html).toContain('مصنع الأناقة والقص المتطور');
       expect(html).toContain('تيشيرت بولو رجالي فاخر');
       expect(html).toContain('TSH-POLO-01');
@@ -104,7 +104,7 @@ describe('Print Preview Formatting & Paper Sizing Verification', () => {
       expect(html).toContain('مراقب الجودة الفنية');
       expect(html).toContain('المحاسب المسؤول');
       expect(html).toContain('الاعتماد الإداري / إدارة الإنتاج');
-      expect(html).toContain('أمر تشغيل وقص رسمي صادر عن نظام code systems ERP');
+      expect(html).toContain('أمر تشغيل وقص رسمي صادر عن نظام كود سيستمز المتكامل');
     });
 
     it('generates compact 80mm thermal Cut Order print layout for production clipboards', () => {
@@ -124,6 +124,84 @@ describe('Print Preview Formatting & Paper Sizing Verification', () => {
       expect(minimalHtml).toContain('PO-MIN-01');
       expect(minimalHtml).toContain('أمر تشغيل وقص ملابس');
     });
+
+    it('suppresses img tag completely when company_logo is missing, empty, or fallback /logo.png', () => {
+      // 1. Empty string logo
+      const htmlEmpty = generateCutOrderHtml(mockOrder, { ...mockSettings, company_logo: '' }, 'A4');
+      expect(htmlEmpty).not.toContain('<img');
+      expect(htmlEmpty).not.toContain('alt="Logo"');
+
+      // 2. Fallback /logo.png
+      const htmlFallback = generateCutOrderHtml(mockOrder, { ...mockSettings, company_logo: '/logo.png' }, 'A4');
+      expect(htmlFallback).not.toContain('<img');
+      expect(htmlFallback).not.toContain('alt="Logo"');
+
+      // 3. Null logo
+      const htmlNull = generateCutOrderHtml(mockOrder, { ...mockSettings, company_logo: null }, 'A4');
+      expect(htmlNull).not.toContain('<img');
+      expect(htmlNull).not.toContain('alt="Logo"');
+    });
+
+    it('renders constrained img tag with empty alt and onerror handler when company_logo is a valid data URL', () => {
+      const validLogo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const htmlWithLogo = generateCutOrderHtml(mockOrder, { ...mockSettings, company_logo: validLogo }, 'A4');
+      expect(htmlWithLogo).toContain('<img');
+      expect(htmlWithLogo).toContain('src="data:image/png;base64,');
+      expect(htmlWithLogo).toContain('alt=""');
+      expect(htmlWithLogo).toContain('onerror="this.style.display=\'none\';"');
+      expect(htmlWithLogo).not.toContain('alt="Logo"');
+    });
+
+    it('wraps vendor names and materials in single-line auto-fit spans with title tooltips', () => {
+      const html = generateCutOrderHtml(mockOrder, mockSettings, 'A4');
+      expect(html).toContain('title="مطبعة الأهرام الحديثة"');
+      expect(html).toContain('title="قماش بيكيه قطن تركي"');
+      expect(html).toContain('white-space: nowrap');
+      expect(html).toContain('text-overflow: ellipsis');
+    });
+  });
+
+  describe('Single-Line Column Data Auto-Fit & Tooltip Integrity', () => {
+    it('scales font size and condenses letter spacing as text length grows while keeping nowrap', async () => {
+      const { getAutoFitStyle } = await import('../../modules/print/PrintPreviewPage');
+
+      // 1. Short text (fits comfortably on single line)
+      const shortStyle = getAutoFitStyle('توريد نسيج', 24, 11.5);
+      expect(shortStyle.fontSize).toBe('11.5px');
+      expect(shortStyle.whiteSpace).toBe('nowrap');
+      expect(shortStyle.overflow).toBe('hidden');
+      expect(shortStyle.textOverflow).toBe('ellipsis');
+
+      // 2. Medium-long text (e.g. 28 chars)
+      const medStyle = getAutoFitStyle('فاتورة توريد خامات قماش ميلتون', 24, 11.5);
+      expect(parseFloat(medStyle.fontSize)).toBeLessThan(11.5);
+      expect(medStyle.letterSpacing).toBe('-0.2px');
+      expect(medStyle.whiteSpace).toBe('nowrap');
+
+      // 3. Very long text (e.g. 50+ chars)
+      const longText = 'فاتورة توريد خامات قماش ميلتون تركي درجة أولى مستوردة خصيصاً للقصة رقم 204';
+      const longStyle = getAutoFitStyle(longText, 24, 11.5);
+      expect(parseFloat(longStyle.fontSize)).toBeLessThanOrEqual(8.2);
+      expect(longStyle.fontStretch).toBe('condensed');
+      expect(longStyle.whiteSpace).toBe('nowrap');
+      expect(longStyle.textOverflow).toBe('ellipsis');
+    });
+
+    it('generates valid inline CSS rules via getAutoFitInlineStyle for HTML print engines', async () => {
+      const { getAutoFitInlineStyle } = await import('../../modules/print/invoicePrintTemplates');
+
+      const cssShort = getAutoFitInlineStyle('قميص كلاسيك', 24, 11.5);
+      expect(cssShort).toContain('font-size: 11.5px');
+      expect(cssShort).toContain('white-space: nowrap');
+      expect(cssShort).toContain('text-overflow: ellipsis');
+
+      const cssLong = getAutoFitInlineStyle('تيشيرت بولو رجالي فاخر بأزرار صدفية وتطريز على الصدر والكم الأيمن', 24, 11.5);
+      expect(cssLong).toContain('font-stretch: condensed');
+      expect(cssLong).toContain('letter-spacing: -');
+      expect(cssLong).toContain('white-space: nowrap');
+      expect(cssLong).toContain('text-overflow: ellipsis');
+    });
   });
 });
+
 

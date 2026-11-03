@@ -249,8 +249,33 @@ export const api = {
     return { success: true, data: list, parties: list };
   },
   getParty: async (id) => {
-    const party = await partiesRepo.getById(id);
-    return { success: true, data: party, party };
+    if (!id) return { success: false, data: null };
+    let party = await partiesRepo.getById(id);
+    if (!party && db.customers) {
+      const cust = await db.customers.get(id);
+      if (cust) {
+        party = {
+          ...cust,
+          is_customer: 1,
+          is_supplier: 0,
+          customer_balance: cust.balance_due || cust.current_balance || 0,
+          balance_due: cust.balance_due || cust.current_balance || 0,
+        };
+      }
+    }
+    if (!party && db.suppliers) {
+      const sup = await db.suppliers.get(id);
+      if (sup) {
+        party = {
+          ...sup,
+          is_customer: 0,
+          is_supplier: 1,
+          supplier_balance: sup.balance_due || sup.current_balance || 0,
+          balance_due: sup.balance_due || sup.current_balance || 0,
+        };
+      }
+    }
+    return { success: Boolean(party), data: party, party };
   },
   createParty: async (data) => {
     const res = await partiesRepo.create(data, currentUserId);
@@ -455,6 +480,10 @@ export const api = {
     const list = await suppliersRepo.getPurchaseOrders();
     return { success: true, data: list, purchase_orders: list };
   },
+  getPurchaseOrder: async (id) => {
+    const po = await suppliersRepo.getPurchaseOrder(id);
+    return { success: Boolean(po), data: po, purchase_order: po };
+  },
   createPurchaseOrder: async (data) => {
     const res = await suppliersRepo.createPurchaseOrder(data, currentUserId);
     syncPush('purchase_orders', 'insert', res);
@@ -468,6 +497,24 @@ export const api = {
       if (acc) syncPush('treasury_accounts', 'update', acc, acc.id);
     }
     return { success: true, data: res, ...res, message: 'تم إصدار أمر التوريد بنجاح' };
+  },
+  updatePurchaseOrder: async (id, data) => {
+    const res = await suppliersRepo.updatePurchaseOrder(id, data, currentUserId);
+    syncPush('purchase_orders', 'update', res, id);
+    if (Array.isArray(res.items)) {
+      syncPush('purchase_order_items', 'insert', res.items);
+    }
+    const tx = await db.cash_transactions.where('reference_id').equals(id).reverse().first().catch(() => null);
+    if (tx) {
+      syncPush('cash_transactions', 'insert', tx);
+      const acc = await db.treasury_accounts.get(tx.account_id).catch(() => null);
+      if (acc) syncPush('treasury_accounts', 'update', acc, acc.id);
+    }
+    const sinv = await db.supplier_invoices.where('po_id').equals(id).first().catch(() => null);
+    if (sinv) {
+      syncPush('supplier_invoices', 'update', sinv, sinv.id);
+    }
+    return { success: true, data: res, ...res, message: 'تم تعديل أمر التوريد وفاتورة الشراء بنجاح' };
   },
   receivePurchaseOrderFull: async (poId) => {
     const res = await suppliersRepo.receivePurchaseOrderFull(poId, currentUserId);
@@ -722,9 +769,17 @@ export const api = {
     const list = await salesRepo.getSalesInvoices(userOutletId);
     return { success: true, data: list, invoices: list };
   },
+  getSalesInvoice: async (id) => {
+    const inv = await salesRepo.getSalesInvoice(id);
+    return { success: Boolean(inv), data: inv, invoice: inv };
+  },
   getSalesReport: async (filters = {}) => {
     const res = await salesRepo.getSalesReport(filters);
     return { success: true, data: res.customerRows, ...res };
+  },
+  getNextSalesInvoiceNumber: async (year = new Date().getFullYear()) => {
+    const num = await salesRepo.getNextInvoiceNumber(year);
+    return { success: true, data: num, invoice_number: num };
   },
   createSalesInvoice: async (data) => {
     const res = await salesRepo.createSalesInvoice(data, currentUserId);
@@ -799,8 +854,8 @@ export const api = {
     syncPush('treasury_accounts', 'insert', a);
     return { success: true, data: a, account: a, message: 'تم إضافة الحساب المالي' };
   },
-  getTransactions: async (params = '') => {
-    const list = await cashRepo.getTransactions();
+  getTransactions: async (filters = {}) => {
+    const list = await cashRepo.getTransactions(filters);
     return { success: true, data: list, transactions: list };
   },
   recordCashTransaction: async (data) => {
@@ -868,6 +923,59 @@ export const api = {
     }));
     return { success: true, data: enriched, receipts: enriched };
   },
+
+  // Single Receipt & Payment Fetchers
+  getSupplierPayment: async (id) => {
+    if (!id) return { success: false, data: null };
+    let pay = await db.payments.get(id);
+    if (!pay && !isNaN(Number(id))) {
+      pay = await db.payments.get(Number(id));
+    }
+    if (!pay) {
+      pay = await db.payments.where('payment_number').equals(String(id)).first();
+    }
+    if (!pay) {
+      const all = await db.payments.toArray();
+      pay = all.find(p => String(p.id) === String(id) || String(p.payment_number) === String(id));
+    }
+    if (!pay) return { success: false, data: null };
+    const party = (db.parties && await db.parties.get(pay.supplier_id)) || (db.suppliers && await db.suppliers.get(pay.supplier_id));
+    const account = db.treasury_accounts && await db.treasury_accounts.get(pay.account_id);
+    const enriched = {
+      ...pay,
+      supplier_name: party?.name || pay.supplier_name || pay.supplier_id,
+      supplier_code: party?.code || '',
+      account_name: account?.name || pay.account_name || pay.account_id
+    };
+    return { success: true, data: enriched, payment: enriched };
+  },
+
+  getCustomerReceipt: async (id) => {
+    if (!id) return { success: false, data: null };
+    let rec = await db.customer_payments.get(id);
+    if (!rec && !isNaN(Number(id))) {
+      rec = await db.customer_payments.get(Number(id));
+    }
+    if (!rec) {
+      rec = await db.customer_payments.where('receipt_number').equals(String(id)).first();
+    }
+    if (!rec) {
+      const all = await db.customer_payments.toArray();
+      rec = all.find(r => String(r.id) === String(id) || String(r.receipt_number) === String(id));
+    }
+    if (!rec) return { success: false, data: null };
+    const party = (db.parties && await db.parties.get(rec.customer_id)) || (db.customers && await db.customers.get(rec.customer_id));
+    const account = db.treasury_accounts && await db.treasury_accounts.get(rec.account_id);
+    const enriched = {
+      ...rec,
+      customer_name: party?.name || rec.customer_name || rec.customer_id,
+      customer_code: party?.code || '',
+      account_name: account?.name || rec.account_name || rec.account_id
+    };
+    return { success: true, data: enriched, receipt: enriched };
+  },
+
+
 
 
   // Reports & Dashboard
@@ -953,6 +1061,12 @@ export const api = {
   getAuditLogsFiltered: async (filters = {}) => {
     const logs = await dataManagementRepo.getAuditLogs(filters);
     return { success: true, data: logs, audit_logs: logs };
+  },
+  auditAccountingAnomalies: async () => {
+    return await dataManagementRepo.auditAccountingAnomalies();
+  },
+  repairAccountingAnomalies: async (selectedIds = []) => {
+    return await dataManagementRepo.repairAccountingAnomalies(selectedIds, currentUserId);
   },
 
   // Real-Time Hostinger Database Sync

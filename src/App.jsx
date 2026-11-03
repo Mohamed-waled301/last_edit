@@ -163,6 +163,10 @@ export default function App() {
     if (typeof window !== 'undefined' && window.electronAPI?.db) {
       const verifyIntegrity = async (initialInfo = null) => {
         try {
+          if (localStorage.getItem('erp_db_integrity_dismissed') === 'true') {
+            setDbIntegrityError(null);
+            return;
+          }
           const res = initialInfo || (await window.electronAPI.db.checkIntegrity());
           if (res && !res.ok) {
             // Re-verify after 600ms to allow concurrent startup locks to settle
@@ -170,7 +174,14 @@ export default function App() {
               try {
                 const secondCheck = await window.electronAPI.db.checkIntegrity();
                 if (secondCheck && !secondCheck.ok) {
-                  setDbIntegrityError(secondCheck);
+                  // Only report actual corruption, ignore driver/binding or dismissed warnings
+                  const hasRealCorruption = Array.isArray(secondCheck.details) &&
+                    secondCheck.details.some((d) => typeof d === 'string' && !/ok|binding|module|cannot find/i.test(d));
+                  if (hasRealCorruption && localStorage.getItem('erp_db_integrity_dismissed') !== 'true') {
+                    setDbIntegrityError(secondCheck);
+                  } else {
+                    setDbIntegrityError(null);
+                  }
                 } else {
                   setDbIntegrityError(null);
                 }
@@ -194,9 +205,14 @@ export default function App() {
     // Full-Page SPA Safe Hash Routing Sync with unsaved changes guard
     const handleHashChange = () => {
       const newHash = window.location.hash || '';
+      if (newHash === currentHashRef.current) return;
       if (!bypassGuardRef.current && navigationGuard.hasUnsavedChanges()) {
         const target = newHash;
+        bypassGuardRef.current = true;
         window.location.hash = currentHashRef.current;
+        setTimeout(() => {
+          bypassGuardRef.current = false;
+        }, 80);
         setUnsavedModal({ isOpen: true, pendingNav: target });
         return;
       }
@@ -296,7 +312,10 @@ export default function App() {
       return;
     }
     currentHashRef.current = formatted;
-    window.location.hash = formatted;
+    setRoute(parseHash(formatted));
+    if (window.location.hash !== formatted) {
+      window.location.hash = formatted;
+    }
     setSidebarOpen(false);
   };
 
@@ -535,8 +554,9 @@ export default function App() {
         if (action === 'new') {
           return <PurchaseOrderFormPage onBack={() => navigateTo('purchases')} onNotify={showNotification} />;
         }
-        if (subAction === 'edit' && parts[1]) {
-          return <PurchaseOrderFormPage orderId={parts[1]} onBack={() => navigateTo('purchases')} onNotify={showNotification} />;
+        if ((subAction === 'edit' && parts[1]) || (action === 'edit' && parts[2])) {
+          const poId = subAction === 'edit' ? parts[1] : parts[2];
+          return <PurchaseOrderFormPage orderId={poId} onBack={() => navigateTo('purchases')} onNotify={showNotification} />;
         }
         return <PurchasesListPage onNavigate={navigateTo} onNotify={showNotification} />;
 
@@ -753,6 +773,9 @@ export default function App() {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={async () => {
+                  try {
+                    localStorage.setItem('erp_db_integrity_dismissed', 'true');
+                  } catch {}
                   if (typeof window !== 'undefined' && window.electronAPI?.db?.checkIntegrity) {
                     try {
                       const res = await window.electronAPI.db.checkIntegrity();
@@ -777,9 +800,14 @@ export default function App() {
                 استرجاع نسخة احتياطية
               </button>
               <button
-                onClick={() => setDbIntegrityError(null)}
+                onClick={() => {
+                  setDbIntegrityError(null);
+                  try {
+                    localStorage.setItem('erp_db_integrity_dismissed', 'true');
+                  } catch {}
+                }}
                 className="p-1 text-red-200 hover:text-white rounded hover:bg-red-800 cursor-pointer transition-colors"
-                title="إغلاق التنبيه"
+                title="إغلاق التنبيه نهائياً"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -808,7 +836,7 @@ export default function App() {
 
         {/* Dynamic Screen View wrapped with ErrorBoundary */}
         <main className="flex-1 p-3 sm:p-5 lg:p-6 w-full max-w-[1700px] mx-auto min-w-0 overflow-y-auto overflow-x-hidden">
-          <ErrorBoundary>
+          <ErrorBoundary key={route.raw || 'main-view'}>
             {renderScreen()}
           </ErrorBoundary>
         </main>

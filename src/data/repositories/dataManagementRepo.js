@@ -2,6 +2,8 @@ import db, { SCHEMA_V1 } from '../db';
 import { getActiveUser } from '../../services/api';
 import { syncPush } from '../../services/apiSync';
 import BalanceCalculator, { resolveOpeningBalance } from '../../logic/balances';
+import { backupRepo } from './backupRepo';
+import { auditRepo } from './auditRepo';
 
 /**
  * Arabic names mapping for all system tables
@@ -558,6 +560,325 @@ export const dataManagementRepo = {
   async recalculateAllBalances() {
     return await recalculateBalancesInTransaction('all');
   },
+
+  /**
+   * Safe Accounting Audit Tool: فحص واكتشاف الأخطاء والقيود المزدوجة والمكررة
+   */
+  async auditAccountingAnomalies() {
+    const anomalies = [];
+    const suppliers = db.suppliers ? await db.suppliers.toArray() : [];
+    const customers = db.customers ? await db.customers.toArray() : [];
+    const parties = db.parties ? await db.parties.toArray() : [];
+    const invoices = db.supplier_invoices ? await db.supplier_invoices.toArray() : [];
+    const returns = db.supplier_returns ? await db.supplier_returns.toArray() : [];
+    const payments = db.payments ? await db.payments.toArray() : [];
+    const salesInvs = db.sales_invoices ? await db.sales_invoices.toArray() : [];
+    const salesRets = db.customer_returns ? await db.customer_returns.toArray() : [];
+    const custPayments = db.customer_payments ? await db.customer_payments.toArray() : [];
+    const cashTxs = db.cash_transactions ? await db.cash_transactions.toArray() : [];
+    const treasuries = db.treasury_accounts ? await db.treasury_accounts.toArray() : [];
+
+    const supMap = new Map(suppliers.map(s => [s.id, s]));
+    const custMap = new Map(customers.map(c => [c.id, c]));
+    const partyMap = new Map(parties.map(p => [p.id, p]));
+
+    // 1. Detect fake/offsetting opening balance payment rows in db.payments
+    for (const p of payments) {
+      if (p.status === 'cancelled') continue;
+      const isOpeningOffset = (
+        (p.notes && p.notes.includes('افتتاحي')) ||
+        (p.payment_number && p.payment_number.includes('OPENING')) ||
+        (p.account_id === 'offset-settlement' && p.notes && p.notes.includes('افتتاحي'))
+      );
+      if (isOpeningOffset) {
+        const sup = supMap.get(p.supplier_id) || partyMap.get(p.supplier_id) || { name: 'مورد غير معروف' };
+        const currentBal = Number(sup.balance_due ?? sup.supplier_balance ?? 0);
+        const correctedBal = Number((currentBal + Number(p.amount || 0)).toFixed(2));
+        anomalies.push({
+          id: `anom-pay-${p.id}`,
+          type: 'fake_opening_payment',
+          table: 'payments',
+          record_id: p.id,
+          entity_type: 'supplier',
+          entity_id: p.supplier_id,
+          entity_name: sup.name,
+          doc_type: 'سند صرف مورد',
+          doc_number: p.payment_number || p.id,
+          amount: Number(p.amount) || 0,
+          issue_description: `قيد سداد افتتاحي وهمي بقيمة (${p.amount} ج.م) قام بخصم رصيد المورد بدون سداد فعلي`,
+          repair_action: 'إلغاء قيد السداد الوهمي وإعادة المبلغ لرصيد المورد المستحق',
+          balance_before: currentBal,
+          balance_after: correctedBal
+        });
+      }
+    }
+
+    // 2. Detect fake/offsetting opening balance receipt rows in db.customer_payments
+    for (const cp of custPayments) {
+      if (cp.status === 'cancelled') continue;
+      const isOpeningOffset = (
+        (cp.notes && cp.notes.includes('افتتاحي')) ||
+        (cp.receipt_number && cp.receipt_number.includes('OPENING')) ||
+        (cp.account_id === 'offset-settlement' && cp.notes && cp.notes.includes('افتتاحي'))
+      );
+      if (isOpeningOffset) {
+        const cust = custMap.get(cp.customer_id) || partyMap.get(cp.customer_id) || { name: 'عميل غير معروف' };
+        const currentBal = Number(cust.balance_due ?? cust.customer_balance ?? 0);
+        const correctedBal = Number((currentBal + Number(cp.amount || 0)).toFixed(2));
+        anomalies.push({
+          id: `anom-cpay-${cp.id}`,
+          type: 'fake_opening_payment',
+          table: 'customer_payments',
+          record_id: cp.id,
+          entity_type: 'customer',
+          entity_id: cp.customer_id,
+          entity_name: cust.name,
+          doc_type: 'سند تحصيل عميل',
+          doc_number: cp.receipt_number || cp.id,
+          amount: Number(cp.amount) || 0,
+          issue_description: `قيد تحصيل افتتاحي وهمي بقيمة (${cp.amount} ج.م) قام بخصم مديونية العميل دون تحصيل فعلي`,
+          repair_action: 'إلغاء قيد التحصيل الوهمي وإعادة المبلغ لمديونية العميل',
+          balance_before: currentBal,
+          balance_after: correctedBal
+        });
+      }
+    }
+
+    // 3. Detect duplicate cash transactions for supplier payments
+    const paymentRefCounts = new Map();
+    for (const tx of cashTxs) {
+      if (tx.status === 'cancelled') continue;
+      if (tx.reference_type === 'SUPPLIER_PAYMENT' && tx.reference_id) {
+        const list = paymentRefCounts.get(tx.reference_id) || [];
+        list.push(tx);
+        paymentRefCounts.set(tx.reference_id, list);
+      }
+    }
+    for (const [refId, txs] of paymentRefCounts.entries()) {
+      if (txs.length > 1) {
+        for (let i = 1; i < txs.length; i++) {
+          const dup = txs[i];
+          const acc = treasuries.find(a => a.id === dup.account_id) || { name: 'الخزينة', current_balance: 0 };
+          const accBal = Number(acc.current_balance || 0);
+          anomalies.push({
+            id: `anom-dup-tx-${dup.id}`,
+            type: 'duplicate_treasury_txn',
+            table: 'cash_transactions',
+            record_id: dup.id,
+            entity_type: 'treasury',
+            entity_id: dup.account_id,
+            entity_name: acc.name,
+            doc_type: 'حركة خزينة مكررة',
+            doc_number: dup.tx_number || dup.id,
+            amount: Number(dup.amount) || 0,
+            issue_description: `حركة صرف نقدية مكررة لسداد المورد (${dup.tx_number}) خصمت من رصيد الخزينة مرتين`,
+            repair_action: 'إلغاء الحركة المكررة وقيد حركة تسوية عكسية لاسترداد رصيد الخزينة',
+            balance_before: accBal,
+            balance_after: Number((accBal + Number(dup.amount || 0)).toFixed(2))
+          });
+        }
+      }
+    }
+
+    // 4. Detect supplier statement discrepancy where total_paid includes opening balance
+    for (const sup of suppliers) {
+      const sInvs = invoices.filter(i => i.supplier_id === sup.id);
+      const sRets = returns.filter(r => r.supplier_id === sup.id);
+      const opening = resolveOpeningBalance(sup, 'supplier');
+      const expected = BalanceCalculator.calculateSupplierBalance(sInvs, sRets, opening);
+
+      const storedPaid = Number(sup.total_paid || 0);
+      const storedBalance = Number(sup.balance_due || 0);
+
+      if (Math.abs(storedPaid - expected.totalPaid) > 0.01 || Math.abs(storedBalance - expected.balanceDue) > 0.01) {
+        anomalies.push({
+          id: `anom-sup-bal-${sup.id}`,
+          type: 'party_balance_discrepancy',
+          table: 'suppliers',
+          record_id: sup.id,
+          entity_type: 'supplier',
+          entity_id: sup.id,
+          entity_name: sup.name,
+          doc_type: 'رصيد دفتري للمورد',
+          doc_number: `SUP-${sup.id.slice(-4)}`,
+          amount: Math.abs(storedPaid - expected.totalPaid),
+          issue_description: `إجمالي المسدد المسجل (${storedPaid} ج.م) لا يتطابق مع سداد الحركات الفعلية (${expected.totalPaid} ج.م)`,
+          repair_action: 'تصحيح إجمالي المسدد ليقتصر على المدفوعات الفعلية فقط، وإعادة احتساب رصيد المورد الدقيق',
+          balance_before: storedBalance,
+          balance_after: expected.balanceDue
+        });
+      }
+    }
+
+    // 5. Detect customer statement discrepancy where total_paid includes opening balance
+    for (const cust of customers) {
+      const cInvs = salesInvs.filter(i => i.customer_id === cust.id);
+      const cRets = salesRets.filter(r => r.customer_id === cust.id);
+      const opening = resolveOpeningBalance(cust, 'customer');
+      const expected = BalanceCalculator.calculateCustomerBalance(cInvs, cRets, opening);
+
+      const storedPaid = Number(cust.total_paid || 0);
+      const storedBalance = Number(cust.balance_due || 0);
+
+      if (Math.abs(storedPaid - expected.totalPaid) > 0.01 || Math.abs(storedBalance - expected.balanceDue) > 0.01) {
+        anomalies.push({
+          id: `anom-cust-bal-${cust.id}`,
+          type: 'party_balance_discrepancy',
+          table: 'customers',
+          record_id: cust.id,
+          entity_type: 'customer',
+          entity_id: cust.id,
+          entity_name: cust.name,
+          doc_type: 'رصيد دفتري للعميل',
+          doc_number: `CUST-${cust.id.slice(-4)}`,
+          amount: Math.abs(storedPaid - expected.totalPaid),
+          issue_description: `إجمالي المحصل المسجل (${storedPaid} ج.م) لا يتطابق مع حركات التحصيل الفعلية (${expected.totalPaid} ج.م)`,
+          repair_action: 'تصحيح إجمالي المحصل ليقتصر على التحصيلات الحقيقية، وإعادة احتساب مديونية العميل',
+          balance_before: storedBalance,
+          balance_after: expected.balanceDue
+        });
+      }
+    }
+
+    const mainTreasury = treasuries.find(t => t.is_main) || treasuries[0] || { current_balance: 0 };
+
+    return {
+      timestamp: new Date().toISOString(),
+      total_anomalies: anomalies.length,
+      anomalies,
+      treasury_balance: Number(mainTreasury.current_balance || 0)
+    };
+  },
+
+  /**
+   * Safe Accounting Repair Tool: اعتماد وتنفيذ الإصلاح المحاسبي الآمن مع تأكيد
+   */
+  async repairAccountingAnomalies(selectedAnomalyIds = [], userId = 'usr-accountant') {
+    // 1. Mandatory Pre-Repair Automatic Backup
+    let backupRes = null;
+    try {
+      backupRes = await backupRepo.getBackupPayload();
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(`code_systems_repair_backup_${Date.now()}`, JSON.stringify(backupRes));
+      }
+    } catch (bErr) {
+      console.warn('Pre-repair backup warning:', bErr);
+    }
+
+    const scan = await this.auditAccountingAnomalies();
+    const toRepair = scan.anomalies.filter(a => selectedAnomalyIds.length === 0 || selectedAnomalyIds.includes(a.id));
+
+    const treasuriesBefore = db.treasury_accounts ? await db.treasury_accounts.toArray() : [];
+    const mainBefore = treasuriesBefore.find(t => t.is_main) || treasuriesBefore[0] || { current_balance: 0 };
+    const treasuryBalBefore = Number(mainBefore.current_balance || 0);
+
+    const affectedPartyIds = new Set();
+    const affectedTreasuryIds = new Set();
+    const now = new Date().toISOString();
+
+    for (const anom of toRepair) {
+      if (anom.type === 'fake_opening_payment') {
+        if (anom.table === 'payments' && db.payments) {
+          const p = await db.payments.get(anom.record_id);
+          if (p && p.status !== 'cancelled') {
+            await db.payments.update(anom.record_id, {
+              status: 'cancelled',
+              cancellation_reason: 'إلغاء آلي بواسطة أداة فحص وتصحيح الحسابات: قيد سداد افتتاحي وهمي',
+              cancelled_at: now,
+              cancelled_by: userId
+            });
+            affectedPartyIds.add(p.supplier_id);
+
+            const linkedTx = await db.cash_transactions.where('reference_id').equals(anom.record_id).first().catch(() => null);
+            if (linkedTx && linkedTx.tx_type === 'outflow' && linkedTx.status !== 'cancelled') {
+              await db.cash_transactions.update(linkedTx.id, {
+                status: 'cancelled',
+                notes: `ملغي آلياً - ${linkedTx.description || ''}`
+              });
+              affectedTreasuryIds.add(linkedTx.account_id);
+            }
+          }
+        } else if (anom.table === 'customer_payments' && db.customer_payments) {
+          const cp = await db.customer_payments.get(anom.record_id);
+          if (cp && cp.status !== 'cancelled') {
+            await db.customer_payments.update(anom.record_id, {
+              status: 'cancelled',
+              cancellation_reason: 'إلغاء آلي بواسطة أداة فحص وتصحيح الحسابات: قيد تحصيل افتتاحي وهمي',
+              cancelled_at: now,
+              cancelled_by: userId
+            });
+            affectedPartyIds.add(cp.customer_id);
+
+            const linkedTx = await db.cash_transactions.where('reference_id').equals(anom.record_id).first().catch(() => null);
+            if (linkedTx && linkedTx.tx_type === 'inflow' && linkedTx.status !== 'cancelled') {
+              await db.cash_transactions.update(linkedTx.id, {
+                status: 'cancelled',
+                notes: `ملغي آلياً - ${linkedTx.description || ''}`
+              });
+              affectedTreasuryIds.add(linkedTx.account_id);
+            }
+          }
+        }
+      } else if (anom.type === 'duplicate_treasury_txn' && db.cash_transactions) {
+        await db.cash_transactions.update(anom.record_id, {
+          status: 'cancelled',
+          notes: 'إلغاء حركة صرف مكررة بواسطة أداة فحص وتصحيح الحسابات'
+        });
+        affectedTreasuryIds.add(anom.entity_id);
+      } else if (anom.type === 'party_balance_discrepancy') {
+        affectedPartyIds.add(anom.entity_id);
+      }
+    }
+
+    // 2. Full balance recalculation for affected ledgers
+    await recalculateBalancesInTransaction('all');
+
+    // 3. Collect affected parties before/after
+    const partiesList = db.parties ? await db.parties.toArray() : [];
+    const suppliersList = db.suppliers ? await db.suppliers.toArray() : [];
+    const customersList = db.customers ? await db.customers.toArray() : [];
+    const treasuriesAfter = db.treasury_accounts ? await db.treasury_accounts.toArray() : [];
+    const mainAfter = treasuriesAfter.find(t => t.is_main) || treasuriesAfter[0] || { current_balance: 0 };
+    const treasuryBalAfter = Number(mainAfter.current_balance || 0);
+
+    const affectedReport = [];
+    for (const pId of affectedPartyIds) {
+      const p = partiesList.find(x => x.id === pId) || suppliersList.find(x => x.id === pId) || customersList.find(x => x.id === pId);
+      if (p) {
+        const matchingAnom = toRepair.find(a => a.entity_id === pId);
+        affectedReport.push({
+          id: pId,
+          name: p.name,
+          role: p.is_customer && !p.is_supplier ? 'عميل' : (p.is_supplier && !p.is_customer ? 'مورد' : 'جهة تعامل'),
+          balance_before: matchingAnom ? matchingAnom.balance_before : 0,
+          balance_after: Number(p.balance_due ?? p.supplier_balance ?? p.customer_balance ?? 0),
+          total_paid_after: Number(p.total_paid || 0)
+        });
+      }
+    }
+
+    await auditRepo.log(userId, 'REPAIR_ACCOUNTING_ANOMALIES', 'system', 'audit_tool', null, {
+      repairedCount: toRepair.length,
+      treasuryBalBefore,
+      treasuryBalAfter,
+      affectedParties: affectedReport
+    });
+
+    return {
+      success: true,
+      message: `تم فحص وتصحيح الحسابات بنجاح. تم إصلاح (${toRepair.length}) بنداً محاسبياً دون المساس بأي مدفوعات حقيقية.`,
+      repaired_count: toRepair.length,
+      repairedCount: toRepair.length,
+      treasury_balance_before: treasuryBalBefore,
+      treasury_balance_after: treasuryBalAfter,
+      affected_parties: affectedReport,
+      backup_timestamp: backupRes?.exportedAt || now,
+      backup: {
+        timestamp: backupRes?.exportedAt || now,
+        tablesCount: backupRes?.tablesCount || 0
+      }
+    };
+  },
 };
 
 /**
@@ -602,7 +923,8 @@ async function recalculateBalancesInTransaction(tableName) {
       for (const sup of suppliers) {
         const supInvs = invoices.filter((i) => i.supplier_id === sup.id);
         const supRets = returns.filter((r) => r.supplier_id === sup.id);
-        const summary = BalanceCalculator.calculateSupplierBalance(supInvs, supRets);
+        const opening = resolveOpeningBalance(sup, 'supplier');
+        const summary = BalanceCalculator.calculateSupplierBalance(supInvs, supRets, opening);
 
         await db.suppliers.update(sup.id, {
           balance_due: summary.balanceDue,
@@ -621,12 +943,14 @@ async function recalculateBalancesInTransaction(tableName) {
       for (const cust of customers) {
         const custInvs = invoices.filter((i) => i.customer_id === cust.id);
         const custRets = returns.filter((r) => r.customer_id === cust.id);
-        const summary = BalanceCalculator.calculateCustomerBalance(custInvs, custRets);
+        const opening = resolveOpeningBalance(cust, 'customer');
+        const summary = BalanceCalculator.calculateCustomerBalance(custInvs, custRets, opening);
 
         await db.customers.update(cust.id, {
           balance_due: summary.balanceDue,
           total_invoiced: summary.totalInvoiced,
           total_paid: summary.totalPaid,
+          total_sales: summary.totalInvoiced,
         });
       }
     }
@@ -662,12 +986,19 @@ async function recalculateBalancesInTransaction(tableName) {
           unlinkedCust
         );
 
+        const custCalc = BalanceCalculator.calculateCustomerBalance(cInvs, cRets, custOpening, unlinkedCust);
+        const supCalc = BalanceCalculator.calculateSupplierBalance(sInvs, sRets, supOpening, unlinkedSup);
+
         await db.parties.update(party.id, {
           supplier_balance: summary.supplierBalance,
           customer_balance: summary.customerBalance,
           net_balance: summary.netBalance,
           max_offset: summary.maxOffsetAmount,
           balance_due: party.is_supplier ? summary.supplierBalance : summary.customerBalance,
+          total_sales: custCalc.totalInvoiced,
+          total_purchases: supCalc.totalInvoiced,
+          total_paid: party.is_supplier ? supCalc.totalPaid : custCalc.totalPaid,
+          total_collected: custCalc.totalPaid,
         });
       }
     }

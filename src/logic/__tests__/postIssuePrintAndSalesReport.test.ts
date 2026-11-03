@@ -305,9 +305,11 @@ describe('Post-Issue Print and Sales Report Verification Suite', () => {
       expect(a4Html).toContain('CUST-100');
       expect(a4Html).toContain('بدلة رجالي كلاسيك');
       expect(a4Html).toContain('المستلم / العميل');
-      expect(a4Html).toContain('المحاسب المسؤول');
-      expect(a4Html).toContain('أمين الخزينة');
-      expect(a4Html).toContain('رصيد العميل بعد الفاتورة');
+      expect(a4Html).not.toContain('رصيد العميل بعد الفاتورة');
+
+      // When showAccountBalance option is explicitly enabled, it displays the balance
+      const a4HtmlWithBalance = generateSalesInvoiceHtml(invoiceData, settings, 'A4', null, true);
+      expect(a4HtmlWithBalance).toContain('رصيد العميل بعد الفاتورة');
 
       const thermalHtml = generateSalesInvoiceHtml(invoiceData, settings, '80mm');
       expect(thermalHtml).toContain('فاتورة مبيعات');

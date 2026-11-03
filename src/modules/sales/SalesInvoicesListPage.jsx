@@ -137,7 +137,7 @@ export default function SalesInvoicesListPage({ onNotify }) {
                 <th className="p-3">تاريخ الفاتورة</th>
                 <th className="p-3 text-center">طريقة الدفع</th>
                 <th className="p-3 text-center">تاريخ الاستحقاق</th>
-                <th className="p-3 text-left font-mono">إجمالي الفاتورة</th>
+                <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">إجمالي الفاتورة</th>
                 <th className="p-3 text-center">الحالة</th>
                 <th className="p-3 text-center">إجراءات</th>
               </tr>
@@ -182,7 +182,7 @@ export default function SalesInvoicesListPage({ onNotify }) {
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
-                      <td className="p-3 text-left font-mono font-bold text-green-700">{formatCurrency(total)}</td>
+                      <td className="p-3 text-left font-mono font-bold text-green-700 whitespace-nowrap min-w-[130px]">{formatCurrency(total)}</td>
                       <td className="p-3 text-center">
                         <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
                           inv.status === 'cancelled'
@@ -198,7 +198,12 @@ export default function SalesInvoicesListPage({ onNotify }) {
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => { window.location.hash = `#/print-preview?type=sales_invoice&id=${inv.id}&returnUrl=${encodeURIComponent('#/sales')}`; }}
+                            onClick={() => {
+                              try {
+                                sessionStorage.setItem('print_preview_payload', JSON.stringify({ ...inv, type: 'sales_invoice' }));
+                              } catch {}
+                              window.location.hash = `#/print-preview?type=sales_invoice&id=${inv.id}&returnUrl=${encodeURIComponent('#/sales')}`;
+                            }}
                             className="px-2.5 py-1 text-xs text-[#1F3A5F] hover:bg-blue-50 border border-gray-200 rounded font-bold cursor-pointer inline-flex items-center gap-1 shadow-2xs"
                             title="معاينة وطباعة الفاتورة قياس كامل وحراري"
                           >

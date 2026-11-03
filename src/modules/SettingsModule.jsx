@@ -19,6 +19,7 @@ import { NumberInput } from '../components/MoneyInput';
 import { api } from '../services/api';
 import { backupRepo, settingsRepo, auditRepo } from '../data';
 import { formatDate } from '../utils/formatters';
+import AccountAuditModal from '../components/AccountAuditModal';
 
 export default function SettingsModule({ onBack, onNavigate, onNotify }) {
   const [settings, setSettings] = useState({
@@ -42,6 +43,7 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
   const [clearConfirmationText, setClearConfirmationText] = useState('');
   const [licenseInfo, setLicenseInfo] = useState(null);
   const [logoError, setLogoError] = useState('');
+  const [showAuditModal, setShowAuditModal] = useState(false);
   const fileInputRef = React.useRef(null);
 
   const loadData = async () => {
@@ -465,6 +467,25 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
               </button>
             </div>
 
+            {/* Account Audit Tool: فحص الحسابات (Bug 1 & Bug 2 Repair) */}
+            <div className="p-4 bg-emerald-50/70 rounded-md border border-emerald-200 space-y-3">
+              <div className="text-xs font-bold text-emerald-950 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                <span>أداة فحص وتدقيق الحسابات والمدفوعات:</span>
+              </div>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                فحص شامل لدفاتر الأستاذ لاكتشاف أي قيود سداد افتتاحية وهمية أو حركات خزينة مكررة، مع إمكانية المعاينة والتصحيح الآمن مع أخذ نسخة احتياطية تلقائياً.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(true)}
+                className="w-full h-10 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-xs"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>تشغيل فحص الحسابات الآن</span>
+              </button>
+            </div>
+
             {/* Clear All Data */}
             <div className="p-4 bg-gray-50 rounded-md border border-gray-200 space-y-3">
               <div className="text-xs font-bold text-gray-700">تصفير النظام والبدء من الصفر:</div>
@@ -657,6 +678,14 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
           </div>
         </div>
       )}
+
+      {/* Account Audit & Repair Modal */}
+      <AccountAuditModal 
+        isOpen={showAuditModal} 
+        onClose={() => setShowAuditModal(false)} 
+        onNotify={onNotify} 
+        onRefresh={loadData} 
+      />
     </div>
   );
 }

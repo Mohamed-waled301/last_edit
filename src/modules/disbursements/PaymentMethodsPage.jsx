@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CreditCard, Plus, CheckCircle2 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
+import { handleFormKeyDown } from '../../utils/formNavigation';
 
 export default function PaymentMethodsPage({ onNotify }) {
   const [methods, setMethods] = useState([]);
@@ -68,7 +69,7 @@ export default function PaymentMethodsPage({ onNotify }) {
             إضافة طريقة دفع جديدة
           </h2>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-3">
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 اسم طريقة الدفع <span className="text-red-500">*</span>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SlidersHorizontal, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
@@ -6,8 +6,10 @@ import { getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import { handleFormKeyDown } from '../../utils/formNavigation';
 import { NumberInput } from '../../components/MoneyInput';
+import { navigationGuard } from '../../utils/navigationGuard';
 
 export default function StockAdjustmentFormPage({ onSaved, onNotify }) {
+  const isSavedRef = useRef(false);
   const [items, setItems] = useState([]);
   const [locations, setLocations] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -48,6 +50,14 @@ export default function StockAdjustmentFormPage({ onSaved, onNotify }) {
     loadData();
   }, []);
 
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      return Boolean(form.item_id || (form.quantity && Number(form.quantity) > 0) || form.reason.trim());
+    });
+    return unregister;
+  }, [form]);
+
   const handleItemChange = (itemId) => {
     const itm = items.find(i => String(i.id) === String(itemId));
     const vars = (itm && Array.isArray(itm.variants)) ? itm.variants : [];
@@ -87,6 +97,9 @@ export default function StockAdjustmentFormPage({ onSaved, onNotify }) {
         notes: form.notes,
         adjustment_date: form.adjustment_date
       });
+
+      isSavedRef.current = true;
+      navigationGuard.unregister();
 
       if (onNotify) onNotify('تم حفظ محضر التسوية الجردية وتحديث الرصيد بنجاح (بلا أثر مالي)');
 

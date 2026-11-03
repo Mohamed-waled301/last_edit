@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Wallet, Plus, DollarSign, CheckCircle2, AlertCircle } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import { handleFormKeyDown } from '../../utils/formNavigation';
+import { navigationGuard } from '../../utils/navigationGuard';
 
 export default function CashDisbursementFormPage({ onSaved, onNotify }) {
+  const isSavedRef = useRef(false);
   const [expenseCodes, setExpenseCodes] = useState([]);
   const [treasuries, setTreasuries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +66,14 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
     loadData();
   }, []);
 
+  useEffect(() => {
+    const unregister = navigationGuard.register(() => {
+      if (isSavedRef.current) return false;
+      return Boolean((form.amount && Number(form.amount) > 0) || form.notes?.trim());
+    });
+    return unregister;
+  }, [form]);
+
   // When picking an expense code: amount auto-fills from code and is editable (Requirement G)
   const handleExpenseCodeChange = (codeId) => {
     const code = expenseCodes.find(c => String(c.id) === String(codeId));
@@ -110,6 +121,9 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
         description: form.notes || `صرف مصروف ${form.expense_name}`
       });
 
+      isSavedRef.current = true;
+      navigationGuard.unregister();
+
       if (onNotify) onNotify('تم صرف النقدية وقيد المعاملة بالخزينة بنجاح');
 
       if (onSaved) {
@@ -150,7 +164,7 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} onKeyDown={handleFormKeyDown} className="space-y-6">
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
             <Wallet className="w-5 h-5 text-rose-600" />

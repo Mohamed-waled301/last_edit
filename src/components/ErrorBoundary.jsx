@@ -16,10 +16,19 @@ export default class ErrorBoundary extends React.Component {
     this.setState({ errorInfo });
   }
 
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && prevProps.children !== this.props.children) {
+      this.setState({ hasError: false, error: null, errorInfo: null });
+    }
+  }
+
+  handleRetry = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null });
+  };
+
   handleGoHome = () => {
     this.setState({ hasError: false, error: null, errorInfo: null });
-    window.location.hash = '#home';
-    window.location.reload();
+    window.location.hash = '#/home';
   };
 
   render() {
@@ -30,29 +39,31 @@ export default class ErrorBoundary extends React.Component {
             <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full mx-auto flex items-center justify-center font-bold">
               <AlertTriangle className="w-8 h-8" />
             </div>
-            <h2 className="text-2xl font-black text-gray-900">حصلت مشكلة في الشاشة دي</h2>
+            <h2 className="text-xl sm:text-2xl font-black text-gray-900">حدث خطأ أثناء عرض هذه الشاشة</h2>
             <p className="text-gray-600 font-medium text-sm leading-relaxed">
-              حدث خطأ غير متوقع أثناء معالجة البيانات، تم حفظ سجل الخطأ للتدقيق الفني. يمكنك الرجوع إلى الشاشة الرئيسية أو إعادة المحاولة.
+              تم احتواء الخطأ البرمجي بنجاح لحماية استقرار التطبيق. يمكنك إعادة محاولة تحميل الشاشة أو الرجوع للشاشة الرئيسية ومتابعة العمل.
             </p>
             {this.state.error?.message && (
-              <div className="p-3 bg-red-50 text-red-800 rounded-md text-xs font-mono text-left max-h-28 overflow-y-auto border border-red-200">
+              <div className="p-3 bg-red-50 text-red-800 rounded-md text-xs font-mono text-left max-h-28 overflow-y-auto border border-red-200" dir="ltr">
                 {this.state.error.message}
               </div>
             )}
             <div className="pt-3 flex items-center justify-center gap-3 flex-wrap">
               <button
-                onClick={this.handleGoHome}
+                type="button"
+                onClick={this.handleRetry}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1F3A5F] hover:bg-[#162a45] text-white rounded-md font-bold text-sm shadow-sm cursor-pointer"
               >
-                <Home className="w-4 h-4" />
-                <span>رجوع للرئيسية</span>
+                <RotateCw className="w-4 h-4" />
+                <span>إعادة محاولة العرض</span>
               </button>
               <button
-                onClick={() => window.location.reload()}
+                type="button"
+                onClick={this.handleGoHome}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-md font-bold text-sm shadow-xs cursor-pointer"
               >
-                <RotateCw className="w-4 h-4 text-gray-500" />
-                <span>إعادة المحاولة</span>
+                <Home className="w-4 h-4 text-gray-500" />
+                <span>العودة للرئيسية</span>
               </button>
             </div>
           </div>

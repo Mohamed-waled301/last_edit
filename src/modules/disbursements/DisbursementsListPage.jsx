@@ -26,9 +26,17 @@ export default function DisbursementsListPage({ onNotify }) {
       ]);
 
       const txList = Array.isArray(txRes.data) ? txRes.data : (Array.isArray(txRes.transactions) ? txRes.transactions : []);
-      // Filter operating expenses / outflows
-      const outflows = txList.filter(t => t.tx_type === 'outflow' || t.category === 'operating_expense' || t.reference_type === 'EXPENSE_DISBURSEMENT');
-      setExpenseTxs(outflows.length > 0 ? outflows : txList);
+      // Filter real operating expenses ONLY (أذون صرف المصروفات التشغيلية الحقيقية فقط)
+      const realExpenses = txList.filter(t => 
+        (t.category === 'operating_expense' || t.reference_type === 'EXPENSE_DISBURSEMENT') &&
+        t.category !== 'supplier_payment' &&
+        t.reference_type !== 'SUPPLIER_PAYMENT' &&
+        t.category !== 'customer_payment' &&
+        t.reference_type !== 'CUSTOMER_RECEIPT' &&
+        t.category !== 'purchase_orders' &&
+        t.category !== 'sales_invoices'
+      );
+      setExpenseTxs(realExpenses);
 
       const sPays = Array.isArray(supPayRes.data) ? supPayRes.data : (supPayRes.payments || []);
       setSupplierPayments(sPays);
@@ -342,7 +350,7 @@ export default function DisbursementsListPage({ onNotify }) {
                 <th className="p-3">نوع الحركة</th>
                 <th className="p-3">الطرف / البيان</th>
                 <th className="p-3">الخزينة</th>
-                <th className="p-3 text-left font-mono">المبلغ</th>
+                <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المبلغ</th>
                 <th className="p-3">الحالة</th>
                 <th className="p-3">التاريخ</th>
                 <th className="p-3 text-center">الإجراءات</th>
@@ -399,7 +407,7 @@ export default function DisbursementsListPage({ onNotify }) {
                       {r.accountName}
                     </td>
 
-                    <td className="p-3 text-left font-mono font-bold">
+                    <td className="p-3 text-left font-mono font-bold whitespace-nowrap min-w-[130px]">
                       {r.direction === 'inflow' ? (
                         <span className="text-emerald-700">+{formatCurrency(r.amount)}</span>
                       ) : (

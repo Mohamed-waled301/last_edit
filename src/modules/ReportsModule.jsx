@@ -208,7 +208,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
         {
           key: 'cut-production-by-size-color',
           title: 'إنتاج القص حسب المقاس واللون',
-          desc: 'حصر كميات قطع القص مصنفة بالألوان والمقاسات (M إلى 8XL) لكل أمر قص مع الإجماليات والتصدير لإكسيل',
+          desc: 'حصر كميات قطع القص مصنفة بالألوان والمقاسات لكافة المقاسات التفصيلية لكل أمر قص مع الإجماليات والتصدير لإكسيل',
           icon: Scissors,
           color: 'emerald'
         }
@@ -333,7 +333,8 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
             ]);
             let filteredInvoices = salesInvoices;
             if (startDate || endDate) {
-              filteredInvoices = salesInvoices.filter(i => {
+              const safeInvs = Array.isArray(salesInvoices) ? salesInvoices : [];
+              filteredInvoices = safeInvs.filter(i => {
                 const d = i.invoice_date || i.date;
                 if (startDate && d && d < startDate) return false;
                 if (endDate && d && d > endDate) return false;
@@ -387,7 +388,8 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
           }
           case 'invalid-phones': {
             const parties = await db.parties.toArray();
-            const invalid = parties.filter((p) => p.phone && !isValidEgyptianMobile(p.phone));
+            const safeParties = Array.isArray(parties) ? parties : [];
+            const invalid = safeParties.filter((p) => p.phone && !isValidEgyptianMobile(p.phone));
             setReportData(invalid.map((p) => {
               const ph = String(p.phone || '');
               let reason = 'رقم غير صالح';
@@ -427,7 +429,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
                   order_id: o.id,
                   cutting_number: o.cutting_number || o.order_number,
                   cutting_name: o.cutting_name || o.product_name,
-                  stage_title: stKey === 'printing' ? 'الطباعة' : stKey === 'embroidery' ? 'التطريز' : 'الحياكة',
+                  stage_title: stKey === 'printing' ? 'الطباعة' : stKey === 'embroidery' ? 'التطريز' : stKey === 'sewing' ? 'الحياكة' : 'التشغيل',
                   vendor_name: stData.vendor_name || 'غير محدد',
                   pricing_type: stData.pricing_type === 'per_piece' ? 'سعر قطعة' : stData.pricing_type === 'batches' ? 'دفعات' : 'مبلغ ثابت',
                   total_cost: stData.total_cost || 0,
@@ -515,7 +517,8 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
 
   // Filtered dataset
   const filteredData = useMemo(() => {
-    return reportData.filter((row) => {
+    const safeList = Array.isArray(reportData) ? reportData : [];
+    return safeList.filter((row) => {
       const term = searchTerm.trim().toLowerCase();
       if (term) {
         const matchesTerm = Object.values(row).some((val) => {
@@ -564,8 +567,9 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
     try {
       sessionStorage.setItem('print_preview_payload', JSON.stringify({
         type: 'report',
+        id: activeReport,
         reportKey: activeReport,
-        reportTitle: currentReportMeta?.title,
+        reportTitle: currentReportMeta?.title || 'تقرير النظام',
         data: filteredData,
       }));
     } catch {}
@@ -1004,8 +1008,8 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
           <th className="p-3">القسم</th>
           <th className="p-3 text-center">النوع</th>
           <th className="p-3 text-center font-mono">الرصيد الفعلي</th>
-          <th className="p-3 text-left font-mono">سعر التكلفة</th>
-          <th className="p-3 text-left font-mono">سعر البيع</th>
+          <th className="p-3 text-left font-mono min-w-[120px] whitespace-nowrap">سعر التكلفة</th>
+          <th className="p-3 text-left font-mono min-w-[120px] whitespace-nowrap">سعر البيع</th>
           <th className="p-3 text-center">هامش الربح %</th>
         </tr>
       );
@@ -1039,7 +1043,7 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
           <th className="p-3">تاريخ الطلب</th>
           <th className="p-3 text-center">طريقة الدفع</th>
           <th className="p-3 text-center font-mono">البنود</th>
-          <th className="p-3 text-left font-mono">الإجمالي</th>
+          <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">الإجمالي</th>
           <th className="p-3 text-center">الحالة</th>
         </tr>
       );
@@ -1050,8 +1054,8 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
           <th className="p-3">الكود</th>
           <th className="p-3">اسم جهة التعامل</th>
           <th className="p-3">الهاتف</th>
-          <th className="p-3 text-center font-mono">رصيد أول المدة</th>
-          <th className="p-3 text-center font-mono">الرصيد الحالي</th>
+          <th className="p-3 text-center font-mono min-w-[130px] whitespace-nowrap">رصيد أول المدة</th>
+          <th className="p-3 text-center font-mono min-w-[130px] whitespace-nowrap">الرصيد الحالي</th>
           <th className="p-3 text-center">طبيعة الحساب</th>
         </tr>
       );
@@ -1061,9 +1065,9 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
           <th className="p-3">أمر الشراء</th>
           <th className="p-3">المورد</th>
           <th className="p-3">تاريخ الاستحقاق</th>
-          <th className="p-3 text-left font-mono">مبلغ القسط</th>
-          <th className="p-3 text-left font-mono">المسدد</th>
-          <th className="p-3 text-left font-mono">المتبقي</th>
+          <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">مبلغ القسط</th>
+          <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المسدد</th>
+          <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المتبقي</th>
           <th className="p-3 text-center">حالة السداد</th>
         </tr>
       );
@@ -1075,9 +1079,9 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
             <th className="p-3">اسم العميل</th>
             <th className="p-3">الهاتف</th>
             <th className="p-3 text-center font-mono">عدد الفواتير</th>
-            <th className="p-3 text-left font-mono">إجمالي المبيعات</th>
-            <th className="p-3 text-left font-mono">المسدد</th>
-            <th className="p-3 text-left font-mono">المتبقي</th>
+            <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">إجمالي المبيعات</th>
+            <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المسدد</th>
+            <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المتبقي</th>
           </tr>
         );
       }
@@ -1087,7 +1091,7 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
           <th className="p-3">العميل</th>
           <th className="p-3">التاريخ</th>
           <th className="p-3 text-center">طريقة الدفع</th>
-          <th className="p-3 text-left font-mono">الصافي</th>
+          <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">الصافي</th>
           <th className="p-3 text-center">الحالة</th>
         </tr>
       );
@@ -1097,7 +1101,7 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
           <th className="p-3">رقم الإذن</th>
           <th className="p-3">نوع المرتجع</th>
           <th className="p-3">التاريخ</th>
-          <th className="p-3 text-left font-mono">القيمة</th>
+          <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">القيمة</th>
           <th className="p-3">السبب</th>
         </tr>
       );
@@ -1106,9 +1110,9 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
         <tr>
           <th className="p-3">الكود</th>
           <th className="p-3">اسم الجهة (عميل ومورد)</th>
-          <th className="p-3 text-center font-mono text-blue-700">له (مشتريات)</th>
-          <th className="p-3 text-center font-mono text-emerald-700">عليه (مبيعات)</th>
-          <th className="p-3 text-center font-mono">الصافي</th>
+          <th className="p-3 text-center font-mono text-blue-700 min-w-[130px] whitespace-nowrap">له (مشتريات)</th>
+          <th className="p-3 text-center font-mono text-emerald-700 min-w-[130px] whitespace-nowrap">عليه (مبيعات)</th>
+          <th className="p-3 text-center font-mono min-w-[130px] whitespace-nowrap">الصافي</th>
           <th className="p-3 text-center font-mono">عدد المقاصات</th>
         </tr>
       );
@@ -1151,9 +1155,9 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
           <th className="p-3">المرحلة</th>
           <th className="p-3">الورشة / المورد</th>
           <th className="p-3">نظام التسعير</th>
-          <th className="p-3 text-left font-mono">إجمالي التكلفة</th>
-          <th className="p-3 text-left font-mono">المسدد</th>
-          <th className="p-3 text-left font-mono">المتبقي</th>
+          <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">إجمالي التكلفة</th>
+          <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المسدد</th>
+          <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المتبقي</th>
         </tr>
       );
     case 'cut-production-by-size-color':
@@ -1175,7 +1179,7 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
         <tr>
           <th className="p-3">رقم السند</th>
           <th className="p-3">كود وبند المصروف</th>
-          <th className="p-3 text-left font-mono">المبلغ المنصرف</th>
+          <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المبلغ المنصرف</th>
           <th className="p-3">التاريخ</th>
           <th className="p-3">البيان</th>
         </tr>
@@ -1210,8 +1214,8 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
           <td className="p-3 text-center font-mono font-bold text-blue-700">
             {formatNumber(row.actual_balance ?? row.current_stock ?? 0)} {row.unit}
           </td>
-          <td className="p-3 text-left font-mono">{formatCurrency(row.cost_price || 0)}</td>
-          <td className="p-3 text-left font-mono">{formatCurrency(row.selling_price || 0)}</td>
+          <td className="p-3 text-left font-mono whitespace-nowrap min-w-[120px]">{formatCurrency(row.cost_price || 0)}</td>
+          <td className="p-3 text-left font-mono whitespace-nowrap min-w-[120px]">{formatCurrency(row.selling_price || 0)}</td>
           <td className="p-3 text-center font-mono font-bold text-emerald-700">
             {row.margin_percent !== undefined ? `${row.margin_percent}%` : '-'}
           </td>
@@ -1253,7 +1257,7 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
           <td className="p-3 font-mono">{formatDate(row.order_date)}</td>
           <td className="p-3 text-center">{row.payment_terms === 'credit' ? 'آجل' : 'نقدي'}</td>
           <td className="p-3 text-center font-mono">{Array.isArray(row.items) ? row.items.length : 0}</td>
-          <td className="p-3 text-left font-mono font-bold text-slate-900">
+          <td className="p-3 text-left font-mono font-bold text-slate-900 whitespace-nowrap min-w-[130px]">
             {formatCurrency(row.total_amount ?? row.grand_total ?? 0)}
           </td>
           <td className="p-3 text-center">{row.status}</td>
@@ -1265,10 +1269,10 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
           <td className="p-3 font-mono font-bold text-slate-900">{row.code || row.id}</td>
           <td className="p-3 font-bold text-slate-800">{row.name}</td>
           <td className="p-3 font-mono">{row.phone || '-'}</td>
-          <td className="p-3 text-center font-mono">
+          <td className="p-3 text-center font-mono whitespace-nowrap min-w-[130px]">
             {formatCurrency(row.supplier_opening_balance ?? row.opening_balance ?? 0)}
           </td>
-          <td className="p-3 text-center font-mono font-bold text-blue-900">
+          <td className="p-3 text-center font-mono font-bold text-blue-900 whitespace-nowrap min-w-[130px]">
             {formatCurrency(row.supplier_balance ?? row.current_balance ?? 0)}
           </td>
           <td className="p-3 text-center">{row.supplier_opening_type ?? row.opening_balance_type ?? 'دائن'}</td>
@@ -1280,10 +1284,10 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
           <td className="p-3 font-mono font-bold text-slate-900">{row.code || row.id}</td>
           <td className="p-3 font-bold text-slate-800">{row.name}</td>
           <td className="p-3 font-mono">{row.phone || '-'}</td>
-          <td className="p-3 text-center font-mono">
+          <td className="p-3 text-center font-mono whitespace-nowrap min-w-[130px]">
             {formatCurrency(row.customer_opening_balance ?? row.opening_balance ?? 0)}
           </td>
-          <td className="p-3 text-center font-mono font-bold text-teal-900">
+          <td className="p-3 text-center font-mono font-bold text-teal-900 whitespace-nowrap min-w-[130px]">
             {formatCurrency(row.customer_balance ?? row.current_balance ?? 0)}
           </td>
           <td className="p-3 text-center">{row.customer_opening_type ?? row.opening_balance_type ?? 'مدين'}</td>
@@ -1295,9 +1299,9 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
           <td className="p-3 font-mono font-bold text-slate-900">{row.po_number}</td>
           <td className="p-3 font-bold text-slate-800">{row.supplier_name}</td>
           <td className="p-3 font-mono text-rose-700 font-bold">{formatDate(row.due_date)}</td>
-          <td className="p-3 text-left font-mono font-bold">{formatCurrency(row.amount)}</td>
-          <td className="p-3 text-left font-mono text-emerald-700">{formatCurrency(row.paid_amount || 0)}</td>
-          <td className="p-3 text-left font-mono text-rose-700 font-bold">{formatCurrency(row.remaining_amount || row.amount)}</td>
+          <td className="p-3 text-left font-mono font-bold whitespace-nowrap min-w-[130px]">{formatCurrency(row.amount)}</td>
+          <td className="p-3 text-left font-mono text-emerald-700 whitespace-nowrap min-w-[130px]">{formatCurrency(row.paid_amount || 0)}</td>
+          <td className="p-3 text-left font-mono text-rose-700 font-bold whitespace-nowrap min-w-[130px]">{formatCurrency(row.remaining_amount || row.amount)}</td>
           <td className="p-3 text-center">
             {row.is_overdue ? (
               <span className="text-red-700 bg-red-50 px-2 py-0.5 rounded-full font-bold">
@@ -1317,9 +1321,9 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
             <td className="p-3 font-bold text-slate-800">{row.name}</td>
             <td className="p-3 font-mono">{row.phone || '-'}</td>
             <td className="p-3 text-center font-mono font-bold text-blue-700">{row.invoices_count}</td>
-            <td className="p-3 text-left font-mono font-bold text-slate-900">{formatCurrency(row.total_sales || 0)}</td>
-            <td className="p-3 text-left font-mono text-emerald-700">{formatCurrency(row.paid_total || 0)}</td>
-            <td className="p-3 text-left font-mono font-bold text-rose-700">{formatCurrency(row.balance_remaining || 0)}</td>
+            <td className="p-3 text-left font-mono font-bold text-slate-900 whitespace-nowrap min-w-[130px]">{formatCurrency(row.total_sales || 0)}</td>
+            <td className="p-3 text-left font-mono text-emerald-700 whitespace-nowrap min-w-[130px]">{formatCurrency(row.paid_total || 0)}</td>
+            <td className="p-3 text-left font-mono font-bold text-rose-700 whitespace-nowrap min-w-[130px]">{formatCurrency(row.balance_remaining || 0)}</td>
           </tr>
         );
       }
@@ -1329,7 +1333,7 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
           <td className="p-3 font-bold text-slate-800">{row.customer_name}</td>
           <td className="p-3 font-mono">{formatDate(row.invoice_date)}</td>
           <td className="p-3 text-center">{row.payment_terms === 'credit' ? 'آجل' : 'نقدي'}</td>
-          <td className="p-3 text-left font-mono font-bold text-emerald-700">{formatCurrency(row.net_amount || row.grand_total || 0)}</td>
+          <td className="p-3 text-left font-mono font-bold text-emerald-700 whitespace-nowrap min-w-[130px]">{formatCurrency(row.net_amount || row.grand_total || 0)}</td>
           <td className="p-3 text-center">{row.status}</td>
         </tr>
       );
@@ -1339,7 +1343,7 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
           <td className="p-3 font-mono font-bold text-slate-900">{row.return_number}</td>
           <td className="p-3 font-semibold text-slate-800">{row.return_type}</td>
           <td className="p-3 font-mono">{formatDate(row.return_date || row.created_at)}</td>
-          <td className="p-3 text-left font-mono font-bold text-rose-700">{formatCurrency(row.total_amount || 0)}</td>
+          <td className="p-3 text-left font-mono font-bold text-rose-700 whitespace-nowrap min-w-[130px]">{formatCurrency(row.total_amount || 0)}</td>
           <td className="p-3 text-slate-600">{row.reason || '-'}</td>
         </tr>
       );
@@ -1404,9 +1408,9 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
           <td className="p-3 font-bold text-indigo-700">{row.stage_title}</td>
           <td className="p-3 font-semibold text-slate-900">{row.vendor_name}</td>
           <td className="p-3 text-slate-600">{row.pricing_type}</td>
-          <td className="p-3 text-left font-mono font-bold text-slate-900">{formatCurrency(row.total_cost)}</td>
-          <td className="p-3 text-left font-mono font-bold text-emerald-700">{formatCurrency(row.paid)}</td>
-          <td className="p-3 text-left font-mono font-bold text-amber-700">{formatCurrency(row.remaining)}</td>
+          <td className="p-3 text-left font-mono font-bold text-slate-900 whitespace-nowrap min-w-[130px]">{formatCurrency(row.total_cost)}</td>
+          <td className="p-3 text-left font-mono font-bold text-emerald-700 whitespace-nowrap min-w-[130px]">{formatCurrency(row.paid)}</td>
+          <td className="p-3 text-left font-mono font-bold text-amber-700 whitespace-nowrap min-w-[130px]">{formatCurrency(row.remaining)}</td>
         </tr>
       );
     case 'cut-production-by-size-color':
@@ -1442,7 +1446,7 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
         <tr key={row.id || idx} className="hover:bg-slate-50">
           <td className="p-3 font-mono font-bold text-slate-900">{row.receipt_number || row.id}</td>
           <td className="p-3 font-bold text-slate-800">{row.expense_name}</td>
-          <td className="p-3 text-left font-mono font-bold text-rose-700">{formatCurrency(row.amount)}</td>
+          <td className="p-3 text-left font-mono font-bold text-rose-700 whitespace-nowrap min-w-[130px]">{formatCurrency(row.amount)}</td>
           <td className="p-3 font-mono text-slate-600">{formatDate(row.date)}</td>
           <td className="p-3 text-slate-600">{row.notes || '-'}</td>
         </tr>

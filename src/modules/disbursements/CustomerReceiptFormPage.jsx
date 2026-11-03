@@ -7,6 +7,7 @@ import { api } from '../../services/api';
 import { formatCurrency, getTodayDateString, formatDate } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import { navigationGuard } from '../../utils/navigationGuard';
+import { handleFormKeyDown } from '../../utils/formNavigation';
 
 export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
   const today = getTodayDateString();
@@ -111,15 +112,14 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
   const currentTreasuryBal = Number(selectedTreasury?.current_balance) || 0;
   const numAmount = Number(form.amount) || 0;
   const projectedTreasuryBal = Number((currentTreasuryBal + numAmount).toFixed(2));
-  const projectedCustomerBal = Math.max(0, Number((customerBalance - numAmount).toFixed(2)));
+  const projectedCustomerBal = Number((customerBalance - numAmount).toFixed(2));
+  const isAdvanceReceipt = customerBalance <= 0 || numAmount > customerBalance;
 
   const validate = () => {
     const errs = {};
     if (!form.customer_id) errs.customer_id = 'يرجى اختيار العميل';
     if (!numAmount || numAmount <= 0) {
       errs.amount = 'قيمة الدفعة يجب أن تكون أكبر من صفر';
-    } else if (numAmount > customerBalance) {
-      errs.amount = `قيمة الدفعة (${formatCurrency(numAmount)}) لا يمكن أن تتجاوز رصيد المديونية المستحق على العميل (${formatCurrency(customerBalance)})`;
     }
     if (!form.account_id) errs.account_id = 'يرجى اختيار الخزينة المودع بها';
     if (!form.payment_date) errs.payment_date = 'تاريخ السند مطلوب';
@@ -147,6 +147,7 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
       });
 
       isSavedRef.current = true;
+      navigationGuard.unregister();
       if (onNotify) {
         onNotify(`تم إصدار سند استلام نقدية العميل برقم (${res.receiptNumber}) بنجاح`);
       }
@@ -157,7 +158,12 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
         window.location.hash = '#/disbursements';
       }
     } catch (err) {
-      alert(err.message || 'فشل في إصدار سند استلام نقدية العميل');
+      if (onNotify) {
+        onNotify(err.message || 'فشل في إصدار سند استلام نقدية العميل', 'error');
+      } else {
+        alert(err.message || 'فشل في إصدار سند استلام نقدية العميل');
+      }
+      setErrors(prev => ({ ...prev, general: err.message || 'فشل في إصدار سند استلام نقدية العميل' }));
     } finally {
       setSaving(false);
       setShowConfirmModal(false);
@@ -169,7 +175,8 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
     else window.location.hash = '#/disbursements';
   };
 
-  const isFormValid = Boolean(form.customer_id && numAmount > 0 && numAmount <= customerBalance && form.account_id);
+  // Zero-balance and advance prepayments are fully valid as long as customer, amount > 0, and account are selected
+  const isFormValid = Boolean(form.customer_id && numAmount > 0 && form.account_id);
 
   // Filtered customers for quick select
   const filteredCustomers = customers.filter(c => {
@@ -181,7 +188,7 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
   return (
     <PageContainer
       title="استلام نقدية من عميل"
-      subtitle="تحصيل دفعة نقدية من عميل وتوريدها للخزينة لتخفيض رصيد مديونيته في قيد واحد"
+      subtitle="تحصيل دفعة نقدية أو دفعة مقدمة تحت الحساب من عميل وتوريدها للخزينة في قيد واحد"
       breadcrumbs={[
         { label: 'صرف النقدية', href: '#/disbursements' },
         { label: 'استلام نقدية' }
@@ -193,12 +200,24 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
       saveDisabled={!isFormValid || saving}
       saveText="إصدار"
       extraBottomContent={
-        <div className="flex items-center gap-4 text-xs font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200">
+        <div className="flex items-center gap-4 text-xs font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200 flex-wrap">
           <span>العميل: <strong className="text-[#1F3A5F]">{selectedCustomer?.name || '-'}</strong></span>
           <span className="text-gray-300">|</span>
-          <span>المديونية: <span className="font-mono text-emerald-700">{formatCurrency(customerBalance)}</span></span>
+          <span>المديونية الحالية: <span className="font-mono text-emerald-700">{formatCurrency(customerBalance)}</span></span>
           <span className="text-gray-300">|</span>
           <span>الدفعة: <span className="font-mono text-blue-700 text-sm font-bold">{formatCurrency(numAmount)}</span></span>
+          <span className="text-gray-300">|</span>
+          <span>
+            {projectedCustomerBal < 0 ? (
+              <span className="text-rose-700 font-bold">
+                رصيد مقدم للعميل (له): <span className="font-mono">{formatCurrency(Math.abs(projectedCustomerBal))}</span>
+              </span>
+            ) : (
+              <span>
+                المتبقي عليه: <span className="font-mono text-emerald-700 font-bold">{formatCurrency(projectedCustomerBal)}</span>
+              </span>
+            )}
+          </span>
           <span className="text-gray-300">|</span>
           <span>
             رصيد الخزينة بعدها: 
@@ -209,7 +228,13 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
         </div>
       }
     >
-      <form onSubmit={handleIssueClick} className="space-y-6">
+      <form onSubmit={handleIssueClick} onKeyDown={handleFormKeyDown} className="space-y-6">
+        {errors.general && (
+          <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-xs font-bold">
+            {errors.general}
+          </div>
+        )}
+
         {/* Main Card */}
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-5">
           <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-2.5 flex items-center gap-2">
@@ -243,7 +268,7 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
                     <option value="">-- اختر العميل --</option>
                     {filteredCustomers.map(c => (
                       <option key={c.id} value={c.id}>
-                        [{c.code}] {c.name} (مستحق عليه: {formatCurrency(c.customer_balance || 0)})
+                        [{c.code}] {c.name} (الرصيد: {formatCurrency(c.customer_balance || 0)})
                       </option>
                     ))}
                   </select>
@@ -253,11 +278,16 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
                 {/* Read-Only Owed Balance beside field */}
                 <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-md flex flex-col justify-center">
                   <span className="text-[11px] font-bold text-emerald-900 block">
-                    الرصيد الحالي المستحق على العميل (عليه):
+                    الرصيد الحالي المسجل على العميل (عليه):
                   </span>
                   <span className="text-base font-bold text-emerald-700 font-mono">
                     {formatCurrency(customerBalance)}
                   </span>
+                  {customerBalance <= 0 && (
+                    <span className="text-[10px] text-blue-700 font-semibold mt-0.5">
+                      متاح تحصيل دفعات وعرابين مقدمة تحت الحساب
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -281,7 +311,7 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
                 required
               />
               <span className="text-[11px] text-gray-500 mt-1 block">
-                اكتب القيمة يدوياً. يجب أن تكون أكبر من 0 ولا تتجاوز الرصيد المستحق ({formatCurrency(customerBalance)}).
+                اكتب القيمة يدوياً. يمكن تحصيل دفعات مديونية أو دفعات مقدمة تحت الحساب حتى مع وجود رصيد 0.00 ج.م.
               </span>
               <FieldError error={errors.amount} />
             </div>
@@ -369,7 +399,7 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
         </div>
       </form>
 
-      {/* Confirmation Summary Modal (Requirement 2.2) */}
+      {/* Confirmation Summary Modal */}
       <DocumentConfirmModal
         isOpen={showConfirmModal}
         title="تأكيد إصدار سند استلام نقدية العميل"
@@ -385,7 +415,9 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
           'كود العميل': selectedCustomer?.code || '-',
           'الرصيد المستحق قبل الاستلام': formatCurrency(customerBalance),
           'قيمة الدفعة المحصلة': formatCurrency(numAmount),
-          'الرصيد المتبقي على العميل بعد السداد': formatCurrency(projectedCustomerBal),
+          'حالة الرصيد بعد التحصيل': projectedCustomerBal < 0
+            ? `رصيد دائن / دفعة مقدمة للعميل (${formatCurrency(Math.abs(projectedCustomerBal))})`
+            : (projectedCustomerBal === 0 ? 'الحساب متزن (0.00 ج.م)' : `متبقي عليه (${formatCurrency(projectedCustomerBal)})`),
           'الخزينة المودع بها': selectedTreasury?.name || '-',
           'رصيد الخزينة قبل الاستلام': formatCurrency(currentTreasuryBal),
           'رصيد الخزينة بعد الاستلام': formatCurrency(projectedTreasuryBal),
