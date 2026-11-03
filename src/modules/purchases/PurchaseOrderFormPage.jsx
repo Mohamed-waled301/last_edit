@@ -20,6 +20,7 @@ import PostIssuePrintDialog from '../../components/PostIssuePrintDialog';
 import MoneyInput, { NumberInput } from '../../components/MoneyInput';
 import { navigationGuard } from '../../utils/navigationGuard';
 import { api } from '../../services/api';
+import { getEntityCurrentBalance } from '../../services/balanceService';
 import { formatCurrency, formatNumber, getTodayDateString } from '../../utils/formatters';
 import { FieldError } from '../../utils/validation';
 import { handleFormKeyDown } from '../../utils/formNavigation';
@@ -141,7 +142,7 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
     }
   };
 
-  // Fetch authoritative supplier previous balance (Requirement 6)
+  // Fetch authoritative supplier previous balance via Central Balance Engine
   useEffect(() => {
     async function loadSupplierBalance() {
       if (!form.supplier_id) {
@@ -150,11 +151,11 @@ export default function PurchaseOrderFormPage({ orderId = null, onSaved, onCance
         return;
       }
       try {
+        const bal = await getEntityCurrentBalance(form.supplier_id);
         const pRes = await api.getParty(form.supplier_id);
         const p = pRes?.data || pRes?.party || null;
         setSupplierData(p);
-        const bal = p?.supplier_balance ?? p?.balance_due ?? 0;
-        setSupplierBalance(Number(bal) || 0);
+        setSupplierBalance(Number(bal.supplierBalance) || 0);
       } catch {
         const sup = suppliers.find((s) => String(s.id) === String(form.supplier_id));
         setSupplierData(sup || null);

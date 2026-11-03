@@ -2,6 +2,7 @@ import db from '../db';
 import auditRepo from './auditRepo';
 import { validateNotPastDate } from '../../utils/formatters';
 import { partiesRepo } from './partiesRepo';
+import { getEntityCurrentBalance } from '../../services/balanceService';
 
 export const cashRepo = {
   async getAccounts() {
@@ -218,12 +219,15 @@ export const cashRepo = {
     const payAmount = Math.max(0, Number(amount) || 0);
     if (payAmount <= 0) throw new Error('مبلغ دفعة المورد يجب أن يكون رقماً أكبر من صفر');
 
-    // Retrieve supplier and current balance
-    const party = await db.parties.get(supplier_id);
-    if (!party || !party.is_supplier) throw new Error('المورد المحدد غير موجود بالنظام');
+    // Retrieve supplier and current balance via Central Balance Engine
+    let party = await db.parties.get(supplier_id);
+    if (!party && db.suppliers) {
+      party = await db.suppliers.get(supplier_id);
+    }
+    if (!party) throw new Error('المورد أو الورشة المحددة غير موجودة بالنظام');
 
-        const fullParty = await partiesRepo.getById(supplier_id);
-    const owedBalance = Number(fullParty?.supplier_balance) || 0;
+    const bal = await getEntityCurrentBalance(supplier_id);
+    const owedBalance = Number(bal.supplierBalance) || 0;
     const isAdvance = owedBalance <= 0 || payAmount > owedBalance;
 
     // Default to main treasury if not provided
@@ -336,12 +340,15 @@ export const cashRepo = {
     const recAmount = Math.max(0, Number(amount) || 0);
     if (recAmount <= 0) throw new Error('قيمة الدفعة المستلمة يجب أن تكون أكبر من صفر');
 
-    // Retrieve customer and current balance
-    const party = await db.parties.get(customer_id);
-    if (!party || !party.is_customer) throw new Error('العميل المحدد غير موجود بالنظام');
+    // Retrieve customer and current balance via Central Balance Engine
+    let party = await db.parties.get(customer_id);
+    if (!party && db.customers) {
+      party = await db.customers.get(customer_id);
+    }
+    if (!party) throw new Error('العميل المحدد غير موجود بالنظام');
 
-        const fullParty = await partiesRepo.getById(customer_id);
-    const owedBalance = Number(fullParty?.customer_balance) || 0;
+    const bal = await getEntityCurrentBalance(customer_id);
+    const owedBalance = Number(bal.customerBalance) || 0;
     const isAdvance = owedBalance <= 0 || recAmount > owedBalance;
 
     // Default to main treasury if not provided

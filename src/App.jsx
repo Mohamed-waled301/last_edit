@@ -204,9 +204,10 @@ export default function App() {
 
     // Full-Page SPA Safe Hash Routing Sync with unsaved changes guard
     const handleHashChange = () => {
+      if (bypassGuardRef.current) return;
       const newHash = window.location.hash || '';
       if (newHash === currentHashRef.current) return;
-      if (!bypassGuardRef.current && navigationGuard.hasUnsavedChanges()) {
+      if (navigationGuard.hasUnsavedChanges()) {
         const target = newHash;
         bypassGuardRef.current = true;
         window.location.hash = currentHashRef.current;

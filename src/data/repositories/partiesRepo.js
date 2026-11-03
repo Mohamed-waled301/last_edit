@@ -8,6 +8,8 @@ import BalanceCalculator, {
   DEFAULT_CUSTOMER_OPENING_TYPE,
 } from '../../logic/balances';
 import auditRepo from './auditRepo';
+import { computeAvailableCredit, toPiasters, fromPiasters } from '../../utils/money';
+import { getEntityCurrentBalance } from '../../services/balanceService';
 
 /**
  * Normalize opening-balance payload into canonical side-specific fields.
@@ -61,21 +63,18 @@ function normalizePartyOpenings(data = {}, current = null) {
 }
 
 /**
- * Compute final ledger balances for a party:
+ * Compute final ledger balances for a party via authoritative Central Balance Engine:
  * Supplier Balance (له / مقدماً) = amounts we owe them (Opening + Purchases - Payments)
  * Customer Balance (عليه / مقدماً) = amounts they owe us (Opening + Sales - Receipts)
  * Net Balance (الصافي) = Customer Balance - Supplier Balance (عليه - له)
  */
-import { computeAvailableCredit, toPiasters, fromPiasters } from '../../utils/money';
-
 function withComputedBalances(party, bal) {
-  const supplierOpening = resolveOpeningBalance(party, 'supplier');
-  const customerOpening = resolveOpeningBalance(party, 'customer');
-  // Preserve signed balances for advance payments (negative = advances)
+  const supplierOpening = Number(bal.supplierOpening ?? resolveOpeningBalance(party, 'supplier')) || 0;
+  const customerOpening = Number(bal.customerOpening ?? resolveOpeningBalance(party, 'customer')) || 0;
   const finalSup = Number(bal.supplierBalance) || 0;
   const finalCust = Number(bal.customerBalance) || 0;
-  const finalNet = fromPiasters(toPiasters(finalCust) - toPiasters(finalSup));
-  const finalMaxOffset = Math.max(0, fromPiasters(Math.min(Math.max(0, toPiasters(finalSup)), Math.max(0, toPiasters(finalCust)))));
+  const finalNet = Number(bal.netBalance) || 0;
+  const finalMaxOffset = Number(bal.maxOffsetAmount) || 0;
   const creditLimitVal = party.credit_limit !== undefined ? Number(party.credit_limit) || 0 : 0;
   const availCredit = computeAvailableCredit(creditLimitVal, finalCust);
 
@@ -83,14 +82,14 @@ function withComputedBalances(party, bal) {
     ...party,
     supplier_opening_balance: supplierOpening,
     customer_opening_balance: customerOpening,
-    supplier_opening_type: resolveOpeningType(party, 'supplier'),
-    customer_opening_type: resolveOpeningType(party, 'customer'),
+    supplier_opening_type: bal.supplierOpeningType || resolveOpeningType(party, 'supplier'),
+    customer_opening_type: bal.customerOpeningType || resolveOpeningType(party, 'customer'),
     opening_balance: Number(party.opening_balance) || 0,
     opening_balance_type: party.opening_balance_type || (party.is_supplier && !party.is_customer
-      ? resolveOpeningType(party, 'supplier')
-      : resolveOpeningType(party, 'customer')),
-    supplier_balance: finalSup, // له (إذا كان موجباً مستحق له، إذا كان سالباً دفعة مقدمة لنا)
-    customer_balance: finalCust, // عليه (إذا كان موجباً مستحق عليه، إذا كان سالباً دفعة مقدمة له)
+      ? (bal.supplierOpeningType || resolveOpeningType(party, 'supplier'))
+      : (bal.customerOpeningType || resolveOpeningType(party, 'customer'))),
+    supplier_balance: finalSup, // له (موجب = مستحق له، سالب = دفعة مقدمة لنا)
+    customer_balance: finalCust, // عليه (موجب = مستحق عليه، سالب = دفعة مقدمة له)
     balance_due: party.is_supplier && !party.is_customer ? finalSup : finalCust,
     current_balance: party.is_supplier && !party.is_customer ? finalSup : (party.is_customer && !party.is_supplier ? finalCust : finalNet),
     net_balance: finalNet, // الصافي = عليه - له (موجب = لنا، سالب = له)
@@ -103,50 +102,16 @@ function withComputedBalances(party, bal) {
 
 export const partiesRepo = {
   /**
-   * Get all parties with calculated supplier balance, customer balance, and net balance
+   * Get all parties with authoritative calculated balances from Central Balance Engine
    */
   async getAll() {
     const list = await db.parties.filter(p => p.is_active === 1).toArray();
-    const supInvoices = await db.supplier_invoices.toArray();
-    const supReturns = await db.supplier_returns.toArray();
-    const custInvoices = await db.sales_invoices.toArray();
-    const custReturns = await db.customer_returns.toArray();
-    const payments = await db.payments.toArray();
-    const custPayments = await db.customer_payments.toArray();
-
-    return list.map(party => {
-      const pSupInvoices = supInvoices.filter(i => i.supplier_id === party.id);
-      const pSupReturns = supReturns.filter(r => r.supplier_id === party.id);
-      const pCustInvoices = custInvoices.filter(i => i.customer_id === party.id);
-      const pCustReturns = custReturns.filter(r => r.customer_id === party.id);
-
-      const unlinkedSupPaid = payments
-        .filter(p => p.supplier_id === party.id && !p.invoice_id && p.status !== 'cancelled')
-        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-      const unlinkedCustPaid = custPayments
-        .filter(p => p.customer_id === party.id && !p.invoice_id && p.status !== 'cancelled')
-        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-
-      const supOpening = resolveOpeningBalance(party, 'supplier');
-      const custOpening = resolveOpeningBalance(party, 'customer');
-      const supOpeningType = resolveOpeningType(party, 'supplier');
-      const custOpeningType = resolveOpeningType(party, 'customer');
-
-      const bal = BalanceCalculator.calculateUnifiedPartyBalance(
-        pSupInvoices,
-        pSupReturns,
-        pCustInvoices,
-        pCustReturns,
-        supOpening,
-        custOpening,
-        unlinkedSupPaid,
-        unlinkedCustPaid,
-        supOpeningType,
-        custOpeningType
-      );
-
-      return withComputedBalances(party, bal);
-    });
+    const result = [];
+    for (const party of list) {
+      const bal = await getEntityCurrentBalance(party.id);
+      result.push(withComputedBalances(party, bal));
+    }
+    return result;
   },
 
   async getSuppliers() {
@@ -162,39 +127,7 @@ export const partiesRepo = {
   async getById(id) {
     const party = await db.parties.get(id);
     if (!party) return null;
-
-    const supInvoices = await db.supplier_invoices.where('supplier_id').equals(id).toArray();
-    const supReturns = await db.supplier_returns.where('supplier_id').equals(id).toArray();
-    const custInvoices = await db.sales_invoices.where('customer_id').equals(id).toArray();
-    const custReturns = await db.customer_returns.where('customer_id').equals(id).toArray();
-    const payments = await db.payments.where('supplier_id').equals(id).toArray();
-    const custPayments = await db.customer_payments.where('customer_id').equals(id).toArray();
-
-    const unlinkedSupPaid = payments
-      .filter(p => !p.invoice_id && p.status !== 'cancelled')
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    const unlinkedCustPaid = custPayments
-      .filter(p => !p.invoice_id && p.status !== 'cancelled')
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-
-    const supOpening = resolveOpeningBalance(party, 'supplier');
-    const custOpening = resolveOpeningBalance(party, 'customer');
-    const supOpeningType = resolveOpeningType(party, 'supplier');
-    const custOpeningType = resolveOpeningType(party, 'customer');
-
-    const bal = BalanceCalculator.calculateUnifiedPartyBalance(
-      supInvoices,
-      supReturns,
-      custInvoices,
-      custReturns,
-      supOpening,
-      custOpening,
-      unlinkedSupPaid,
-      unlinkedCustPaid,
-      supOpeningType,
-      custOpeningType
-    );
-
+    const bal = await getEntityCurrentBalance(id);
     return withComputedBalances(party, bal);
   },
 

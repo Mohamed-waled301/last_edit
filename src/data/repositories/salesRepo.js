@@ -10,37 +10,28 @@ import BalanceCalculator, {
 import auditRepo from './auditRepo';
 import { validateNotPastDate } from '../../utils/formatters';
 import { toPiasters, fromPiasters } from '../../utils/money';
+import { getEntityCurrentBalance } from '../../services/balanceService';
 
 export const salesRepo = {
   async getCustomers() {
     const list = await db.customers.toArray();
-    const invoices = await db.sales_invoices.toArray();
-    const returns = await db.customer_returns.toArray();
-    const payments = await db.customer_payments.toArray();
-
-    return list.map(c => {
-      const custInvoices = invoices.filter(i => i.customer_id === c.id);
-      const custReturns = returns.filter(r => r.customer_id === c.id);
-      const unlinkedPayments = payments
-        .filter(p => p.customer_id === c.id && !p.invoice_id)
-        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-      // Current Balance = Opening Balance + Credit Sales - Cash In / Receipts
-      const opening = resolveOpeningBalance(c, 'customer');
-      const openingType = resolveOpeningType(c, 'customer');
-      const bal = BalanceCalculator.calculateCustomerBalance(custInvoices, custReturns, opening, unlinkedPayments, openingType);
-
-      return {
+    const result = [];
+    for (const c of list) {
+      const bal = await getEntityCurrentBalance(c.id);
+      result.push({
         ...c,
-        opening_balance: opening,
-        opening_balance_type: resolveOpeningType(c, 'customer'),
-        total_invoiced: bal.totalInvoiced,
-        total_paid: bal.totalPaid,
-        balance_due: bal.balanceDue,
-        outstanding_balance: bal.balanceDue,
-        current_balance: bal.balanceDue,
-        customer_balance: bal.balanceDue,
-      };
-    });
+        opening_balance: bal.customerOpening,
+        opening_balance_type: bal.customerOpeningType,
+        total_invoiced: bal.customerInvoiced,
+        total_paid: bal.customerPaid,
+        total_returns: bal.customerReturns,
+        balance_due: bal.customerBalance,
+        outstanding_balance: bal.customerBalance,
+        current_balance: bal.customerBalance,
+        customer_balance: bal.customerBalance,
+      });
+    }
+    return result;
   },
 
   async createCustomer(data, userId = 'usr-accountant') {
@@ -79,9 +70,10 @@ export const salesRepo = {
     const invoices = await db.sales_invoices.where('customer_id').equals(id).toArray();
     const payments = await db.customer_payments.where('customer_id').equals(id).toArray();
     const returns = await db.customer_returns.where('customer_id').equals(id).toArray();
+    const bal = await getEntityCurrentBalance(id);
 
-    const opening = resolveOpeningBalance(customer, 'customer');
-    const openingType = resolveOpeningType(customer, 'customer');
+    const opening = bal.customerOpening;
+    const openingType = bal.customerOpeningType;
     const transactions = [];
 
     // Opening balance row (رصيد أول المدة) comes first chronologically
@@ -106,35 +98,52 @@ export const salesRepo = {
           type: 'فاتورة مبيعات',
           reference: inv.invoice_number,
           description: inv.notes || 'مبيعات منتجات تامة',
-          debit: Number(inv.total_invoice_amount) || 0, // Customer owes us
+          debit: Number(inv.total_invoice_amount ?? inv.total_amount) || 0, // Customer owes us
           credit: 0,
           raw_date: inv.created_at || inv.invoice_date,
         });
+
+        // If cash sale or immediate receipt recorded at invoice creation, credit immediately
+        if (inv.payment_terms === 'cash' || Number(inv.paid_amount) > 0) {
+          transactions.push({
+            date: inv.invoice_date,
+            type: 'تحصيل نقدي فوري',
+            reference: `CASH-${inv.invoice_number}`,
+            description: `تحصيل نقدي فوري لفاتورة ${inv.invoice_number}`,
+            debit: 0,
+            credit: Number(inv.paid_amount || inv.total_invoice_amount) || 0,
+            raw_date: inv.created_at || inv.invoice_date,
+          });
+        }
       }
     }
 
     for (const pay of payments) {
-      transactions.push({
-        date: pay.payment_date,
-        type: 'سند تحصيل',
-        reference: pay.receipt_number,
-        description: pay.notes || 'سداد دفعة نقدية/تحويل',
-        debit: 0,
-        credit: Number(pay.amount) || 0,
-        raw_date: pay.created_at || pay.payment_date,
-      });
+      if (pay.status !== 'cancelled') {
+        transactions.push({
+          date: pay.payment_date,
+          type: pay.payment_method === 'offset' ? 'تسوية مقاصة' : 'سند تحصيل',
+          reference: pay.receipt_number || pay.payment_number,
+          description: pay.notes || 'سداد دفعة نقدية/تحويل',
+          debit: 0,
+          credit: Number(pay.amount) || 0,
+          raw_date: pay.created_at || pay.payment_date,
+        });
+      }
     }
 
     for (const ret of returns) {
-      transactions.push({
-        date: ret.return_date,
-        type: 'مرتجع مبيعات',
-        reference: ret.return_number,
-        description: ret.reason || 'رد بضاعة من العميل',
-        debit: 0,
-        credit: Number(ret.refund_amount) || 0,
-        raw_date: ret.created_at || ret.return_date,
-      });
+      if (ret.status !== 'cancelled') {
+        transactions.push({
+          date: ret.return_date,
+          type: 'مرتجع مبيعات',
+          reference: ret.return_number,
+          description: ret.reason || 'رد بضاعة من العميل',
+          debit: 0,
+          credit: Number(ret.refund_amount ?? ret.total_amount) || 0,
+          raw_date: ret.created_at || ret.return_date,
+        });
+      }
     }
 
     transactions.sort((a, b) => new Date(a.raw_date).getTime() - new Date(b.raw_date).getTime());
@@ -148,33 +157,26 @@ export const salesRepo = {
       };
     });
 
-    const activeInvoices = invoices.filter(i => i.status !== 'cancelled');
-    const activeReturns = returns.filter(r => r.status !== 'cancelled');
-    const activePayments = payments.filter(p => p.status !== 'cancelled');
-    const unlinkedCustPaid = activePayments
-      .filter(p => !p.invoice_id)
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-
-    const bal = BalanceCalculator.calculateCustomerBalance(activeInvoices, activeReturns, opening, unlinkedCustPaid, openingType);
-
     return {
-      customer: { ...customer, opening_balance: opening, opening_balance_type: openingType, ...bal },
+      customer: { ...customer, opening_balance: bal.customerOpening, opening_balance_type: bal.customerOpeningType, ...bal },
       statement: ledger,
       movements: ledger,
-      opening_balance: opening,
-      opening_balance_type: openingType,
+      opening_balance: bal.customerOpening,
+      opening_balance_type: bal.customerOpeningType,
       invoices,
       payments,
       summary: {
-        opening_balance: opening,
-        opening_balance_type: openingType,
-        total_sales: bal.totalInvoiced || 0,
-        total_collected: bal.totalPaid || 0,
-        remaining_balance: bal.balanceDue || 0,
+        opening_balance: bal.customerOpening,
+        opening_balance_type: bal.customerOpeningType,
+        total_sales: bal.customerInvoiced,
+        total_collected: bal.customerPaid,
+        remaining_balance: bal.customerBalance,
+        balance_due: bal.customerBalance,
+        is_advance: bal.customerBalance < 0,
       },
-      total_invoiced: bal.totalInvoiced,
-      total_paid: bal.totalPaid,
-      balance_due: bal.balanceDue,
+      total_invoiced: bal.customerInvoiced,
+      total_paid: bal.customerPaid,
+      balance_due: bal.customerBalance,
     };
   },
 

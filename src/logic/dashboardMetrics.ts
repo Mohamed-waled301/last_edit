@@ -222,8 +222,8 @@ export function computeSupplierDebts(
     const openingType = resolveOpeningType(sup, 'supplier');
     const signedOpeningPiasters = openingType === 'debit' ? -toPiasters(opening) : toPiasters(opening);
 
-    // 1. Credit Purchases (Invoices + POs without duplicate)
-    const creditInvoices = supplierInvoices.filter(
+    // 1. Credit Purchases (Invoices + POs without duplicate, separate material vs stage invoices)
+    const allCreditInvoices = supplierInvoices.filter(
       inv => (inv.supplier_id === sup.id || inv.party_id === sup.id) &&
              inv.payment_terms === 'credit' &&
              inv.status !== 'cancelled'
@@ -232,18 +232,32 @@ export function computeSupplierDebts(
       po => (po.supplier_id === sup.id || po.party_id === sup.id) &&
             po.payment_terms === 'credit' &&
             po.status !== 'cancelled' &&
-            !creditInvoices.some(inv => inv.po_id === po.id || inv.id === po.id)
+            !allCreditInvoices.some(inv => inv.po_id === po.id || inv.id === po.id)
     );
+
     let creditPurchasesPiasters = 0;
-    for (const inv of creditInvoices) {
-      creditPurchasesPiasters += toPiasters(inv.total_amount ?? inv.grand_total ?? 0);
+    let stageCostsPiasters = 0;
+    const invoicedCutStageKeys = new Set<string>();
+
+    for (const inv of allCreditInvoices) {
+      const isStageInvoice = inv.reference_type === 'CUTTING_ORDER' || String(inv.id).startsWith('sinv-cut-');
+      const amtPiasters = toPiasters(inv.total_amount ?? inv.grand_total ?? 0);
+      if (isStageInvoice) {
+        stageCostsPiasters += amtPiasters;
+        if (inv.cut_order_id && inv.stage_key) {
+          invoicedCutStageKeys.add(`${inv.cut_order_id}-${inv.stage_key}`);
+        } else if (inv.id) {
+          invoicedCutStageKeys.add(String(inv.id));
+        }
+      } else {
+        creditPurchasesPiasters += amtPiasters;
+      }
     }
     for (const po of creditPOs) {
       creditPurchasesPiasters += toPiasters(po.total_amount ?? po.grand_total ?? 0);
     }
 
-    // 2. Credit Stage Costs (Cutting Edition only: printing, embroidery, sewing)
-    let stageCostsPiasters = 0;
+    // 2. Credit Stage Costs from cut orders NOT already synced in supplier_invoices (prevents double-counting!)
     if (options.includeCutting !== false) {
       for (const co of cutOrders) {
         if (co.status === 'cancelled') continue;
@@ -252,7 +266,11 @@ export function computeSupplierDebts(
           for (const stKey of ['printing', 'embroidery', 'sewing', 'operation']) {
             const st = stages[stKey];
             if (st && (st.vendor_id === sup.id || (!st.vendor_id && st.vendor_name && st.vendor_name === sup.name))) {
-              stageCostsPiasters += toPiasters(st.total_cost || 0);
+              const stageKey = `${co.id}-${stKey}`;
+              const sinvKey = `sinv-cut-${co.id}-${stKey}`;
+              if (!invoicedCutStageKeys.has(stageKey) && !invoicedCutStageKeys.has(sinvKey)) {
+                stageCostsPiasters += toPiasters(st.total_cost || 0);
+              }
             }
           }
         } else {

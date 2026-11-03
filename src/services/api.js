@@ -28,6 +28,7 @@ import {
 } from '../data';
 import db from '../data/db';
 import { syncPush, syncFetch, syncHydrateAll } from './apiSync';
+import { getEntityCurrentBalance, getAllEntitiesCurrentBalances } from './balanceService';
 
 let currentUserId = '';
 let currentUserRole = '';
@@ -243,7 +244,11 @@ export const api = {
     return { success: true, data: report, ...report, message: 'تم إعادة احتساب أرصدة المخزون بالكامل بنجاح' };
   },
 
-  // Master Data: Unified Parties (Suppliers & Customers)
+  // Master Data: Unified Parties (Suppliers & Customers) & Central Balance Engine
+  getEntityCurrentBalance: async (entityId) => {
+    const bal = await getEntityCurrentBalance(entityId);
+    return { success: true, data: bal, ...bal };
+  },
   getParties: async () => {
     const list = await partiesRepo.getAll();
     return { success: true, data: list, parties: list };
@@ -251,27 +256,25 @@ export const api = {
   getParty: async (id) => {
     if (!id) return { success: false, data: null };
     let party = await partiesRepo.getById(id);
-    if (!party && db.customers) {
-      const cust = await db.customers.get(id);
-      if (cust) {
+    if (!party) {
+      const bal = await getEntityCurrentBalance(id);
+      if (bal && bal.name && (bal.isSupplier || bal.isCustomer)) {
         party = {
-          ...cust,
-          is_customer: 1,
-          is_supplier: 0,
-          customer_balance: cust.balance_due || cust.current_balance || 0,
-          balance_due: cust.balance_due || cust.current_balance || 0,
-        };
-      }
-    }
-    if (!party && db.suppliers) {
-      const sup = await db.suppliers.get(id);
-      if (sup) {
-        party = {
-          ...sup,
-          is_customer: 0,
-          is_supplier: 1,
-          supplier_balance: sup.balance_due || sup.current_balance || 0,
-          balance_due: sup.balance_due || sup.current_balance || 0,
+          id: bal.entityId,
+          name: bal.name,
+          code: bal.code,
+          is_customer: bal.isCustomer ? 1 : 0,
+          is_supplier: bal.isSupplier ? 1 : 0,
+          supplier_balance: bal.supplierBalance,
+          customer_balance: bal.customerBalance,
+          balance_due: bal.balanceDue,
+          current_balance: bal.currentBalance,
+          net_balance: bal.netBalance,
+          max_offset_amount: bal.maxOffsetAmount,
+          supplier_opening_balance: bal.supplierOpening,
+          customer_opening_balance: bal.customerOpening,
+          supplier_opening_type: bal.supplierOpeningType,
+          customer_opening_type: bal.customerOpeningType,
         };
       }
     }
@@ -1075,7 +1078,7 @@ export const api = {
   syncHydrateAll,
 };
 
-export { syncPush, syncFetch, syncHydrateAll };
+export { syncPush, syncFetch, syncHydrateAll, getEntityCurrentBalance, getAllEntitiesCurrentBalances };
 export default api;
 
 

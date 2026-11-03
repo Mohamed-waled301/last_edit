@@ -44,10 +44,27 @@ export const MoneyInput = forwardRef(function MoneyInput(
 
   const [localValue, setLocalValue] = useState(() => toDisplayString(value));
   const isFocusedRef = useRef(false);
+  const inputRef = useRef(null);
+
+  const setCombinedRef = (node) => {
+    inputRef.current = node;
+    if (typeof ref === 'function') {
+      ref(node);
+    } else if (ref && typeof ref === 'object') {
+      ref.current = node;
+    }
+  };
 
   // Sync from prop changes when the user is NOT actively typing inside the field
   useEffect(() => {
-    if (!isFocusedRef.current) {
+    const isActuallyFocused = isFocusedRef.current && (
+      typeof document !== 'undefined' &&
+      document.activeElement &&
+      document.activeElement.tagName === 'INPUT' &&
+      (!inputRef.current || document.activeElement === inputRef.current)
+    );
+    if (!isActuallyFocused) {
+      isFocusedRef.current = false;
       setLocalValue(toDisplayString(value));
     }
   }, [value]);
@@ -87,34 +104,38 @@ export const MoneyInput = forwardRef(function MoneyInput(
   };
 
   const handleChange = (e) => {
-    const rawVal = e?.target ? e.target.value : String(e ?? '');
-    const clean = sanitize(rawVal);
+    try {
+      const rawVal = e?.target ? e.target.value : String(e ?? '');
+      const clean = sanitize(rawVal);
 
-    // Update local state immediately so intermediate typing is preserved
-    setLocalValue(clean);
+      // Update local state immediately so intermediate typing is preserved
+      setLocalValue(clean);
 
-    if (onChange) {
-      // Support both React event signature and direct value signature
-      const syntheticEvent = {
-        ...(typeof e === 'object' && e !== null ? e : {}),
-        target: {
-          ...(typeof e === 'object' && e?.target ? e.target : {}),
-          name: props.name,
-          value: clean,
-        },
-        currentTarget: {
-          ...(typeof e === 'object' && e?.currentTarget ? e.currentTarget : {}),
-          name: props.name,
-          value: clean,
-        },
-        toString: () => clean,
-        valueOf: () => clean,
-        [Symbol.toPrimitive]: () => clean,
-        stopPropagation: () => e?.stopPropagation?.(),
-        preventDefault: () => e?.preventDefault?.(),
-      };
+      if (onChange) {
+        // Support both React event signature and direct value signature
+        const syntheticEvent = {
+          ...(typeof e === 'object' && e !== null ? e : {}),
+          target: {
+            ...(typeof e === 'object' && e?.target ? e.target : {}),
+            name: props.name,
+            value: clean,
+          },
+          currentTarget: {
+            ...(typeof e === 'object' && e?.currentTarget ? e.currentTarget : {}),
+            name: props.name,
+            value: clean,
+          },
+          toString: () => clean,
+          valueOf: () => clean,
+          [Symbol.toPrimitive]: () => clean,
+          stopPropagation: () => e?.stopPropagation?.(),
+          preventDefault: () => e?.preventDefault?.(),
+        };
 
-      onChange(syntheticEvent);
+        onChange(syntheticEvent);
+      }
+    } catch (err) {
+      console.warn('MoneyInput handleChange error caught:', err);
     }
   };
 
@@ -162,32 +183,36 @@ export const MoneyInput = forwardRef(function MoneyInput(
   };
 
   const handlePaste = (e) => {
-    // Let browser paste, then sanitize via onChange, or handle clipboardData
-    const pasted = e.clipboardData?.getData('text');
-    if (pasted) {
-      e.preventDefault();
-      const clean = sanitize(pasted);
-      const input = e.target;
-      const start = input.selectionStart || 0;
-      const end = input.selectionEnd || 0;
-      const nextVal = sanitize(
-        localValue.slice(0, start) + clean + localValue.slice(end)
-      );
-      setLocalValue(nextVal);
-      if (onChange) {
-        const syntheticEvent = {
-          target: { name: props.name, value: nextVal },
-          currentTarget: { name: props.name, value: nextVal },
-          toString: () => nextVal,
-        };
-        onChange(syntheticEvent);
+    try {
+      // Let browser paste, then sanitize via onChange, or handle clipboardData
+      const pasted = e.clipboardData?.getData('text');
+      if (pasted) {
+        e.preventDefault();
+        const clean = sanitize(pasted);
+        const input = e.target;
+        const start = input.selectionStart || 0;
+        const end = input.selectionEnd || 0;
+        const nextVal = sanitize(
+          localValue.slice(0, start) + clean + localValue.slice(end)
+        );
+        setLocalValue(nextVal);
+        if (onChange) {
+          const syntheticEvent = {
+            target: { name: props.name, value: nextVal },
+            currentTarget: { name: props.name, value: nextVal },
+            toString: () => nextVal,
+          };
+          onChange(syntheticEvent);
+        }
       }
+    } catch (err) {
+      console.warn('MoneyInput handlePaste error caught:', err);
     }
   };
 
   return (
     <input
-      ref={ref}
+      ref={setCombinedRef}
       type="text"
       inputMode={allowDecimal ? 'decimal' : 'numeric'}
       dir={dir}

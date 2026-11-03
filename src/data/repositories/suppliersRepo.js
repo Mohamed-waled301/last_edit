@@ -10,35 +10,28 @@ import BalanceCalculator, {
 import auditRepo from './auditRepo';
 import { validateNotPastDate, getTodayDateString } from '../../utils/formatters';
 import { calculatePurchaseOrderTotals } from '../../logic/purchaseOrderCalculations';
+import { getEntityCurrentBalance } from '../../services/balanceService';
 
 export const suppliersRepo = {
   async getAll() {
     const list = await db.suppliers.toArray();
-    const invoices = await db.supplier_invoices.toArray();
-    const returns = await db.supplier_returns.toArray();
-    const payments = await db.payments.toArray();
-
-    return list.map(s => {
-      const supInvoices = invoices.filter(i => i.supplier_id === s.id);
-      const supReturns = returns.filter(r => r.supplier_id === s.id);
-      const unlinkedPayments = payments
-        .filter(p => p.supplier_id === s.id && !p.invoice_id)
-        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-      const opening = resolveOpeningBalance(s, 'supplier');
-      const openingType = resolveOpeningType(s, 'supplier');
-      const bal = BalanceCalculator.calculateSupplierBalance(supInvoices, supReturns, opening, unlinkedPayments, openingType);
-
-      return {
+    const result = [];
+    for (const s of list) {
+      const bal = await getEntityCurrentBalance(s.id);
+      result.push({
         ...s,
-        opening_balance: opening,
-        opening_balance_type: resolveOpeningType(s, 'supplier'),
-        total_invoiced: bal.totalInvoiced,
-        total_paid: bal.totalPaid,
-        balance_due: bal.balanceDue,
-        outstanding_balance: bal.balanceDue,
-        current_balance: bal.balanceDue,
-      };
-    });
+        opening_balance: bal.supplierOpening,
+        opening_balance_type: bal.supplierOpeningType,
+        total_invoiced: bal.supplierInvoiced,
+        total_paid: bal.supplierPaid,
+        total_returns: bal.supplierReturns,
+        balance_due: bal.supplierBalance,
+        supplier_balance: bal.supplierBalance,
+        outstanding_balance: bal.supplierBalance,
+        current_balance: bal.supplierBalance,
+      });
+    }
+    return result;
   },
 
   async getById(id) {
@@ -47,26 +40,19 @@ export const suppliersRepo = {
       s = await db.parties.get(id);
     }
     if (!s) return null;
-    const invoices = await db.supplier_invoices.where('supplier_id').equals(id).toArray();
-    const returns = await db.supplier_returns.where('supplier_id').equals(id).toArray();
-    const payments = await db.payments.where('supplier_id').equals(id).toArray();
-    const unlinkedPayments = payments
-      .filter(p => !p.invoice_id)
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    const opening = resolveOpeningBalance(s, 'supplier');
-    const openingType = resolveOpeningType(s, 'supplier');
-    const bal = BalanceCalculator.calculateSupplierBalance(invoices, returns, opening, unlinkedPayments, openingType);
+    const bal = await getEntityCurrentBalance(id);
     return {
       ...s,
-      opening_balance: opening,
-      opening_balance_type: resolveOpeningType(s, 'supplier'),
-      ...bal,
-      total_invoiced: bal.totalInvoiced,
-      total_purchases: bal.totalInvoiced,
-      total_paid: bal.totalPaid,
-      balance_due: bal.balanceDue,
-      outstanding_balance: bal.balanceDue,
-      current_balance: bal.balanceDue,
+      opening_balance: bal.supplierOpening,
+      opening_balance_type: bal.supplierOpeningType,
+      total_invoiced: bal.supplierInvoiced,
+      total_purchases: bal.supplierInvoiced,
+      total_paid: bal.supplierPaid,
+      total_returns: bal.supplierReturns,
+      balance_due: bal.supplierBalance,
+      supplier_balance: bal.supplierBalance,
+      outstanding_balance: bal.supplierBalance,
+      current_balance: bal.supplierBalance,
     };
   },
 
@@ -137,9 +123,10 @@ export const suppliersRepo = {
     const invoices = await db.supplier_invoices.where('supplier_id').equals(id).toArray();
     const payments = await db.payments.where('supplier_id').equals(id).toArray();
     const returns = await db.supplier_returns.where('supplier_id').equals(id).toArray();
+    const bal = await getEntityCurrentBalance(id);
 
-    const opening = normalizeOpeningBalance(supplier.opening_balance);
-    const openingType = supplier.opening_balance_type || DEFAULT_SUPPLIER_OPENING_TYPE;
+    const opening = bal.supplierOpening;
+    const openingType = bal.supplierOpeningType;
     const transactions = [];
 
     if (opening > 0) {
@@ -172,44 +159,50 @@ export const suppliersRepo = {
           reference_type: inv.reference_type,
           stage_key: inv.stage_key
         });
+
+        if (inv.payment_terms === 'cash') {
+          transactions.push({
+            date: inv.invoice_date,
+            type: 'سداد نقدي فوري',
+            reference: `CASH-${inv.invoice_number}`,
+            description: `سداد نقدي فوري لفاتورة ${inv.invoice_number}`,
+            debit: Number(inv.paid_amount || inv.total_amount) || 0,
+            credit: 0,
+            raw_date: inv.created_at || inv.invoice_date,
+          });
+        }
       }
     }
 
     for (const pay of payments) {
-      transactions.push({
-        date: pay.payment_date,
-        type: pay.payment_method === 'offset' ? 'تسوية مقاصة' : 'سند صرف',
-        reference: pay.payment_number,
-        description: pay.notes || 'سداد نقدية/شيك',
-        debit: Number(pay.amount) || 0,
-        credit: 0,
-        raw_date: pay.created_at || pay.payment_date,
-      });
+      if (pay.status !== 'cancelled') {
+        transactions.push({
+          date: pay.payment_date,
+          type: pay.payment_method === 'offset' ? 'تسوية مقاصة' : 'سند صرف',
+          reference: pay.payment_number,
+          description: pay.notes || 'سداد نقدية/شيك',
+          debit: Number(pay.amount) || 0,
+          credit: 0,
+          raw_date: pay.created_at || pay.payment_date,
+        });
+      }
     }
 
     for (const ret of returns) {
-      transactions.push({
-        date: ret.return_date,
-        type: 'مرتجع خامات',
-        reference: ret.return_number,
-        description: ret.reason || 'رد بضاعة للمورد',
-        debit: Number(ret.total_amount) || 0,
-        credit: 0,
-        raw_date: ret.created_at || ret.return_date,
-      });
+      if (ret.status !== 'cancelled') {
+        transactions.push({
+          date: ret.return_date,
+          type: 'مرتجع خامات',
+          reference: ret.return_number,
+          description: ret.reason || 'رد بضاعة للمورد',
+          debit: Number(ret.refund_amount ?? ret.total_amount) || 0,
+          credit: 0,
+          raw_date: ret.created_at || ret.return_date,
+        });
+      }
     }
 
     transactions.sort((a, b) => new Date(a.raw_date).getTime() - new Date(b.raw_date).getTime());
-
-    const activeInvoices = invoices.filter(i => i.status !== 'cancelled');
-    const activePayments = payments.filter(p => p.status !== 'cancelled');
-    const activeReturns = returns.filter(r => r.status !== 'cancelled');
-
-    const totalPurchases = activeInvoices.reduce((s, i) => s + (Number(i.total_amount) || 0), 0);
-    const totalPaid = activePayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    const totalReturns = activeReturns.reduce((s, r) => s + (Number(r.total_amount) || 0), 0);
-    const initialBal = openingType === 'debit' ? -opening : opening;
-    const finalBalance = Number((initialBal + totalPurchases - totalPaid - totalReturns).toFixed(2));
 
     let runningBalance = 0;
     const ledger = transactions.map(tx => {
@@ -224,24 +217,24 @@ export const suppliersRepo = {
       supplier,
       statement: ledger,
       movements: ledger,
-      opening_balance: opening,
-      opening_balance_type: openingType,
+      opening_balance: bal.supplierOpening,
+      opening_balance_type: bal.supplierOpeningType,
       invoices,
       payments,
       summary: {
-        opening_balance: opening,
-        opening_balance_type: openingType,
-        total_purchases: totalPurchases,
-        total_paid: totalPaid,
-        total_returns: totalReturns,
-        remaining_balance: finalBalance,
-        balance_due: finalBalance,
-        is_advance: finalBalance < 0,
+        opening_balance: bal.supplierOpening,
+        opening_balance_type: bal.supplierOpeningType,
+        total_purchases: bal.supplierInvoiced,
+        total_paid: bal.supplierPaid,
+        total_returns: bal.supplierReturns,
+        remaining_balance: bal.supplierBalance,
+        balance_due: bal.supplierBalance,
+        is_advance: bal.supplierBalance < 0,
       },
-      total_invoiced: totalPurchases,
-      total_purchases: totalPurchases,
-      total_paid: totalPaid,
-      balance_due: Math.max(0, finalBalance),
+      total_invoiced: bal.supplierInvoiced,
+      total_purchases: bal.supplierInvoiced,
+      total_paid: bal.supplierPaid,
+      balance_due: bal.supplierBalance,
     };
   },
 
