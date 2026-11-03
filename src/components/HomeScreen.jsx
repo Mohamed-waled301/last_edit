@@ -44,40 +44,50 @@ export default function HomeScreen({ onNavigate, userRole }) {
   // Automatically re-computes KPIs whenever any related transaction or record changes in Dexie!
   useEffect(() => {
     let isMounted = true;
+    let debounceTimer = null;
     setLoading(true);
 
     const subscription = liveQuery(async () => {
-      const currentMonth = new Date().toISOString().slice(0, 7);
-      const metrics = await getDashboardMetrics(db, currentMonth, { userRole });
+      try {
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        const metrics = await getDashboardMetrics(db, currentMonth, { userRole });
 
-      // Invoices: unpaid / partially paid, prioritize overdue and due soon
-      const invoices = (await db.supplier_invoices?.toArray().catch(() => [])) || [];
-      const unpaid = invoices
-        .filter(inv => {
-          if (inv.status === 'paid' || inv.status === 'cancelled') return false;
-          const rem = inv.remaining_amount != null
-            ? Number(inv.remaining_amount)
-            : (Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
-          return rem > 0;
-        })
-        .sort((a, b) => {
-          if (a.is_overdue && !b.is_overdue) return -1;
-          if (!a.is_overdue && b.is_overdue) return 1;
-          return (a.due_date || '').localeCompare(b.due_date || '');
-        });
+        // Invoices: unpaid / partially paid, prioritize overdue and due soon
+        const invoices = (await db.supplier_invoices?.toArray().catch(() => [])) || [];
+        const unpaid = invoices
+          .filter(inv => {
+            if (inv.status === 'paid' || inv.status === 'cancelled') return false;
+            const rem = inv.remaining_amount != null
+              ? Number(inv.remaining_amount)
+              : (Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
+            return rem > 0;
+          })
+          .sort((a, b) => {
+            if (a.is_overdue && !b.is_overdue) return -1;
+            if (!a.is_overdue && b.is_overdue) return 1;
+            return (a.due_date || '').localeCompare(b.due_date || '');
+          });
 
-      return {
-        dashboard: metrics,
-        dueInvoices: unpaid,
-        lowStockItems: metrics.lowStockItems || [],
-      };
+        return {
+          dashboard: metrics,
+          dueInvoices: unpaid,
+          lowStockItems: metrics.lowStockItems || [],
+        };
+      } catch (err) {
+        console.error('liveQuery compute error on HomeScreen:', err);
+        return null;
+      }
     }).subscribe({
       next: (data) => {
-        if (!isMounted) return;
-        setDashboard(data.dashboard);
-        setDueInvoices(data.dueInvoices);
-        setLowStockItems(data.lowStockItems);
-        setLoading(false);
+        if (!isMounted || !data) return;
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          if (!isMounted) return;
+          setDashboard(data.dashboard);
+          setDueInvoices(data.dueInvoices);
+          setLowStockItems(data.lowStockItems);
+          setLoading(false);
+        }, 150);
       },
       error: (err) => {
         console.error('liveQuery error on HomeScreen:', err);
@@ -87,6 +97,7 @@ export default function HomeScreen({ onNavigate, userRole }) {
 
     return () => {
       isMounted = false;
+      if (debounceTimer) clearTimeout(debounceTimer);
       subscription.unsubscribe();
     };
   }, [userRole]);

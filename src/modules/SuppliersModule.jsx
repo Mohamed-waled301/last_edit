@@ -509,7 +509,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
     (s.phone && s.phone.includes(searchTerm))
   );
 
-  const totalSupplierDebts = safeSuppliers.reduce((sum, s) => sum + (s.outstanding_balance || s.balance_due || 0), 0);
+  const totalSupplierDebts = safeSuppliers.reduce((sum, s) => sum + (s.supplier_balance ?? s.outstanding_balance ?? s.balance_due ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -629,7 +629,7 @@ export default function SuppliersModule({ onBack, onNotify }) {
                     </tr>
                   ) : (
                     filteredSuppliers.map(s => {
-                      const bal = s.outstanding_balance || s.balance_due || 0;
+                      const bal = s.supplier_balance ?? s.outstanding_balance ?? s.balance_due ?? 0;
                       return (
                         <tr key={s.id} className="hover:bg-blue-50/20 transition-colors">
                           <td className="py-3 px-4">

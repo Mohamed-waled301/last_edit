@@ -171,8 +171,13 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
 
     if (customerId) {
       try {
-        const stmt = await api.getCustomerStatement(customerId);
-        const bal = stmt?.summary?.remaining_balance ?? stmt?.balance_due ?? cust?.customer_balance ?? 0;
+        let bal = 0;
+        if (typeof api.getEntityCurrentBalance === 'function') {
+          bal = await api.getEntityCurrentBalance(customerId);
+        } else {
+          const stmt = await api.getCustomerStatement(customerId);
+          bal = stmt?.summary?.remaining_balance ?? stmt?.balance_due ?? cust?.customer_balance ?? 0;
+        }
         setCustomerBalance(Number(bal) || 0);
       } catch (e) {
         setCustomerBalance(Number(cust?.customer_balance) || 0);
@@ -750,7 +755,7 @@ export default function SalesInvoiceFormPage({ onSaved, onCancel, onNotify }) {
                 <option value="">-- اختر العميل --</option>
                 {customers.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.name} {c.credit_limit > 0 ? `(حد ائتماني: ${c.credit_limit})` : ''}
+                    {c.name} (الرصيد: {formatCurrency(c.customer_balance || 0)}){c.credit_limit > 0 ? ` - حد الائتمان: ${c.credit_limit}` : ''}
                   </option>
                 ))}
               </select>

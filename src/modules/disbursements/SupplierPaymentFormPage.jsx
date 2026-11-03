@@ -4,6 +4,7 @@ import PageContainer from '../../components/PageContainer';
 import DocumentConfirmModal from '../../components/DocumentConfirmModal';
 import MoneyInput from '../../components/MoneyInput';
 import { api } from '../../services/api';
+import { getEntityCurrentBalance } from '../../services/balanceService';
 import { formatCurrency, getTodayDateString, formatDate } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import { navigationGuard } from '../../utils/navigationGuard';
@@ -45,7 +46,15 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
 
         const allParties = Array.isArray(supRes.data) ? supRes.data : (supRes.parties || supRes.suppliers || []);
         const sups = allParties.filter(p => p.is_supplier === 1);
-        setSuppliers(sups);
+        const supsWithBal = await Promise.all(sups.map(async (s) => {
+          const bal = await getEntityCurrentBalance(s.id);
+          return {
+            ...s,
+            supplier_balance: bal.supplierBalance,
+            current_balance: bal.supplierBalance,
+          };
+        }));
+        setSuppliers(supsWithBal);
 
         const trData = trRes || {};
         const treasList = Array.isArray(trData.treasuries) ? trData.treasuries : (Array.isArray(trData.data) ? trData.data : []);
@@ -96,9 +105,8 @@ export default function SupplierPaymentFormPage({ onSaved, onNotify, onBack }) {
 
     if (supplierId) {
       try {
-        const stmt = await api.getParty ? api.getParty(supplierId) : api.getSupplierStatement(supplierId);
-        const bal = stmt?.data?.supplier_balance ?? stmt?.supplier_balance ?? sup?.supplier_balance ?? 0;
-        setSupplierBalance(Number(bal) || 0);
+        const bal = await getEntityCurrentBalance(supplierId);
+        setSupplierBalance(Number(bal.supplierBalance) || 0);
       } catch (e) {
         setSupplierBalance(Number(sup?.supplier_balance) || 0);
       }

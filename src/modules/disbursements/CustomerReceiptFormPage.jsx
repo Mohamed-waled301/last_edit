@@ -4,6 +4,7 @@ import PageContainer from '../../components/PageContainer';
 import DocumentConfirmModal from '../../components/DocumentConfirmModal';
 import MoneyInput from '../../components/MoneyInput';
 import { api } from '../../services/api';
+import { getEntityCurrentBalance } from '../../services/balanceService';
 import { formatCurrency, getTodayDateString, formatDate } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
 import { navigationGuard } from '../../utils/navigationGuard';
@@ -45,7 +46,15 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
 
         const allParties = Array.isArray(custRes.data) ? custRes.data : (custRes.parties || custRes.customers || []);
         const custs = allParties.filter(p => p.is_customer === 1);
-        setCustomers(custs);
+        const custsWithBal = await Promise.all(custs.map(async (c) => {
+          const bal = await getEntityCurrentBalance(c.id);
+          return {
+            ...c,
+            customer_balance: bal.customerBalance,
+            current_balance: bal.customerBalance,
+          };
+        }));
+        setCustomers(custsWithBal);
 
         const trData = trRes || {};
         const treasList = Array.isArray(trData.treasuries) ? trData.treasuries : (Array.isArray(trData.data) ? trData.data : []);
@@ -97,9 +106,8 @@ export default function CustomerReceiptFormPage({ onSaved, onNotify, onBack }) {
 
     if (customerId) {
       try {
-        const stmt = await api.getParty ? api.getParty(customerId) : api.getCustomerStatement(customerId);
-        const bal = stmt?.data?.customer_balance ?? stmt?.customer_balance ?? cust?.customer_balance ?? 0;
-        setCustomerBalance(Number(bal) || 0);
+        const bal = await getEntityCurrentBalance(customerId);
+        setCustomerBalance(Number(bal.customerBalance) || 0);
       } catch (e) {
         setCustomerBalance(Number(cust?.customer_balance) || 0);
       }
