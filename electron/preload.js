@@ -82,5 +82,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('db:integrity-warning', handler);
     },
   },
-});
 
+  // Cutting Edition Auto-Updater IPC
+  updater: {
+    check: (manual = false) => ipcRenderer.invoke('updater:check', manual),
+    download: () => ipcRenderer.invoke('updater:download'),
+    quitAndInstall: () => ipcRenderer.invoke('updater:quit-and-install'),
+    getStatus: () => ipcRenderer.invoke('updater:get-status'),
+    onStatus: (callback) => {
+      const handler = (_event, data) => callback(data);
+      ipcRenderer.on('updater:status', handler);
+      return () => ipcRenderer.removeListener('updater:status', handler);
+    },
+  },
+});

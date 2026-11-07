@@ -6,6 +6,7 @@ import Toast from './components/Toast';
 import SetupScreen from './components/SetupScreen';
 import LoginScreen from './components/LoginScreen';
 import BackupReminderBanner from './components/BackupReminderBanner';
+import UpdateNotificationBanner from './components/UpdateNotificationBanner';
 import ErrorBoundary from './components/ErrorBoundary';
 import ActivationScreen from './components/ActivationScreen';
 import UnsavedChangesModal from './components/UnsavedChangesModal';
@@ -825,6 +826,9 @@ export default function App() {
             </span>
           </div>
         )}
+
+        {/* Automated Cutting Edition Update Banner */}
+        <UpdateNotificationBanner onNotify={handleRoleChanged} />
 
         {/* Top Header Bar with Hamburger Toggle */}
         <Header

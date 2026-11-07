@@ -19,6 +19,7 @@ process.on('unhandledRejection', (reason) => {
 
 const { LicenseManager } = require('./licenseManager');
 const { LocalDatabaseManager } = require('./localDatabase');
+const { CuttingAutoUpdater } = require('./updater');
 
 // 1. Single Instance Lock
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -81,6 +82,7 @@ let isQuitting = false;
 let backupFinished = false;
 let licenseManager = null;
 let localDatabaseManager = null;
+let cuttingAutoUpdater = null;
 
 const isDev =
   process.env.NODE_ENV === 'development' ||
@@ -251,6 +253,27 @@ app.on('second-instance', () => {
 
 // Register IPC handlers
 ipcMain.handle('app:version', () => app.getVersion());
+
+// Cutting Edition Auto-Updater IPC Handlers
+ipcMain.handle('updater:check', async (_event, manual = false) => {
+  if (!cuttingAutoUpdater) return { success: false, reason: 'Updater is available only for cutting edition' };
+  return cuttingAutoUpdater.checkForUpdates(manual);
+});
+
+ipcMain.handle('updater:download', async () => {
+  if (!cuttingAutoUpdater) return { success: false, reason: 'Updater is available only for cutting edition' };
+  return cuttingAutoUpdater.startDownload();
+});
+
+ipcMain.handle('updater:quit-and-install', () => {
+  if (!cuttingAutoUpdater) return { success: false, reason: 'Updater is available only for cutting edition' };
+  return cuttingAutoUpdater.quitAndInstall();
+});
+
+ipcMain.handle('updater:get-status', () => {
+  if (!cuttingAutoUpdater) return { status: 'idle', edition: activeEdition };
+  return cuttingAutoUpdater.getStatus();
+});
 
 // 1. In-App Print Preview IPC Handlers (Item 8: direct silent print & save PDF)
 ipcMain.handle('print:list-printers', async () => {
@@ -787,6 +810,23 @@ app.whenReady().then(async () => {
   }
 
   await createWindow();
+
+  // Automatic update check & background download for Cutting Edition
+  if (activeEdition === 'cutting') {
+    try {
+      cuttingAutoUpdater = new CuttingAutoUpdater({
+        mainWindowProvider: () => mainWindow,
+        activeEdition,
+        currentVersion: app.getVersion(),
+        repoOwner: 'Mohamed-waled301',
+        repoName: 'last_edit',
+        fallbackRepoName: 'code-systems-releases',
+      });
+      cuttingAutoUpdater.init();
+    } catch (updaterErr) {
+      console.warn('[CuttingAutoUpdater] Init error:', updaterErr);
+    }
+  }
 
   if (!integrity.ok && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.once('did-finish-load', () => {

@@ -20,6 +20,7 @@ import { api } from '../services/api';
 import { backupRepo, settingsRepo, auditRepo } from '../data';
 import { formatDate } from '../utils/formatters';
 import AccountAuditModal from '../components/AccountAuditModal';
+import { APP_VERSION } from '../version';
 
 export default function SettingsModule({ onBack, onNavigate, onNotify }) {
   const [settings, setSettings] = useState({
@@ -44,6 +45,9 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
   const [licenseInfo, setLicenseInfo] = useState(null);
   const [logoError, setLogoError] = useState('');
   const [showAuditModal, setShowAuditModal] = useState(false);
+  const [updaterStatus, setUpdaterStatus] = useState(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateFeedback, setUpdateFeedback] = useState(null);
   const fileInputRef = React.useRef(null);
 
   const loadData = async () => {
@@ -78,7 +82,59 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
       }
     }
     loadLicense();
+
+    if (typeof window !== 'undefined' && window.electronAPI?.updater) {
+      window.electronAPI.updater.getStatus().then((status) => {
+        if (status) setUpdaterStatus(status);
+      }).catch(() => {});
+
+      const cleanup = window.electronAPI.updater.onStatus((status) => {
+        if (status) setUpdaterStatus(status);
+      });
+      return () => {
+        if (typeof cleanup === 'function') cleanup();
+      };
+    }
   }, []);
+
+  const handleCheckForUpdates = async () => {
+    if (typeof window === 'undefined' || !window.electronAPI?.updater) {
+      setUpdateFeedback({
+        type: 'info',
+        message: 'التحديث التلقائي متاح حصرياً داخل تطبيق سطح المكتب (Electron).'
+      });
+      return;
+    }
+    setIsCheckingUpdate(true);
+    setUpdateFeedback(null);
+    try {
+      const res = await window.electronAPI.updater.check(true);
+      if (res?.state === 'not-available') {
+        setUpdateFeedback({
+          type: 'success',
+          message: `البرنامج محدث إلى أحدث إصدار متوفر (${res.currentVersion || APP_VERSION}).`
+        });
+      } else if (res?.state === 'error') {
+        setUpdateFeedback({
+          type: 'error',
+          message: res.error || 'فشل الاتصال بخادم التحديثات، يرجى التأكد من اتصال الإنترنت.'
+        });
+      }
+    } catch (err) {
+      setUpdateFeedback({
+        type: 'error',
+        message: 'حدث خطأ أثناء فحص التحديثات: ' + (err?.message || String(err))
+      });
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleRestartAndInstall = async () => {
+    if (typeof window !== 'undefined' && window.electronAPI?.updater?.quitAndInstall) {
+      await window.electronAPI.updater.quitAndInstall();
+    }
+  };
 
   const handleLogoUpload = (e) => {
     const file = e.target.files?.[0];
@@ -573,6 +629,120 @@ export default function SettingsModule({ onBack, onNavigate, onNotify }) {
             </span>
           </div>
         )}
+      </div>
+
+      {/* Auto Update Section (تحديثات نظام إصدار القص) */}
+      <div className="bg-white rounded-md p-6 border border-gray-200 space-y-4">
+        <div className="border-b border-gray-200 pb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-[#1F3A5F]">
+              <RefreshCw className={`w-5 h-5 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900">تحديثات نظام إصدار القص والتصنيع</h3>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">
+                فحص وتنزيل التحديثات تلقائياً وتثبيتها بنقرة واحدة
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-[#1F3A5F] border border-blue-200">
+            <span>الإصدار المثبت: {APP_VERSION}</span>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">الإصدار الحالي</label>
+            <div className="w-full h-11 rounded-md bg-gray-50 border border-gray-200 px-3 flex items-center font-bold text-gray-800">
+              {APP_VERSION}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">نوع الإصدار المخصص</label>
+            <div className="w-full h-11 rounded-md bg-gray-50 border border-gray-200 px-3 flex items-center font-bold text-gray-800">
+              إصدار القص ومصانع الملابس (Cutting)
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">حالة التحديثات التلقائية</label>
+            <div className="w-full h-11 rounded-md bg-gray-50 border border-gray-200 px-3 flex items-center font-bold text-gray-800">
+              {updaterStatus?.state === 'downloading' ? (
+                <span className="text-blue-600">جاري التنزيل ({updaterStatus.downloadPercent || 0}%)</span>
+              ) : updaterStatus?.state === 'downloaded' ? (
+                <span className="text-emerald-600">جاهز للتثبيت</span>
+              ) : updaterStatus?.state === 'checking' || isCheckingUpdate ? (
+                <span className="text-amber-600">جاري الفحص...</span>
+              ) : (
+                <span className="text-emerald-700">نشط ومتصل بالخادم</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {updaterStatus?.state === 'downloading' && (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-md space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold text-blue-900">
+              <span>جاري تحميل التحديث تلقائياً في الخلفية...</span>
+              <span>{updaterStatus.downloadPercent || 0}%</span>
+            </div>
+            <div className="w-full bg-blue-200 rounded-full h-2.5 overflow-hidden">
+              <div 
+                className="bg-[#1F3A5F] h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${updaterStatus.downloadPercent || 0}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {updaterStatus?.state === 'downloaded' && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-md flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-emerald-800 text-sm font-bold">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span>تم اكتمال تنزيل التحديث {updaterStatus.latestVersion ? `(${updaterStatus.latestVersion})` : ''} بنجاح وهو جاهز للتثبيت الآن.</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRestartAndInstall}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-md text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-2 shrink-0 cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>إعادة التشغيل والتحديث الآن</span>
+            </button>
+          </div>
+        )}
+
+        {updateFeedback && (
+          <div className={`p-3 rounded-md text-xs font-bold flex items-center gap-2 ${
+            updateFeedback.type === 'success' 
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
+              : updateFeedback.type === 'error'
+              ? 'bg-red-50 border border-red-200 text-red-800'
+              : 'bg-blue-50 border border-blue-200 text-blue-800'
+          }`}>
+            {updateFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : updateFeedback.type === 'error' ? (
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            ) : (
+              <RefreshCw className="w-4 h-4 text-blue-600 shrink-0" />
+            )}
+            <span>{updateFeedback.message}</span>
+          </div>
+        )}
+
+        <div className="pt-2 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleCheckForUpdates}
+            disabled={isCheckingUpdate || updaterStatus?.state === 'downloading'}
+            className="px-4 py-2.5 bg-[#1F3A5F] text-white rounded-md text-xs font-bold hover:bg-[#152841] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+          >
+            <RefreshCw className={`w-4 h-4 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
+            <span>{isCheckingUpdate ? 'جاري التحقق من التحديثات...' : 'التحقق من وجود تحديثات الآن'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Audit Log */}
