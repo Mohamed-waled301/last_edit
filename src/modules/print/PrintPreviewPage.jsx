@@ -1798,7 +1798,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         phone: 'رقم الهاتف',
         address: 'العنوان',
         tax_number: 'الرقم الضريبي',
-        total_purchases: 'إجمالي المشتريات / التعاملات',
+        total_purchases: 'إجمالي المشتريات',
         total_paid: 'إجمالي المسدد',
         total_sales: 'إجمالي المبيعات',
         balance_due: 'الرصيد المتبقي',
@@ -1911,7 +1911,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         if (k.includes('phone') || k.includes('mobile')) return 'رقم الهاتف';
         if (k.includes('address')) return 'العنوان';
         if (k.includes('tax')) return 'الرقم الضريبي';
-        if (k.includes('purchases')) return 'إجمالي المشتريات / التعاملات';
+        if (k.includes('purchases')) return 'إجمالي المشتريات';
         if (k.includes('paid')) return 'إجمالي المسدد';
         if (k.includes('sales')) return 'إجمالي المبيعات';
         if (k.includes('balance') || k.includes('due') || k.includes('remaining')) return 'الرصيد المتبقي';

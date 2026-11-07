@@ -21,7 +21,7 @@ describe('Print Preview 100% Arabic Headers, Zero Side-Scroll, and Zero Text Ove
       expect(code).toContain("phone: 'رقم الهاتف'");
       expect(code).toContain("address: 'العنوان'");
       expect(code).toContain("tax_number: 'الرقم الضريبي'");
-      expect(code).toContain("total_purchases: 'إجمالي المشتريات / التعاملات'");
+      expect(code).toContain("total_purchases: 'إجمالي المشتريات'");
       expect(code).toContain("total_paid: 'إجمالي المسدد'");
       expect(code).toContain("code: 'الكود'");
       expect(code).toContain("name: 'البيان / الاسم'");
