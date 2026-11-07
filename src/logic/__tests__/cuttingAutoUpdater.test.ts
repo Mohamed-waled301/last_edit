@@ -75,6 +75,18 @@ describe('Cutting Edition Auto-Updater Suite', () => {
       expect(match?.browser_download_url).toBe('https://example.com/cutting.exe');
     });
 
+    it('prioritizes Setup installer over Portable executable when both exist', () => {
+      const assets = [
+        { name: 'code-systems-cutting-Portable-1.2.1.exe', browser_download_url: 'https://example.com/portable.exe' },
+        { name: 'code-systems-cutting-Setup-1.2.1.exe', browser_download_url: 'https://example.com/setup.exe' },
+      ];
+
+      const match = findCuttingAsset(assets);
+      expect(match).not.toBeNull();
+      expect(match?.name).toBe('code-systems-cutting-Setup-1.2.1.exe');
+      expect(match?.browser_download_url).toBe('https://example.com/setup.exe');
+    });
+
     it('falls back to single .exe if only one installer exists in release', () => {
       const assets = [
         { name: 'code-systems-cutting-Setup-1.2.0.exe', browser_download_url: 'https://example.com/cutting.exe' },
