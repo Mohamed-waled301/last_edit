@@ -1131,7 +1131,7 @@ function renderTableFooter(key, data, salesViewMode = 'customers') {
   }
 
   if (key === 'supplier-statements') {
-    const totalPurchases = data.reduce((s, r) => s + Number(r.total_purchases ?? (Number(r.credit_invoices_total || 0) + Number(r.stage_costs_total || 0))), 0);
+    const totalPurchases = data.reduce((s, r) => s + Number(r.total_purchases ?? r.total_dealings ?? (Number(r.credit_invoices_total || 0) + Number(r.stage_costs_total || 0))), 0);
     const totalPaid = data.reduce((s, r) => s + Number(r.total_paid ?? r.payments_total ?? 0), 0);
     const totalBal = data.reduce((s, r) => s + Number(r.balance_due ?? r.supplier_balance ?? r.current_balance ?? 0), 0);
 
@@ -1474,7 +1474,7 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers', currentPage 
         </tr>
       );
     case 'supplier-statements': {
-      const purchases = Number(row.total_purchases ?? (Number(row.credit_invoices_total || 0) + Number(row.stage_costs_total || 0)));
+      const purchases = Number(row.total_purchases ?? row.total_dealings ?? (Number(row.credit_invoices_total || 0) + Number(row.stage_costs_total || 0)));
       const paid = Number(row.total_paid ?? row.payments_total ?? 0);
       const balance = Number(row.balance_due ?? row.supplier_balance ?? row.current_balance ?? 0);
       return (

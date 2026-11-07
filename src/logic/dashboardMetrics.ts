@@ -309,13 +309,18 @@ export function computeSupplierDebts(
     );
     totalDebtsPiasters += netDuePiasters;
 
+    // Credit opening balance represents initial dealings/claims owed to supplier
+    const creditOpeningPiasters = openingType === 'credit' ? toPiasters(opening) : 0;
+    const totalDealingsPiasters = creditOpeningPiasters + creditPurchasesPiasters + stageCostsPiasters;
+
     return {
       id: sup.id,
       code: sup.code || sup.id || '---',
       name: sup.name || 'مورد',
       phone: sup.phone || '',
       opening_balance: opening,
-      total_purchases: fromPiasters(creditPurchasesPiasters + stageCostsPiasters),
+      total_purchases: fromPiasters(totalDealingsPiasters),
+      total_dealings: fromPiasters(totalDealingsPiasters),
       credit_invoices_total: fromPiasters(creditPurchasesPiasters),
       stage_costs_total: fromPiasters(stageCostsPiasters),
       total_paid: fromPiasters(paymentsPiasters),
@@ -412,13 +417,18 @@ export function computeCustomerReceivables(
     );
     totalReceivablesPiasters += netDuePiasters;
 
+    // Debit opening balance represents initial sales/dealings owed by customer
+    const debitOpeningPiasters = openingType === 'debit' ? toPiasters(opening) : 0;
+    const totalSalesDealingsPiasters = debitOpeningPiasters + creditSalesPiasters;
+
     return {
       id: cust.id,
       code: cust.code || cust.id || '---',
       name: cust.name || 'عميل',
       phone: cust.phone || '',
       opening_balance: opening,
-      total_sales: fromPiasters(creditSalesPiasters),
+      total_sales: fromPiasters(totalSalesDealingsPiasters),
+      total_dealings: fromPiasters(totalSalesDealingsPiasters),
       credit_sales_total: fromPiasters(creditSalesPiasters),
       total_paid: fromPiasters(receiptsPiasters),
       receipts_total: fromPiasters(receiptsPiasters),

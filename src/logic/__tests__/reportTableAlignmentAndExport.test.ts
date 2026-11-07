@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import * as XLSX from 'xlsx';
 import { applyAutoColumnWidths, ARABIC_EXCEL_COLUMN_LABELS } from '../../utils/exportExcel';
+import { computeSupplierDebts, computeCustomerReceivables } from '../dashboardMetrics';
 
 describe('Report Table Alignment, Large Numbers & Export Synchronization Suite (حل جذري لترحيلة الجدول وعدم محاذاة الأعمدة)', () => {
   const reportsModulePath = path.resolve(__dirname, '../../modules/ReportsModule.jsx');
@@ -151,4 +152,73 @@ describe('Report Table Alignment, Large Numbers & Export Synchronization Suite (
       expect(ARABIC_EXCEL_COLUMN_LABELS.balance_due).toBe('الرصيد المتبقي');
     });
   });
+
+  describe('4. Total Purchases / Dealings Accounting Integrity (ضبط إجمالي التعاملات والمشتريات)', () => {
+    it('accurately balances Total Dealings = Credit Opening + Invoices + Cut Order Stage Costs', () => {
+      // Test party 1: Opening balance 2000 credit (له), 800 paid, 0 invoices
+      const parties = [
+        { id: 'pty-1001', code: 'PRT-1001', name: 'code', is_supplier: 1, opening_balance: 2000, opening_balance_type: 'credit', is_active: 1 },
+        { id: 'pty-1002', code: 'PRT-981', name: 'عمر', is_supplier: 1, opening_balance: 620, opening_balance_type: 'credit', is_active: 1 },
+        { id: 'pty-1003', code: 'WRK-9107', name: 'احمد', is_supplier: 1, opening_balance: 0, opening_balance_type: 'credit', is_active: 1 },
+        { id: 'pty-1004', code: 'PRT-1005', name: 'اسلام', is_supplier: 1, opening_balance: 50, opening_balance_type: 'credit', is_active: 1 }
+      ];
+
+      const invoices = [
+        { id: 'inv-1', supplier_id: 'pty-1002', payment_terms: 'credit', total_amount: 80, status: 'unpaid' },
+        { id: 'inv-2', supplier_id: 'pty-1003', payment_terms: 'credit', total_amount: 185, status: 'unpaid' },
+      ];
+
+      const cutOrders = [
+        {
+          id: 'co-1',
+          order_number: 'CUT-01',
+          status: 'in_progress',
+          stages: {
+            printing: { vendor_id: 'pty-1004', total_cost: 50 }
+          }
+        }
+      ];
+
+      const payments = [
+        { id: 'pay-1', supplier_id: 'pty-1001', amount: 800, status: 'issued' },
+        { id: 'pay-2', supplier_id: 'pty-1002', amount: 650, status: 'issued' },
+        { id: 'pay-3', supplier_id: 'pty-1003', amount: 200, status: 'issued' },
+        { id: 'pay-4', supplier_id: 'pty-1004', amount: 50, status: 'issued' }
+      ];
+
+      const res = computeSupplierDebts(parties, [], invoices, [], payments, [], cutOrders, []);
+      const p1 = res.suppliersBreakdown.find(p => p.id === 'pty-1001')!;
+      const p2 = res.suppliersBreakdown.find(p => p.id === 'pty-1002')!;
+      const p3 = res.suppliersBreakdown.find(p => p.id === 'pty-1003')!;
+      const p4 = res.suppliersBreakdown.find(p => p.id === 'pty-1004')!;
+
+      // Party 1: Dealings 2000, Paid 800, Remaining 1200 (Equation: 2000 - 800 = 1200)
+      expect(p1.total_purchases).toBe(2000);
+      expect(p1.total_paid).toBe(800);
+      expect(p1.balance_due).toBe(1200);
+
+      // Party 2: Dealings 700 (620 opening + 80 invoice), Paid 650, Remaining 50 (Equation: 700 - 650 = 50)
+      expect(p2.total_purchases).toBe(700);
+      expect(p2.total_paid).toBe(650);
+      expect(p2.balance_due).toBe(50);
+
+      // Party 3: Dealings 185, Paid 200 (Advance), Remaining 0
+      expect(p3.total_purchases).toBe(185);
+      expect(p3.total_paid).toBe(200);
+      expect(p3.balance_due).toBe(0);
+
+      // Party 4: Dealings 100 (50 opening + 50 stage), Paid 50, Remaining 50 (Equation: 100 - 50 = 50)
+      expect(p4.total_purchases).toBe(100);
+      expect(p4.total_paid).toBe(50);
+      expect(p4.balance_due).toBe(50);
+    });
+
+    it('PrintPreviewPage uses computeSupplierDebts and does not clip Arabic column headers', () => {
+      const code = fs.readFileSync(printPreviewPath, 'utf8');
+      expect(code).toContain("computeSupplierDebts(parties, rawSuppliers, safeSupInvoices, purchaseOrders, safePayments, returns, cutOrders, settlements)");
+      expect(code).toContain("computeCustomerReceivables(parties, rawCustomers, safeInvoices, safeCustPayments, returns, settlements)");
+      expect(code).toContain("leading-snug break-words");
+    });
+  });
 });
+

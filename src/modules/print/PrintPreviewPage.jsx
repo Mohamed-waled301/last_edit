@@ -551,27 +551,18 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           } else if (docId === 'customer-statements') {
             reportTitle = 'تقرير أرصدة ومستحقات العملاء';
             try {
-              const [parties, salesInvoices, custPayments, returns, settlements] = await Promise.all([
+              const [parties, rawCustomers, salesInvoices, custPayments, returns, settlements] = await Promise.all([
                 db.parties.filter(p => p.is_customer === 1).toArray(),
+                db.customers ? db.customers.toArray().catch(() => []) : Promise.resolve([]),
                 db.sales_invoices.toArray(),
                 db.customer_payments.toArray(),
                 db.customer_returns.toArray(),
                 db.party_settlements ? db.party_settlements.toArray().catch(() => []) : Promise.resolve([])
               ]);
-              reportRows = parties.map(p => {
-                const pInvs = (Array.isArray(salesInvoices) ? salesInvoices : []).filter(i => i.customer_id === p.id && i.status !== 'cancelled');
-                const totSales = pInvs.reduce((s, i) => s + (Number(i.total_invoice_amount ?? i.total_amount) || 0), 0);
-                const pPays = (Array.isArray(custPayments) ? custPayments : []).filter(cp => cp.customer_id === p.id && cp.status !== 'cancelled');
-                const totPaid = pPays.reduce((s, cp) => s + (Number(cp.amount) || 0), 0);
-                return {
-                  code: p.code || '---',
-                  name: p.name || 'عميل',
-                  total_sales: totSales,
-                  total_paid: totPaid,
-                  balance_due: p.customer_balance ?? p.balance_due ?? (totSales - totPaid),
-                  credit_limit: p.credit_limit || 0
-                };
-              });
+              const safeInvoices = (Array.isArray(salesInvoices) ? salesInvoices : []).filter(i => i.status !== 'cancelled');
+              const safeCustPayments = (Array.isArray(custPayments) ? custPayments : []).filter(cp => cp.status !== 'cancelled');
+              const receivables = computeCustomerReceivables(parties, rawCustomers, safeInvoices, safeCustPayments, returns, settlements);
+              reportRows = receivables.customersBreakdown;
             } catch {
               const parties = await partiesRepo.getAll();
               reportRows = (Array.isArray(parties) ? parties : []).filter(p => p.is_customer === 1);
@@ -579,25 +570,20 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           } else if (docId === 'supplier-statements') {
             reportTitle = 'تقرير أرصدة ومديونيات الموردين والورش';
             try {
-              const [parties, supInvoices, payments, returns] = await Promise.all([
+              const [parties, rawSuppliers, supInvoices, purchaseOrders, payments, returns, cutOrders, settlements] = await Promise.all([
                 db.parties.filter(p => p.is_supplier === 1).toArray(),
+                db.suppliers ? db.suppliers.toArray().catch(() => []) : Promise.resolve([]),
                 db.supplier_invoices.toArray(),
+                db.purchase_orders.toArray(),
                 db.payments.toArray(),
-                db.supplier_returns.toArray()
+                db.supplier_returns.toArray(),
+                db.production_orders ? db.production_orders.toArray().catch(() => []) : Promise.resolve([]),
+                db.party_settlements ? db.party_settlements.toArray().catch(() => []) : Promise.resolve([])
               ]);
-              reportRows = parties.map(p => {
-                const pInvs = (Array.isArray(supInvoices) ? supInvoices : []).filter(i => i.supplier_id === p.id && i.status !== 'cancelled');
-                const totPurchases = pInvs.reduce((s, i) => s + (Number(i.total_amount) || 0), 0);
-                const pPays = (Array.isArray(payments) ? payments : []).filter(pm => pm.supplier_id === p.id && pm.status !== 'cancelled');
-                const totPaid = pPays.reduce((s, pm) => s + (Number(pm.amount) || 0), 0);
-                return {
-                  code: p.code || '---',
-                  name: p.name || 'مورد',
-                  total_purchases: totPurchases,
-                  total_paid: totPaid,
-                  balance_due: p.supplier_balance ?? p.balance_due ?? (totPurchases - totPaid)
-                };
-              });
+              const safeSupInvoices = (Array.isArray(supInvoices) ? supInvoices : []).filter(i => i.status !== 'cancelled');
+              const safePayments = (Array.isArray(payments) ? payments : []).filter(pm => pm.status !== 'cancelled');
+              const debts = computeSupplierDebts(parties, rawSuppliers, safeSupInvoices, purchaseOrders, safePayments, returns, cutOrders, settlements);
+              reportRows = debts.suppliersBreakdown;
             } catch {
               const parties = await partiesRepo.getAll();
               reportRows = (Array.isArray(parties) ? parties : []).filter(p => p.is_supplier === 1);
@@ -2211,9 +2197,9 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                     return (
                       <th
                         key={k}
-                        className={`${thPadClass} border border-slate-300 font-bold whitespace-nowrap ${isNum ? 'text-left' : k === 'code' ? 'text-center' : 'text-right'}`}
+                        className={`${thPadClass} border border-slate-300 font-bold ${isNum ? 'text-left' : k === 'code' ? 'text-center' : 'text-right'}`}
                       >
-                        <span className="whitespace-nowrap font-bold block">
+                        <span className="font-bold block leading-snug break-words">
                           {getArabicColumnTitle(k)}
                         </span>
                       </th>
