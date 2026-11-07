@@ -38,7 +38,7 @@ describe('Report Table Alignment, Large Numbers & Export Synchronization Suite (
       expect(code).toContain('الرصيد المتبقي');
 
       // Supplier statements headers
-      expect(code).toContain('إجمالي التكلفة / المشتريات');
+      expect(code).toContain('إجمالي المشتريات');
     });
 
     it('enforces footer summary row (tfoot) with colSpan={3} and financial sums aligned underneath parent columns', () => {
@@ -59,7 +59,7 @@ describe('Report Table Alignment, Large Numbers & Export Synchronization Suite (
     it('exports clean 6-column reports to Excel with exact column headers and summary totals', () => {
       const code = fs.readFileSync(reportsModulePath, 'utf8');
       expect(code).toContain("headers = ['#', 'الكود', 'البيان / الاسم', 'إجمالي المبيعات', 'إجمالي المسدد', 'الرصيد المتبقي']");
-      expect(code).toContain("headers = ['#', 'الكود', 'البيان / الاسم', 'إجمالي التكلفة / المشتريات', 'إجمالي المسدد', 'الرصيد المتبقي']");
+      expect(code).toContain("headers = ['#', 'الكود', 'البيان / الاسم', 'إجمالي المشتريات', 'إجمالي المسدد', 'الرصيد المتبقي']");
       expect(code).toContain("rows.push(['الإجمالي الكلي للمطابقات', '', '', sumSales, sumPaid, sumBal])");
     });
   });

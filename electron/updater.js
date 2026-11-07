@@ -73,6 +73,7 @@ function findCuttingAsset(assets = []) {
 class CuttingAutoUpdater {
   constructor(options = {}) {
     this.app = options.app || electronApp;
+    this.spawn = options.spawn || spawn;
     this.mainWindowProvider = options.mainWindowProvider || (() => null);
     this.activeEdition = options.activeEdition || process.env.EDITION || 'cutting';
     this.currentVersion = options.currentVersion || (this.app && typeof this.app.isReady === 'function' && this.app.isReady() ? this.app.getVersion() : '1.2.0');
@@ -446,8 +447,8 @@ class CuttingAutoUpdater {
     console.log('[CuttingAutoUpdater] Launching installer and restarting:', installer);
 
     try {
-      // Spawn NSIS installer detached so it continues running after app exits
-      const child = spawn(installer, ['--updated'], {
+      // Spawn NSIS installer detached in silent mode (/S) so it installs without any wizard/Next dialogs and relaunches with --updated
+      const child = this.spawn(installer, ['/S', '--updated'], {
         detached: true,
         stdio: 'ignore',
       });

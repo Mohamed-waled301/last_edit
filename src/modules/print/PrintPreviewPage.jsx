@@ -1903,11 +1903,12 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
       // Fail-safe resolver to guarantee ZERO English database keys ever reach print headers
       const getArabicColumnTitle = (key) => {
+        if (key === 'supplier_type') return 'نوع المورد';
         if (columnLabels[key]) return columnLabels[key];
         const k = String(key || '').toLowerCase().trim();
         if (k.includes('grn')) return 'رقم إذن الاستلام';
         if (k.includes('po_') || k === 'po' || k === 'po_id') return 'رقم أمر الشراء';
-        if (k.includes('supplier_type') || k.includes('activity')) return 'نوع المورد / النشاط';
+        if (k.includes('supplier_type') || k.includes('activity')) return 'نوع المورد';
         if (k.includes('phone') || k.includes('mobile')) return 'رقم الهاتف';
         if (k.includes('address')) return 'العنوان';
         if (k.includes('tax')) return 'الرقم الضريبي';
@@ -1979,12 +1980,12 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         ).slice(0, 8);
       }
 
-      // Check whether this is a 6-column financial balance/statement report
+      // Check whether this is a financial balance/statement report
       const isBalancesReport = (
         activeReportKey === 'customer-statements' ||
         activeReportKey === 'supplier-statements' ||
         ((columnKeys.includes('total_sales') || columnKeys.includes('total_purchases')) &&
-          (columnKeys.includes('total_paid') || columnKeys.includes('paid_total')) &&
+          (columnKeys.includes('total_paid') || columnKeys.includes('paid_total') || columnKeys.includes('payments_total')) &&
           (columnKeys.includes('balance_due') || columnKeys.includes('balance_remaining') || columnKeys.includes('customer_balance') || columnKeys.includes('supplier_balance')))
       );
 
@@ -2028,8 +2029,8 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         supplier_code: '10%',
         item_code: '10%',
         product_code: '10%',
-        phone: '12%',
-        supplier_type: '12%',
+        phone: '13%',
+        supplier_type: '13%',
         payment_terms: '10%',
         payment_type: '10%',
         payment_method: '10%',
@@ -2062,13 +2063,26 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
       };
 
       const getColWidth = (k, allKeys) => {
-        if (isBalancesReport) {
+        // Balanced 7-column layout (Total = 96% + 4% for # = 100%)
+        if (allKeys.length >= 7) {
+          if (k === 'code' || k.includes('code')) return '8%';
+          if (k === 'name' || k.includes('name')) return '20%';
+          if (k === 'supplier_type' || k.includes('type')) return '13%';
+          if (k === 'phone' || k.includes('phone')) return '13%';
+          if (k === 'total_purchases' || k === 'total_sales') return '14%';
+          if (k === 'total_paid' || k.includes('paid') || k.includes('receipt')) return '14%';
+          if (k === 'balance_due' || k.includes('balance') || k.includes('remain')) return '14%';
+        }
+
+        // Balanced 5-column balance report layout (Total = 95% + 5% for # = 100%)
+        if (isBalancesReport && allKeys.length <= 5) {
           if (k === 'code' || k.includes('code')) return '10%';
           if (k === 'name' || k.includes('name')) return '30%';
           if (k === 'total_sales' || k === 'total_purchases') return '18%';
           if (k === 'total_paid' || k === 'paid_total' || k === 'receipts_total' || k === 'payments_total') return '18%';
           if (k === 'balance_due' || k === 'balance_remaining' || k === 'customer_balance' || k === 'supplier_balance') return '19%';
         }
+
         if (COLUMN_WIDTH_MAP[k]) return COLUMN_WIDTH_MAP[k];
         return `${Math.floor(95 / (allKeys.length || 1))}%`;
       };
@@ -2198,8 +2212,9 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                       <th
                         key={k}
                         className={`${thPadClass} border border-slate-300 font-bold ${isNum ? 'text-left' : k === 'code' ? 'text-center' : 'text-right'}`}
+                        style={{ overflow: 'hidden' }}
                       >
-                        <span className="font-bold block leading-snug break-words">
+                        <span className="font-bold block leading-snug break-words whitespace-normal text-center">
                           {getArabicColumnTitle(k)}
                         </span>
                       </th>
@@ -2309,7 +2324,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 <tfoot>
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
                     {(() => {
-                      if (isBalancesReport) {
+                      if (isBalancesReport && columnKeys.length <= 5) {
                         const colSalesKey = columnKeys.find(k => k === 'total_sales' || k === 'total_purchases') || 'total_sales';
                         const colPaidKey = columnKeys.find(k => k === 'total_paid' || k === 'paid_total' || k === 'receipts_total' || k === 'payments_total') || 'total_paid';
                         const colBalKey = columnKeys.find(k => k === 'balance_due' || k === 'balance_remaining' || k === 'customer_balance' || k === 'supplier_balance') || 'balance_due';
@@ -2339,6 +2354,56 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                                 {formatCurrency(sumBalance)}
                               </div>
                             </td>
+                          </>
+                        );
+                      }
+
+                      // Financial numeric columns that should have a calculated sum in the footer for expanded or dynamic reports
+                      const financialKeys = new Set([
+                        'total_purchases', 'total_sales', 'total_dealings', 'total_paid', 'balance_due',
+                        'paid_total', 'receipts_total', 'payments_total', 'balance_remaining',
+                        'customer_balance', 'supplier_balance', 'amount', 'total_amount',
+                        'total_invoice_amount', 'subtotal', 'stage_cost'
+                      ]);
+
+                      const firstFinIdx = columnKeys.findIndex(k => financialKeys.has(k));
+
+                      if (firstFinIdx !== -1) {
+                        // Columns before firstFinIdx (plus the '#' sequence column) get merged into the label cell
+                        const leadingColSpan = firstFinIdx + 1;
+
+                        return (
+                          <>
+                            <td colSpan={leadingColSpan} className={`${tdPadClass} border border-slate-300 text-right font-bold text-slate-800`}>
+                              الإجمالي الكلي للمطابقات:
+                            </td>
+                            {columnKeys.slice(firstFinIdx).map((k) => {
+                              if (financialKeys.has(k)) {
+                                const sum = reportRows.reduce((acc, r) => {
+                                  const val = r[k] ??
+                                    (k.includes('purchase') || k.includes('sales') ? (r.total_purchases ?? r.total_sales ?? r.total_dealings ?? r.credit_invoices_total) :
+                                     k.includes('paid') || k.includes('receipt') ? (r.total_paid ?? r.payments_total ?? r.paid_total) :
+                                     k.includes('balance') || k.includes('due') ? (r.balance_due ?? r.supplier_balance ?? r.customer_balance ?? r.balance_remaining) : 0);
+                                  return acc + (Number(val) || 0);
+                                }, 0);
+                                const isBal = k.includes('balance') || k.includes('remaining') || k.includes('due');
+                                const isPaid = k.includes('paid') || k.includes('receipt');
+                                return (
+                                  <td key={k} className={`${tdPadClass} border border-slate-300 text-left whitespace-nowrap`}>
+                                    <div className={`inline-flex items-center gap-1 font-mono font-bold whitespace-nowrap text-left ${
+                                      isBal ? 'text-rose-700' : isPaid ? 'text-emerald-700' : 'text-slate-900'
+                                    }`} dir="ltr">
+                                      {formatCurrency(sum)}
+                                    </div>
+                                  </td>
+                                );
+                              }
+                              return (
+                                <td key={k} className={`${tdPadClass} border border-slate-300 text-center text-slate-400`}>
+                                  —
+                                </td>
+                              );
+                            })}
                           </>
                         );
                       }

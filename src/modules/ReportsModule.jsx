@@ -580,7 +580,7 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
     }
 
     if (activeReport === 'supplier-statements') {
-      const headers = ['#', 'الكود', 'البيان / الاسم', 'إجمالي التكلفة / المشتريات', 'إجمالي المسدد', 'الرصيد المتبقي'];
+      const headers = ['#', 'الكود', 'البيان / الاسم', 'إجمالي المشتريات', 'إجمالي المسدد', 'الرصيد المتبقي'];
       const rows = filteredData.map((r, i) => [
         i + 1,
         r.code || r.id || '---',
@@ -1253,7 +1253,7 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
           <th className="p-2.5 text-center">#</th>
           <th className="p-2.5 text-center">الكود</th>
           <th className="p-2.5 text-right">البيان / الاسم</th>
-          <th className="p-2.5 text-left font-mono whitespace-nowrap">إجمالي التكلفة / المشتريات</th>
+          <th className="p-2.5 text-left font-mono whitespace-nowrap">إجمالي المشتريات</th>
           <th className="p-2.5 text-left font-mono whitespace-nowrap">إجمالي المسدد</th>
           <th className="p-2.5 text-left font-mono whitespace-nowrap">الرصيد المتبقي</th>
         </tr>

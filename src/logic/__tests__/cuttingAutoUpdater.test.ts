@@ -184,5 +184,37 @@ describe('Cutting Edition Auto-Updater Suite', () => {
       expect(downloadResult.installerPath).toBe(fakeInstallerPath);
       expect(updater.getStatus().status).toBe('update-downloaded');
     });
+
+    it('launches NSIS installer in silent mode with /S and --updated', async () => {
+      const childProcess = require('child_process');
+      const fakeInstallerPath = path.join(tempDir, 'code-systems-cutting-update-1.2.1.exe');
+      fs.writeFileSync(fakeInstallerPath, 'test-installer-binary-content');
+
+      const mockSpawn = vi.spyOn(childProcess, 'spawn').mockImplementation(() => ({
+        unref: vi.fn(),
+      } as any));
+
+      const mockApp = {
+        isReady: () => true,
+        getVersion: () => '1.2.0',
+        quit: vi.fn(),
+      };
+
+      const updater = new CuttingAutoUpdater({
+        app: mockApp,
+        spawn: mockSpawn,
+        activeEdition: 'cutting',
+        currentVersion: '1.2.0',
+      });
+
+      updater.state.installerPath = fakeInstallerPath;
+      updater.quitAndInstall();
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        fakeInstallerPath,
+        ['/S', '--updated'],
+        expect.objectContaining({ detached: true })
+      );
+    });
   });
 });
