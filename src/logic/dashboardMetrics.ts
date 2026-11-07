@@ -311,13 +311,19 @@ export function computeSupplierDebts(
 
     return {
       id: sup.id,
+      code: sup.code || sup.id || '---',
       name: sup.name || 'مورد',
+      phone: sup.phone || '',
       opening_balance: opening,
+      total_purchases: fromPiasters(creditPurchasesPiasters + stageCostsPiasters),
       credit_invoices_total: fromPiasters(creditPurchasesPiasters),
       stage_costs_total: fromPiasters(stageCostsPiasters),
+      total_paid: fromPiasters(paymentsPiasters),
       payments_total: fromPiasters(paymentsPiasters),
       returns_total: fromPiasters(returnsPiasters),
       balance_due: fromPiasters(netDuePiasters),
+      current_balance: fromPiasters(netDuePiasters),
+      supplier_balance: fromPiasters(netDuePiasters),
     };
   });
 
@@ -408,12 +414,18 @@ export function computeCustomerReceivables(
 
     return {
       id: cust.id,
+      code: cust.code || cust.id || '---',
       name: cust.name || 'عميل',
+      phone: cust.phone || '',
       opening_balance: opening,
+      total_sales: fromPiasters(creditSalesPiasters),
       credit_sales_total: fromPiasters(creditSalesPiasters),
+      total_paid: fromPiasters(receiptsPiasters),
       receipts_total: fromPiasters(receiptsPiasters),
       returns_total: fromPiasters(returnsPiasters),
       balance_due: fromPiasters(netDuePiasters),
+      current_balance: fromPiasters(netDuePiasters),
+      customer_balance: fromPiasters(netDuePiasters),
     };
   });
 

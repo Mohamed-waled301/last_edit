@@ -559,6 +559,64 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
   // Export to Excel for active report
   const handleExportExcel = () => {
     if (filteredData.length === 0) return;
+
+    if (activeReport === 'customer-statements') {
+      const headers = ['#', 'الكود', 'البيان / الاسم', 'إجمالي المبيعات', 'إجمالي المسدد', 'الرصيد المتبقي'];
+      const rows = filteredData.map((r, i) => [
+        i + 1,
+        r.code || r.id || '---',
+        r.name || 'عميل',
+        Number(r.total_sales ?? r.credit_sales_total ?? 0),
+        Number(r.total_paid ?? r.receipts_total ?? r.paid_total ?? 0),
+        Number(r.balance_due ?? r.customer_balance ?? r.current_balance ?? 0),
+      ]);
+      const sumSales = filteredData.reduce((s, r) => s + Number(r.total_sales ?? r.credit_sales_total ?? 0), 0);
+      const sumPaid = filteredData.reduce((s, r) => s + Number(r.total_paid ?? r.receipts_total ?? r.paid_total ?? 0), 0);
+      const sumBal = filteredData.reduce((s, r) => s + Number(r.balance_due ?? r.customer_balance ?? r.current_balance ?? 0), 0);
+      rows.push(['الإجمالي الكلي للمطابقات', '', '', sumSales, sumPaid, sumBal]);
+      exportToExcel(`تقرير_أرصدة_ومستحقات_العملاء_${new Date().toISOString().split('T')[0]}`, headers, rows);
+      if (onNotify) onNotify('تم تصدير التقرير إلى إكسيل بنجاح');
+      return;
+    }
+
+    if (activeReport === 'supplier-statements') {
+      const headers = ['#', 'الكود', 'البيان / الاسم', 'إجمالي التكلفة / المشتريات', 'إجمالي المسدد', 'الرصيد المتبقي'];
+      const rows = filteredData.map((r, i) => [
+        i + 1,
+        r.code || r.id || '---',
+        r.name || 'مورد',
+        Number(r.total_purchases ?? (Number(r.credit_invoices_total || 0) + Number(r.stage_costs_total || 0))),
+        Number(r.total_paid ?? r.payments_total ?? 0),
+        Number(r.balance_due ?? r.supplier_balance ?? r.current_balance ?? 0),
+      ]);
+      const sumPurchases = filteredData.reduce((s, r) => s + Number(r.total_purchases ?? (Number(r.credit_invoices_total || 0) + Number(r.stage_costs_total || 0))), 0);
+      const sumPaid = filteredData.reduce((s, r) => s + Number(r.total_paid ?? r.payments_total ?? 0), 0);
+      const sumBal = filteredData.reduce((s, r) => s + Number(r.balance_due ?? r.supplier_balance ?? r.current_balance ?? 0), 0);
+      rows.push(['الإجمالي الكلي للمطابقات', '', '', sumPurchases, sumPaid, sumBal]);
+      exportToExcel(`تقرير_أرصدة_ومديونيات_الموردين_${new Date().toISOString().split('T')[0]}`, headers, rows);
+      if (onNotify) onNotify('تم تصدير التقرير إلى إكسيل بنجاح');
+      return;
+    }
+
+    if (activeReport === 'sales-invoices' && salesViewMode === 'customers') {
+      const headers = ['#', 'الكود', 'البيان / الاسم', 'إجمالي المبيعات', 'إجمالي المسدد', 'الرصيد المتبقي'];
+      const rows = filteredData.map((r, i) => [
+        i + 1,
+        r.code || r.customer_id || '---',
+        r.name || 'عميل',
+        Number(r.total_sales ?? 0),
+        Number(r.paid_total ?? r.total_paid ?? 0),
+        Number(r.balance_remaining ?? r.balance_due ?? 0),
+      ]);
+      const sumSales = filteredData.reduce((s, r) => s + Number(r.total_sales ?? 0), 0);
+      const sumPaid = filteredData.reduce((s, r) => s + Number(r.paid_total ?? r.total_paid ?? 0), 0);
+      const sumBal = filteredData.reduce((s, r) => s + Number(r.balance_remaining ?? r.balance_due ?? 0), 0);
+      rows.push(['الإجمالي الكلي للمطابقات', '', '', sumSales, sumPaid, sumBal]);
+      exportToExcel(`تقرير_مبيعات_العملاء_${new Date().toISOString().split('T')[0]}`, headers, rows);
+      if (onNotify) onNotify('تم تصدير التقرير إلى إكسيل بنجاح');
+      return;
+    }
+
     exportToExcel(filteredData, `تقرير_${activeReport}_${new Date().toISOString().split('T')[0]}`);
     if (onNotify) onNotify('تم تصدير التقرير إلى إكسيل بنجاح');
   };
@@ -937,27 +995,32 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
         {/* Dynamic Table Rendering based on Active Report */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse text-xs">
+            <table
+              className="w-full text-right border-collapse text-xs table-fixed"
+              style={{ width: '100% !important', tableLayout: 'fixed !important', borderCollapse: 'collapse !important' }}
+            >
+              {renderTableColgroup(activeReport, salesViewMode)}
               <thead className="bg-slate-800 text-white font-semibold sticky top-0">
                 {renderTableHeaders(activeReport, salesViewMode)}
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan="10" className="p-10 text-center text-slate-500 font-semibold">
+                    <td colSpan={10} className="p-10 text-center text-slate-500 font-semibold">
                       جاري استخراج وتجميع بيانات التقرير...
                     </td>
                   </tr>
                 ) : pagedData.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="p-12 text-center text-slate-500">
+                    <td colSpan={10} className="p-12 text-center text-slate-500">
                       لا توجد بيانات مطابقة لمعايير البحث في هذا التقرير
                     </td>
                   </tr>
                 ) : (
-                  pagedData.map((row, idx) => renderTableRow(activeReport, row, idx, salesViewMode))
+                  pagedData.map((row, idx) => renderTableRow(activeReport, row, idx, salesViewMode, currentPage, pageSize))
                 )}
               </tbody>
+              {!loading && pagedData.length > 0 && renderTableFooter(activeReport, filteredData, salesViewMode)}
             </table>
           </div>
 
@@ -993,6 +1056,143 @@ export default function ReportsModule({ onBack, userRole, onNotify, onNavigate, 
       </div>
     </PageContainer>
   );
+}
+
+// Helper: Render Colgroup for Strict Table Alignment
+function renderTableColgroup(key, salesViewMode = 'customers') {
+  if (
+    key === 'customer-statements' ||
+    key === 'supplier-statements' ||
+    (key === 'sales-invoices' && salesViewMode === 'customers')
+  ) {
+    return (
+      <colgroup>
+        <col style={{ width: '5%' }} />
+        <col style={{ width: '10%' }} />
+        <col style={{ width: '30%' }} />
+        <col style={{ width: '18%' }} />
+        <col style={{ width: '18%' }} />
+        <col style={{ width: '19%' }} />
+      </colgroup>
+    );
+  }
+
+  if (key === 'items' || key === 'low-stock') {
+    return (
+      <colgroup>
+        <col style={{ width: '10%' }} />
+        <col style={{ width: '22%' }} />
+        <col style={{ width: '12%' }} />
+        <col style={{ width: '10%' }} />
+        <col style={{ width: '8%' }} />
+        <col style={{ width: '12%' }} />
+        <col style={{ width: '13%' }} />
+        <col style={{ width: '13%' }} />
+      </colgroup>
+    );
+  }
+
+  return null;
+}
+
+// Helper: Render Table Footer for Aligned Summary Row
+function renderTableFooter(key, data, salesViewMode = 'customers') {
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  if (key === 'customer-statements') {
+    const totalSales = data.reduce((s, r) => s + Number(r.total_sales ?? r.credit_sales_total ?? 0), 0);
+    const totalPaid = data.reduce((s, r) => s + Number(r.total_paid ?? r.receipts_total ?? r.paid_total ?? 0), 0);
+    const totalBal = data.reduce((s, r) => s + Number(r.balance_due ?? r.customer_balance ?? r.current_balance ?? 0), 0);
+
+    return (
+      <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300">
+        <tr>
+          <td colSpan={3} className="p-2.5 text-right font-bold text-slate-800">
+            الإجمالي الكلي للمطابقات:
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-slate-900 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(totalSales)}
+            </div>
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(totalPaid)}
+            </div>
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-rose-700 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(totalBal)}
+            </div>
+          </td>
+        </tr>
+      </tfoot>
+    );
+  }
+
+  if (key === 'supplier-statements') {
+    const totalPurchases = data.reduce((s, r) => s + Number(r.total_purchases ?? (Number(r.credit_invoices_total || 0) + Number(r.stage_costs_total || 0))), 0);
+    const totalPaid = data.reduce((s, r) => s + Number(r.total_paid ?? r.payments_total ?? 0), 0);
+    const totalBal = data.reduce((s, r) => s + Number(r.balance_due ?? r.supplier_balance ?? r.current_balance ?? 0), 0);
+
+    return (
+      <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300">
+        <tr>
+          <td colSpan={3} className="p-2.5 text-right font-bold text-slate-800">
+            الإجمالي الكلي للمطابقات:
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-slate-900 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(totalPurchases)}
+            </div>
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(totalPaid)}
+            </div>
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-rose-700 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(totalBal)}
+            </div>
+          </td>
+        </tr>
+      </tfoot>
+    );
+  }
+
+  if (key === 'sales-invoices' && salesViewMode === 'customers') {
+    const totalSales = data.reduce((s, r) => s + Number(r.total_sales ?? 0), 0);
+    const totalPaid = data.reduce((s, r) => s + Number(r.paid_total ?? r.total_paid ?? 0), 0);
+    const totalBal = data.reduce((s, r) => s + Number(r.balance_remaining ?? r.balance_due ?? 0), 0);
+
+    return (
+      <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300">
+        <tr>
+          <td colSpan={3} className="p-2.5 text-right font-bold text-slate-800">
+            الإجمالي الكلي للمطابقات:
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-slate-900 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(totalSales)}
+            </div>
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(totalPaid)}
+            </div>
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-rose-700 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(totalBal)}
+            </div>
+          </td>
+        </tr>
+      </tfoot>
+    );
+  }
+
+  return null;
 }
 
 // Helper: Render Table Headers
@@ -1048,15 +1248,25 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
         </tr>
       );
     case 'supplier-statements':
+      return (
+        <tr>
+          <th className="p-2.5 text-center">#</th>
+          <th className="p-2.5 text-center">الكود</th>
+          <th className="p-2.5 text-right">البيان / الاسم</th>
+          <th className="p-2.5 text-left font-mono whitespace-nowrap">إجمالي التكلفة / المشتريات</th>
+          <th className="p-2.5 text-left font-mono whitespace-nowrap">إجمالي المسدد</th>
+          <th className="p-2.5 text-left font-mono whitespace-nowrap">الرصيد المتبقي</th>
+        </tr>
+      );
     case 'customer-statements':
       return (
         <tr>
-          <th className="p-3">الكود</th>
-          <th className="p-3">اسم جهة التعامل</th>
-          <th className="p-3">الهاتف</th>
-          <th className="p-3 text-center font-mono min-w-[130px] whitespace-nowrap">رصيد أول المدة</th>
-          <th className="p-3 text-center font-mono min-w-[130px] whitespace-nowrap">الرصيد الحالي</th>
-          <th className="p-3 text-center">طبيعة الحساب</th>
+          <th className="p-2.5 text-center">#</th>
+          <th className="p-2.5 text-center">الكود</th>
+          <th className="p-2.5 text-right">البيان / الاسم</th>
+          <th className="p-2.5 text-left font-mono whitespace-nowrap">إجمالي المبيعات</th>
+          <th className="p-2.5 text-left font-mono whitespace-nowrap">إجمالي المسدد</th>
+          <th className="p-2.5 text-left font-mono whitespace-nowrap">الرصيد المتبقي</th>
         </tr>
       );
     case 'installments-due':
@@ -1075,13 +1285,12 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
       if (salesViewMode === 'customers') {
         return (
           <tr>
-            <th className="p-3">كود العميل</th>
-            <th className="p-3">اسم العميل</th>
-            <th className="p-3">الهاتف</th>
-            <th className="p-3 text-center font-mono">عدد الفواتير</th>
-            <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">إجمالي المبيعات</th>
-            <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المسدد</th>
-            <th className="p-3 text-left font-mono min-w-[130px] whitespace-nowrap">المتبقي</th>
+            <th className="p-2.5 text-center">#</th>
+            <th className="p-2.5 text-center">الكود</th>
+            <th className="p-2.5 text-right">البيان / الاسم</th>
+            <th className="p-2.5 text-left font-mono whitespace-nowrap">إجمالي المبيعات</th>
+            <th className="p-2.5 text-left font-mono whitespace-nowrap">إجمالي المسدد</th>
+            <th className="p-2.5 text-left font-mono whitespace-nowrap">الرصيد المتبقي</th>
           </tr>
         );
       }
@@ -1200,7 +1409,8 @@ function renderTableHeaders(key, salesViewMode = 'customers') {
 }
 
 // Helper: Render Table Row
-function renderTableRow(key, row, idx, salesViewMode = 'customers') {
+function renderTableRow(key, row, idx, salesViewMode = 'customers', currentPage = 1, pageSize = 20) {
+  const seq = (currentPage - 1) * pageSize + idx + 1;
   switch (key) {
     case 'items':
     case 'low-stock':
@@ -1263,36 +1473,72 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
           <td className="p-3 text-center">{row.status}</td>
         </tr>
       );
-    case 'supplier-statements':
+    case 'supplier-statements': {
+      const purchases = Number(row.total_purchases ?? (Number(row.credit_invoices_total || 0) + Number(row.stage_costs_total || 0)));
+      const paid = Number(row.total_paid ?? row.payments_total ?? 0);
+      const balance = Number(row.balance_due ?? row.supplier_balance ?? row.current_balance ?? 0);
       return (
-        <tr key={row.id || idx} className="hover:bg-slate-50">
-          <td className="p-3 font-mono font-bold text-slate-900">{row.code || row.id}</td>
-          <td className="p-3 font-bold text-slate-800">{row.name}</td>
-          <td className="p-3 font-mono">{row.phone || '-'}</td>
-          <td className="p-3 text-center font-mono whitespace-nowrap min-w-[130px]">
-            {formatCurrency(row.supplier_opening_balance ?? row.opening_balance ?? 0)}
+        <tr key={row.id || idx} className="hover:bg-slate-50 transition-colors">
+          <td className="p-2.5 text-center font-mono text-slate-500 whitespace-nowrap">
+            {seq}
           </td>
-          <td className="p-3 text-center font-mono font-bold text-blue-900 whitespace-nowrap min-w-[130px]">
-            {formatCurrency(row.supplier_balance ?? row.current_balance ?? 0)}
+          <td className="p-2.5 text-center font-mono font-bold text-slate-800 whitespace-nowrap truncate" title={row.code || row.id}>
+            {row.code || row.id || '---'}
           </td>
-          <td className="p-3 text-center">{row.supplier_opening_type ?? row.opening_balance_type ?? 'دائن'}</td>
+          <td className="p-2.5 text-right font-bold text-slate-900 truncate" title={row.name}>
+            {row.name}
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-slate-900 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(purchases)}
+            </div>
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(paid)}
+            </div>
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-rose-700 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(balance)}
+            </div>
+          </td>
         </tr>
       );
-    case 'customer-statements':
+    }
+    case 'customer-statements': {
+      const sales = Number(row.total_sales ?? row.credit_sales_total ?? 0);
+      const paid = Number(row.total_paid ?? row.receipts_total ?? row.paid_total ?? 0);
+      const balance = Number(row.balance_due ?? row.customer_balance ?? row.current_balance ?? 0);
       return (
-        <tr key={row.id || idx} className="hover:bg-slate-50">
-          <td className="p-3 font-mono font-bold text-slate-900">{row.code || row.id}</td>
-          <td className="p-3 font-bold text-slate-800">{row.name}</td>
-          <td className="p-3 font-mono">{row.phone || '-'}</td>
-          <td className="p-3 text-center font-mono whitespace-nowrap min-w-[130px]">
-            {formatCurrency(row.customer_opening_balance ?? row.opening_balance ?? 0)}
+        <tr key={row.id || idx} className="hover:bg-slate-50 transition-colors">
+          <td className="p-2.5 text-center font-mono text-slate-500 whitespace-nowrap">
+            {seq}
           </td>
-          <td className="p-3 text-center font-mono font-bold text-teal-900 whitespace-nowrap min-w-[130px]">
-            {formatCurrency(row.customer_balance ?? row.current_balance ?? 0)}
+          <td className="p-2.5 text-center font-mono font-bold text-slate-800 whitespace-nowrap truncate" title={row.code || row.id}>
+            {row.code || row.id || '---'}
           </td>
-          <td className="p-3 text-center">{row.customer_opening_type ?? row.opening_balance_type ?? 'مدين'}</td>
+          <td className="p-2.5 text-right font-bold text-slate-900 truncate" title={row.name}>
+            {row.name}
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-slate-900 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(sales)}
+            </div>
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(paid)}
+            </div>
+          </td>
+          <td className="p-2.5 text-left whitespace-nowrap">
+            <div className="inline-flex items-center gap-1 font-mono font-bold text-rose-700 whitespace-nowrap text-left" dir="ltr">
+              {formatCurrency(balance)}
+            </div>
+          </td>
         </tr>
       );
+    }
     case 'installments-due':
       return (
         <tr key={row.id || idx} className="hover:bg-slate-50">
@@ -1314,16 +1560,36 @@ function renderTableRow(key, row, idx, salesViewMode = 'customers') {
         </tr>
       );
     case 'sales-invoices':
-      if (row.invoices_count !== undefined) {
+      if (row.invoices_count !== undefined || salesViewMode === 'customers') {
+        const sales = Number(row.total_sales ?? 0);
+        const paid = Number(row.paid_total ?? row.total_paid ?? 0);
+        const balance = Number(row.balance_remaining ?? row.balance_due ?? 0);
         return (
-          <tr key={row.id || idx} className="hover:bg-slate-50">
-            <td className="p-3 font-mono font-bold text-slate-900">{row.code || row.customer_id}</td>
-            <td className="p-3 font-bold text-slate-800">{row.name}</td>
-            <td className="p-3 font-mono">{row.phone || '-'}</td>
-            <td className="p-3 text-center font-mono font-bold text-blue-700">{row.invoices_count}</td>
-            <td className="p-3 text-left font-mono font-bold text-slate-900 whitespace-nowrap min-w-[130px]">{formatCurrency(row.total_sales || 0)}</td>
-            <td className="p-3 text-left font-mono text-emerald-700 whitespace-nowrap min-w-[130px]">{formatCurrency(row.paid_total || 0)}</td>
-            <td className="p-3 text-left font-mono font-bold text-rose-700 whitespace-nowrap min-w-[130px]">{formatCurrency(row.balance_remaining || 0)}</td>
+          <tr key={row.id || idx} className="hover:bg-slate-50 transition-colors">
+            <td className="p-2.5 text-center font-mono text-slate-500 whitespace-nowrap">
+              {seq}
+            </td>
+            <td className="p-2.5 text-center font-mono font-bold text-slate-800 whitespace-nowrap truncate" title={row.code || row.customer_id}>
+              {row.code || row.customer_id || '---'}
+            </td>
+            <td className="p-2.5 text-right font-bold text-slate-900 truncate" title={row.name}>
+              {row.name}
+            </td>
+            <td className="p-2.5 text-left whitespace-nowrap">
+              <div className="inline-flex items-center gap-1 font-mono font-bold text-slate-900 whitespace-nowrap text-left" dir="ltr">
+                {formatCurrency(sales)}
+              </div>
+            </td>
+            <td className="p-2.5 text-left whitespace-nowrap">
+              <div className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 whitespace-nowrap text-left" dir="ltr">
+                {formatCurrency(paid)}
+              </div>
+            </td>
+            <td className="p-2.5 text-left whitespace-nowrap">
+              <div className="inline-flex items-center gap-1 font-mono font-bold text-rose-700 whitespace-nowrap text-left" dir="ltr">
+                {formatCurrency(balance)}
+              </div>
+            </td>
           </tr>
         );
       }

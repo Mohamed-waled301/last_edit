@@ -1,6 +1,82 @@
 import * as XLSX from 'xlsx';
 
 /**
+ * 100% Arabic Column Translations Dictionary for System & Database Keys
+ */
+export const ARABIC_EXCEL_COLUMN_LABELS = {
+  seq: '#',
+  index: '#',
+  code: 'الكود',
+  customer_code: 'كود العميل',
+  supplier_code: 'كود المورد',
+  item_code: 'كود الصنف',
+  product_code: 'كود الموديل',
+  name: 'البيان / الاسم',
+  customer_name: 'اسم العميل',
+  supplier_name: 'اسم المورد',
+  item_name: 'اسم الصنف',
+  product_name: 'اسم الموديل',
+  phone: 'رقم الهاتف',
+  address: 'العنوان',
+  tax_number: 'الرقم الضريبي',
+  supplier_type: 'نوع المورد / النشاط',
+  total_sales: 'إجمالي المبيعات',
+  credit_sales_total: 'إجمالي المبيعات الآجلة',
+  total_purchases: 'إجمالي المشتريات / التكلفة',
+  credit_invoices_total: 'إجمالي المشتريات الآجلة',
+  stage_costs_total: 'تكاليف مراحل التشغيل',
+  total_paid: 'إجمالي المسدد',
+  payments_total: 'إجمالي المسدد',
+  receipts_total: 'إجمالي المسدد',
+  paid_amount: 'إجمالي المسدد',
+  paid_total: 'إجمالي المسدد',
+  balance_due: 'الرصيد المتبقي',
+  balance: 'الرصيد المتبقي',
+  remaining_balance: 'الرصيد المتبقي',
+  remaining_amount: 'الرصيد المتبقي',
+  balance_remaining: 'الرصيد المتبقي',
+  current_balance: 'الرصيد الحالي',
+  opening_balance: 'رصيد أول المدة',
+  opening_type: 'طبيعة رصيد أول المدة',
+  returns_total: 'إجمالي المرتجعات',
+  total_amount: 'إجمالي المبلغ',
+  total_invoice_amount: 'إجمالي الفاتورة',
+  grand_total: 'الإجمالي الكلي',
+  invoices_count: 'عدد الفواتير',
+  invoice_number: 'رقم الفاتورة',
+  po_number: 'رقم أمر الشراء',
+  order_number: 'رقم الطلب',
+  cutting_number: 'رقم أمر القص',
+  grn_number: 'رقم إذن الاستلام',
+  receipt_date: 'تاريخ الاستلام',
+  invoice_date: 'تاريخ الفاتورة',
+  order_date: 'تاريخ الطلب',
+  due_date: 'تاريخ الاستحقاق',
+  date: 'التاريخ',
+  created_at: 'تاريخ الإنشاء',
+  payment_terms: 'طريقة الدفع',
+  status: 'الحالة',
+  unit: 'الوحدة',
+  quantity: 'الكمية',
+  cost_price: 'سعر التكلفة',
+  selling_price: 'سعر البيع',
+  actual_balance: 'الرصيد الفعلي',
+  min_reorder_level: 'حد إعادة الطلب',
+  item_group: 'المجموعة',
+  item_department: 'القسم',
+  item_type: 'نوع الصنف',
+  notes: 'ملاحظات',
+  reason: 'سبب الحركة / البيان'
+};
+
+const IGNORED_EXCEL_KEYS = new Set([
+  'id', '_id', 'uuid', 'created_by', 'updated_at', 'is_active', 'raw_date', 'password', 'salt',
+  'party_id', 'supplier_id', 'customer_id', 'item_id', 'outlet_id', 'user_id', 'account_id',
+  'order_id', 'category_id', 'version', 'hash', 'sync_status', 'items', 'matrix', 'stages',
+  'is_customer', 'is_supplier'
+]);
+
+/**
  * Helper to test if a string represents a clean numeric value (Western digits, optional decimal)
  */
 function isNumericString(val) {
@@ -14,37 +90,74 @@ function isNumericString(val) {
 }
 
 /**
- * Clean data rows so numbers are actual numbers, dates readable, and Arabic text intact.
+ * Translate and clean row object into Arabic keys and numbers
  */
 function cleanRowData(obj) {
   if (!obj || typeof obj !== 'object') return obj;
   const cleaned = {};
   for (const [key, val] of Object.entries(obj)) {
+    if (IGNORED_EXCEL_KEYS.has(key)) continue;
+    const arabicKey = ARABIC_EXCEL_COLUMN_LABELS[key] || key;
     if (val === null || val === undefined) {
-      cleaned[key] = '';
+      cleaned[arabicKey] = '';
     } else if (typeof val === 'number') {
-      cleaned[key] = val;
+      cleaned[arabicKey] = val;
     } else if (isNumericString(val)) {
-      cleaned[key] = Number(val);
+      cleaned[arabicKey] = Number(val);
     } else {
-      cleaned[key] = String(val);
+      cleaned[arabicKey] = String(val);
     }
   }
   return cleaned;
 }
 
 /**
- * Automatically calculates and sets generous column widths on XLSX worksheets
+ * Automatically calculates and sets exact column widths on XLSX worksheets
+ * (col.width = 18 baseline for financial numbers, generous widths for names)
  * to completely eliminate truncation, clipping, and Excel hash overflows (#####).
  */
 export function applyAutoColumnWidths(worksheet) {
   if (!worksheet || !worksheet['!ref']) return;
   try {
     const range = XLSX.utils.decode_range(worksheet['!ref']);
+    const colCount = range.e.c - range.s.c + 1;
+
+    // Check if this matches standard 6-column Balances Report:
+    // [# (Seq), Code, Name, Sales/Cost, Paid, Remaining Balance]
+    const firstRowHeader = [];
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const headerCell = worksheet[XLSX.utils.encode_cell({ c: C, r: range.s.r })];
+      firstRowHeader.push(headerCell ? String(headerCell.v || '').trim() : '');
+    }
+
+    const isSixColBalanceReport = (
+      colCount === 6 &&
+      (firstRowHeader.some(h => h.includes('مبيعات') || h.includes('مشتريات') || h.includes('تكلفة'))) &&
+      (firstRowHeader.some(h => h.includes('مسدد'))) &&
+      (firstRowHeader.some(h => h.includes('متبقي') || h.includes('رصيد')))
+    );
+
+    if (isSixColBalanceReport) {
+      // Explicit exact column width settings matching report structure
+      worksheet['!cols'] = [
+        { wch: 8 },   // #
+        { wch: 15 },  // الكود
+        { wch: 35 },  // البيان / الاسم
+        { wch: 22 },  // إجمالي المبيعات / التكلفة (col.width >= 18)
+        { wch: 22 },  // إجمالي المسدد (col.width >= 18)
+        { wch: 22 }   // الرصيد المتبقي (col.width >= 18)
+      ];
+      return;
+    }
+
     const colWidths = [];
 
     for (let C = range.s.c; C <= range.e.c; ++C) {
-      let maxLen = 12; // Minimum baseline column width
+      const headerCell = worksheet[XLSX.utils.encode_cell({ c: C, r: range.s.r })];
+      const headerVal = headerCell ? String(headerCell.v || '').trim() : '';
+      const isSeq = headerVal === '#' || C === 0 && headerVal.length <= 2;
+
+      let maxLen = isSeq ? 6 : 14;
       for (let R = range.s.r; R <= range.e.r; ++R) {
         const cellAddress = XLSX.utils.encode_cell({ c: C, r: R });
         const cell = worksheet[cellAddress];
@@ -56,8 +169,14 @@ export function applyAutoColumnWidths(worksheet) {
           }
         }
       }
-      // Add safe 4-char padding and ensure at least 15 characters to accommodate 6+ digits
-      colWidths.push({ wch: Math.max(maxLen + 4, 15) });
+
+      if (isSeq) {
+        colWidths.push({ wch: Math.max(maxLen + 2, 8) });
+      } else {
+        // Enforce baseline column width (col.width = 18 minimum for numeric/data columns, at least Math.max(maxLen + 4, 15))
+        const autoWidth = Math.max(maxLen + 4, 15);
+        colWidths.push({ wch: Math.max(autoWidth, 18) });
+      }
     }
 
     worksheet['!cols'] = colWidths;

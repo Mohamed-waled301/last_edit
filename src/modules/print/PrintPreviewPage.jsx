@@ -25,6 +25,7 @@ import { salesRepo, suppliersRepo, partiesRepo, manufacturingRepo, itemsRepo, re
 import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
 import { generatePurchaseInvoiceHtml, generateSalesInvoiceHtml, generateCutOrderHtml, DEFAULT_CUT_ORDER_PRINT_OPTIONS } from './invoicePrintTemplates';
 import { calculateStatementSummaryCards } from '../../logic/statementSummaryCards';
+import { computeCustomerReceivables, computeSupplierDebts } from '../../logic/dashboardMetrics';
 
 /**
  * Auto-Fit Font Scaling & Condensed Spacing for single-line table cells
@@ -565,9 +566,6 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 return {
                   code: p.code || '---',
                   name: p.name || 'عميل',
-                  phone: p.phone || '',
-                  address: p.address || '',
-                  tax_number: p.tax_number || '',
                   total_sales: totSales,
                   total_paid: totPaid,
                   balance_due: p.customer_balance ?? p.balance_due ?? (totSales - totPaid),
@@ -592,19 +590,13 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 const totPurchases = pInvs.reduce((s, i) => s + (Number(i.total_amount) || 0), 0);
                 const pPays = (Array.isArray(payments) ? payments : []).filter(pm => pm.supplier_id === p.id && pm.status !== 'cancelled');
                 const totPaid = pPays.reduce((s, pm) => s + (Number(pm.amount) || 0), 0);
-                const supTypeDisplay = p.supplier_type === 'goods' ? 'توريد خامات' : p.supplier_type === 'service' ? 'خدمات وتشغيل' : (p.supplier_type || 'مورد عام');
-                const rowObj = {
+                return {
                   code: p.code || '---',
                   name: p.name || 'مورد',
-                  supplier_type: supTypeDisplay,
-                  phone: p.phone || '',
                   total_purchases: totPurchases,
                   total_paid: totPaid,
                   balance_due: p.supplier_balance ?? p.balance_due ?? (totPurchases - totPaid)
                 };
-                if (p.address && String(p.address).trim()) rowObj.address = p.address;
-                if (p.tax_number && String(p.tax_number).trim()) rowObj.tax_number = p.tax_number;
-                return rowObj;
               });
             } catch {
               const parties = await partiesRepo.getAll();
@@ -1598,7 +1590,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           </div>
 
           <div className="w-full max-w-full" style={{ width: '100%', overflow: 'visible', boxSizing: 'border-box' }}>
-            <table className="w-full max-w-full text-right text-xs border-collapse" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '16px', marginBottom: '16px', tableLayout: 'auto', boxSizing: 'border-box' }}>
+            <table className="w-full max-w-full text-right text-xs border-collapse table-fixed" style={{ width: '100% !important', borderCollapse: 'collapse !important', marginTop: '16px', marginBottom: '16px', tableLayout: 'fixed !important', boxSizing: 'border-box' }}>
               <colgroup>
                 <col style={{ width: '11%', minWidth: '85px' }} />
                 <col style={{ width: '31%', minWidth: '150px' }} />
@@ -1958,8 +1950,8 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
       // Standard Schemas for known reports
       const REPORT_SCHEMAS = {
-        'supplier-statements': ['code', 'name', 'supplier_type', 'phone', 'total_purchases', 'total_paid', 'balance_due'],
-        'customer-statements': ['code', 'name', 'phone', 'total_sales', 'total_paid', 'balance_due'],
+        'supplier-statements': ['code', 'name', 'total_purchases', 'total_paid', 'balance_due'],
+        'customer-statements': ['code', 'name', 'total_sales', 'total_paid', 'balance_due'],
         'goods-receipts': ['grn_number', 'po_number', 'po_id', 'supplier_name', 'receipt_date', 'receiver_name', 'notes'],
         'purchase-orders': ['po_number', 'supplier_name', 'order_date', 'payment_terms', 'subtotal', 'discount_value', 'total_amount'],
         'sales-invoices': ['invoice_number', 'customer_name', 'invoice_date', 'payment_terms', 'total_amount', 'status'],
@@ -1972,7 +1964,14 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
       // Determine active columns with deduplication and data-presence check
       let columnKeys = [];
-      if (REPORT_SCHEMAS[activeReportKey] && Array.isArray(reportRows) && reportRows.length > 0) {
+      if (
+        activeReportKey === 'sales-invoices' &&
+        Array.isArray(reportRows) &&
+        reportRows.length > 0 &&
+        (reportRows[0]?.total_sales !== undefined || reportRows[0]?.invoices_count !== undefined)
+      ) {
+        columnKeys = ['code', 'name', 'total_sales', 'total_paid', 'balance_due'];
+      } else if (REPORT_SCHEMAS[activeReportKey] && Array.isArray(reportRows) && reportRows.length > 0) {
         columnKeys = REPORT_SCHEMAS[activeReportKey].filter(k => {
           return reportRows.some(row => {
             const val = row[k];
@@ -1993,6 +1992,15 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           reportRows.some(row => row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '')
         ).slice(0, 8);
       }
+
+      // Check whether this is a 6-column financial balance/statement report
+      const isBalancesReport = (
+        activeReportKey === 'customer-statements' ||
+        activeReportKey === 'supplier-statements' ||
+        ((columnKeys.includes('total_sales') || columnKeys.includes('total_purchases')) &&
+          (columnKeys.includes('total_paid') || columnKeys.includes('paid_total')) &&
+          (columnKeys.includes('balance_due') || columnKeys.includes('balance_remaining') || columnKeys.includes('customer_balance') || columnKeys.includes('supplier_balance')))
+      );
 
       // Balanced Column Widths Map (Guarantees every column has ample horizontal room)
       const COLUMN_WIDTH_MAP = {
@@ -2043,33 +2051,40 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         unit: '8%',
         quantity: '10%',
         row_total: '10%',
-        total_purchases: '13%',
-        total_sales: '13%',
-        total_paid: '12%',
-        balance_due: '13%',
-        total_amount: '13%',
-        total_invoice_amount: '13%',
-        subtotal: '12%',
+        total_purchases: '18%',
+        total_sales: '18%',
+        total_paid: '18%',
+        balance_due: '19%',
+        total_amount: '18%',
+        total_invoice_amount: '18%',
+        subtotal: '14%',
         discount_value: '10%',
         discount: '10%',
         actual_balance: '12%',
-        cost_price: '11%',
-        selling_price: '11%',
-        amount: '13%',
-        paid_amount: '12%',
-        paid: '12%',
-        remaining: '12%',
-        remaining_amount: '13%',
-        stage_cost: '12%',
+        cost_price: '12%',
+        selling_price: '12%',
+        amount: '18%',
+        paid_amount: '18%',
+        paid: '18%',
+        remaining: '19%',
+        remaining_amount: '19%',
+        stage_cost: '14%',
         return_number: '14%',
         return_type: '14%',
-        pricing_type: '11%',
-        total_cost: '13%'
+        pricing_type: '12%',
+        total_cost: '18%'
       };
 
-      const getColWidth = (k, count) => {
+      const getColWidth = (k, allKeys) => {
+        if (isBalancesReport) {
+          if (k === 'code' || k.includes('code')) return '10%';
+          if (k === 'name' || k.includes('name')) return '30%';
+          if (k === 'total_sales' || k === 'total_purchases') return '18%';
+          if (k === 'total_paid' || k === 'paid_total' || k === 'receipts_total' || k === 'payments_total') return '18%';
+          if (k === 'balance_due' || k === 'balance_remaining' || k === 'customer_balance' || k === 'supplier_balance') return '19%';
+        }
         if (COLUMN_WIDTH_MAP[k]) return COLUMN_WIDTH_MAP[k];
-        return `${Math.floor(100 / (count || 1))}%`;
+        return `${Math.floor(95 / (allKeys.length || 1))}%`;
       };
 
       // Summary sums
@@ -2129,7 +2144,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
         );
       }
 
-      // 6.B) Standardized A4 / A5 Report Layout (Zero Side-Scroll, 100% Arabic Headers, Zero Overlap)
+      // 6.B) Standardized A4 / A5 Report Layout (Strict Table Alignment, Zero Side-Scroll, 100% Arabic Headers, Zero Overlap)
       return (
         <div className="p-6 sm:p-8 space-y-6 text-slate-900 bg-white max-w-full overflow-hidden" dir="rtl">
           {/* Standardized Report Header: Logo top-right, Company top-left, Title centered in bordered box, Date/Time stamp */}
@@ -2172,25 +2187,31 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
             </div>
           </div>
 
-          {/* Data Table with complete overflow-x elimination, colgroup widths, and cell containment */}
+          {/* Data Table with complete overflow-x elimination, colgroup widths, and strict cell containment */}
           <div className="w-full max-w-full overflow-hidden">
-            <table className={`w-full max-w-full text-right ${tableFontClass} border-collapse table-fixed`}>
+            <table
+              className={`w-full max-w-full text-right ${tableFontClass} border-collapse table-fixed`}
+              style={{
+                width: '100% !important',
+                tableLayout: 'fixed !important',
+                borderCollapse: 'collapse !important',
+              }}
+            >
               <colgroup>
-                <col style={{ width: '42px' }} />
+                <col style={{ width: '5%' }} />
                 {columnKeys.map(k => (
-                  <col key={k} style={{ width: getColWidth(k, columnKeys.length) }} />
+                  <col key={k} style={{ width: getColWidth(k, columnKeys) }} />
                 ))}
               </colgroup>
               <thead>
                 <tr className="bg-[#1F3A5F] text-white border-b border-slate-300">
-                  <th className={`${thPadClass} border border-slate-300 text-center font-bold whitespace-nowrap w-10 shrink-0`}>#</th>
+                  <th className={`${thPadClass} border border-slate-300 text-center font-bold whitespace-nowrap`}>#</th>
                   {columnKeys.map(k => {
                     const isNum = k.includes('total') || k.includes('amount') || k.includes('balance') || k.includes('price') || k.includes('cost') || k.includes('limit');
                     return (
                       <th
                         key={k}
-                        style={{ width: getColWidth(k, columnKeys.length) }}
-                        className={`${thPadClass} border border-slate-300 font-bold whitespace-nowrap ${isNum ? 'text-left' : 'text-center'}`}
+                        className={`${thPadClass} border border-slate-300 font-bold whitespace-nowrap ${isNum ? 'text-left' : k === 'code' ? 'text-center' : 'text-right'}`}
                       >
                         <span className="whitespace-nowrap font-bold block">
                           {getArabicColumnTitle(k)}
@@ -2210,7 +2231,9 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 ) : (
                   reportRows.map((row, idx) => (
                     <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className={`${tdPadClass} border border-slate-200 text-center font-mono text-slate-500 whitespace-nowrap`}>{idx + 1}</td>
+                      <td className={`${tdPadClass} border border-slate-200 text-center font-mono text-slate-500 whitespace-nowrap`}>
+                        {idx + 1}
+                      </td>
                       {columnKeys.map(k => {
                         const val = row[k];
                         const isNum = typeof val === 'number';
@@ -2220,8 +2243,8 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                         return (
                           <td
                             key={k}
-                            className={`${tdPadClass} border border-slate-200 ${
-                              isMoney ? 'text-left font-mono font-bold whitespace-nowrap' : isCenter ? 'text-center whitespace-nowrap' : 'text-right'
+                            className={`${tdPadClass} border border-slate-200 overflow-hidden text-ellipsis ${
+                              isMoney ? 'text-left' : isCenter ? 'text-center' : 'text-right'
                             }`}
                           >
                             {(() => {
@@ -2255,24 +2278,23 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                               }
                               if (isMoney || (isNum && (k.includes('price') || k.includes('cost')))) {
                                 return (
-                                  <span className="font-mono font-bold whitespace-nowrap block text-left" dir="ltr">
+                                  <div className="inline-flex items-center gap-1 font-mono font-bold whitespace-nowrap text-left" dir="ltr">
                                     {formatCurrency(Number(val) || 0)}
-                                  </span>
+                                  </div>
                                 );
                               }
                               if (isNum) {
                                 return (
-                                  <span className="font-mono font-bold whitespace-nowrap block text-center" dir="ltr">
+                                  <div className="inline-flex items-center gap-1 font-mono font-bold whitespace-nowrap text-center" dir="ltr">
                                     {formatNumber(Number(val) || 0)}
-                                  </span>
+                                  </div>
                                 );
                               }
                               if (k === 'code' || k.includes('code') || k === 'po_number' || k === 'grn_number' || k === 'po_id' || k === 'phone' || k.includes('phone')) {
                                 const codeStr = String(val || '-');
                                 return (
                                   <span
-                                    className="font-mono font-bold whitespace-nowrap block text-center cell-autofit"
-                                    style={getAutoFitStyle(codeStr, 14, isUltraDense ? 9 : isDense ? 10 : 11)}
+                                    className="font-mono font-bold whitespace-nowrap block text-center truncate"
                                     title={codeStr}
                                     dir="ltr"
                                   >
@@ -2283,8 +2305,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                               const textStr = String(val ?? '-');
                               return (
                                 <span
-                                  className="cell-autofit font-semibold"
-                                  style={getAutoFitStyle(textStr, isUltraDense ? 14 : isDense ? 20 : 26, isUltraDense ? 9 : isDense ? 10 : 11)}
+                                  className="font-semibold block truncate text-right"
                                   title={textStr}
                                 >
                                   {textStr}
@@ -2298,13 +2319,61 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                   ))
                 )}
               </tbody>
-              {hasAmountSum && reportRows.length > 0 && (
+              {reportRows.length > 0 && (
                 <tfoot>
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-                    <td colSpan={columnKeys.length} className={`${tdPadClass} text-right font-bold`}>الإجمالي الكلي للمطابقات:</td>
-                    <td className={`${tdPadClass} text-left font-mono text-emerald-700 ${isUltraDense ? 'text-xs' : 'text-sm'} whitespace-nowrap`}>
-                      {formatCurrency(totalAmountSum)}
-                    </td>
+                    {(() => {
+                      if (isBalancesReport) {
+                        const colSalesKey = columnKeys.find(k => k === 'total_sales' || k === 'total_purchases') || 'total_sales';
+                        const colPaidKey = columnKeys.find(k => k === 'total_paid' || k === 'paid_total' || k === 'receipts_total' || k === 'payments_total') || 'total_paid';
+                        const colBalKey = columnKeys.find(k => k === 'balance_due' || k === 'balance_remaining' || k === 'customer_balance' || k === 'supplier_balance') || 'balance_due';
+
+                        const sumSales = reportRows.reduce((acc, r) => acc + (Number(r[colSalesKey] ?? r.total_sales ?? r.credit_sales_total ?? r.total_purchases) || 0), 0);
+                        const sumPaid = reportRows.reduce((acc, r) => acc + (Number(r[colPaidKey] ?? r.total_paid ?? r.receipts_total ?? r.payments_total ?? r.paid_total) || 0), 0);
+                        const sumBalance = reportRows.reduce((acc, r) => acc + (Number(r[colBalKey] ?? r.balance_due ?? r.customer_balance ?? r.supplier_balance ?? r.balance_remaining ?? r.current_balance) || 0), 0);
+
+                        return (
+                          <>
+                            {/* Spans columns 1, 2, 3: #, Code, Name */}
+                            <td colSpan={3} className={`${tdPadClass} border border-slate-300 text-right font-bold text-slate-800`}>
+                              الإجمالي الكلي للمطابقات:
+                            </td>
+                            <td className={`${tdPadClass} border border-slate-300 text-left whitespace-nowrap`}>
+                              <div className="inline-flex items-center gap-1 font-mono font-bold text-slate-900 whitespace-nowrap text-left" dir="ltr">
+                                {formatCurrency(sumSales)}
+                              </div>
+                            </td>
+                            <td className={`${tdPadClass} border border-slate-300 text-left whitespace-nowrap`}>
+                              <div className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 whitespace-nowrap text-left" dir="ltr">
+                                {formatCurrency(sumPaid)}
+                              </div>
+                            </td>
+                            <td className={`${tdPadClass} border border-slate-300 text-left whitespace-nowrap`}>
+                              <div className="inline-flex items-center gap-1 font-mono font-bold text-rose-700 whitespace-nowrap text-left" dir="ltr">
+                                {formatCurrency(sumBalance)}
+                              </div>
+                            </td>
+                          </>
+                        );
+                      }
+
+                      if (hasAmountSum) {
+                        return (
+                          <>
+                            <td colSpan={columnKeys.length} className={`${tdPadClass} border border-slate-300 text-right font-bold text-slate-800`}>
+                              الإجمالي الكلي للمطابقات:
+                            </td>
+                            <td className={`${tdPadClass} border border-slate-300 text-left whitespace-nowrap`}>
+                              <div className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 whitespace-nowrap text-left" dir="ltr">
+                                {formatCurrency(totalAmountSum)}
+                              </div>
+                            </td>
+                          </>
+                        );
+                      }
+
+                      return null;
+                    })()}
                   </tr>
                 </tfoot>
               )}
