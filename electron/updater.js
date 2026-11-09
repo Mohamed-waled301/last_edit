@@ -56,14 +56,21 @@ function isNewerVersion(remoteVerStr, localVerStr) {
 function findCuttingAsset(assets = []) {
   if (!Array.isArray(assets) || assets.length === 0) return null;
 
-  // 1. Explicit cutting exe asset (e.g. code-systems-cutting-Setup-1.2.0.exe)
+  // 1. Prioritize cutting setup exe over portable
+  const cuttingSetup = assets.find((a) => {
+    const name = (a.name || '').toLowerCase();
+    return name.includes('cutting') && name.includes('setup') && name.endsWith('.exe');
+  });
+  if (cuttingSetup) return cuttingSetup;
+
+  // 2. Explicit cutting exe asset (e.g. code-systems-cutting-Portable-1.2.0.exe)
   const cuttingExe = assets.find((a) => {
     const name = (a.name || '').toLowerCase();
     return name.includes('cutting') && name.endsWith('.exe');
   });
   if (cuttingExe) return cuttingExe;
 
-  // 2. Generic setup exe asset if only one exe exists
+  // 3. Generic setup exe asset if only one exe exists
   const anyExe = assets.filter((a) => (a.name || '').toLowerCase().endsWith('.exe'));
   if (anyExe.length === 1) return anyExe[0];
 
