@@ -83,7 +83,7 @@ class CuttingAutoUpdater {
     this.spawn = options.spawn || spawn;
     this.mainWindowProvider = options.mainWindowProvider || (() => null);
     this.activeEdition = options.activeEdition || process.env.EDITION || 'cutting';
-    this.currentVersion = options.currentVersion || (this.app && typeof this.app.isReady === 'function' && this.app.isReady() ? this.app.getVersion() : '1.2.0');
+    this.currentVersion = options.currentVersion || (this.app && typeof this.app.isReady === 'function' && this.app.isReady() ? this.app.getVersion() : '1.2.2');
     this.repoOwner = options.repoOwner || 'Mohamed-waled301';
     this.repoName = options.repoName || 'last_edit';
     this.fallbackRepoName = options.fallbackRepoName || 'code-systems-releases';
