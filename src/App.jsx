@@ -42,6 +42,7 @@ import SalesInvoicePrintPage from './modules/sales/SalesInvoicePrintPage';
 import OutletsListPage from './modules/outlets/OutletsListPage';
 import SalesReturnsListPage from './modules/returns/SalesReturnsListPage';
 import SalesReturnFormPage from './modules/returns/SalesReturnFormPage';
+import PurchaseReturnFormPage from './modules/returns/PurchaseReturnFormPage';
 import TreasuriesListPage from './modules/treasuries/TreasuriesListPage';
 import OutletTransferFormPage from './modules/treasuries/OutletTransferFormPage';
 import DailyClosingFormPage from './modules/treasuries/DailyClosingFormPage';
@@ -373,7 +374,7 @@ export default function App() {
     if (['outsourced', 'finishing'].includes(r)) return 'outsourced';
     if (r === 'sales') return 'sales';
     if (['outlets', 'branches'].includes(r)) return 'outlets';
-    if (r === 'returns') return 'returns';
+    if (['returns', 'purchase-returns'].includes(r)) return 'returns';
     if (['treasuries', 'cash'].includes(r)) return 'treasuries';
     if (['disbursements', 'expense-codes', 'payment-methods'].includes(r)) return 'disbursements';
     if (r === 'reports') return 'reports';
@@ -620,12 +621,21 @@ export default function App() {
       case 'branches':
         return <OutletsListPage onNavigate={navigateTo} onNotify={showNotification} />;
 
-      // Returns (مرتجع حر / مرتجع بفاتورة)
+      // Returns (مرتجع مبيعات / مرتجع مشتريات)
       case 'returns':
+        if (action === 'purchase-new') {
+          return <PurchaseReturnFormPage onBack={() => navigateTo('returns')} onNotify={showNotification} />;
+        }
         if (action === 'new') {
           return <SalesReturnFormPage onBack={() => navigateTo('returns')} onNotify={showNotification} />;
         }
         return <SalesReturnsListPage onNavigate={navigateTo} onNotify={showNotification} />;
+
+      case 'purchase-returns':
+        if (action === 'new') {
+          return <PurchaseReturnFormPage onBack={() => navigateTo('returns')} onNotify={showNotification} />;
+        }
+        return <SalesReturnsListPage defaultTab="purchases" onNavigate={navigateTo} onNotify={showNotification} />;
 
       // G & B) Treasuries & Outlets
       case 'treasuries':

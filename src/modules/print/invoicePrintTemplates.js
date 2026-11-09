@@ -570,7 +570,7 @@ export function generatePurchaseInvoiceHtml(po, settings = {}, paperSize = 'a4',
         </div>
       </div>
 
-      <!-- Bottom System Stamp -->
+      <!-- ختم النظام السفلي -->
       <div style="margin-top: 24px; padding-top: 10px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 10px; color: #94a3b8;" class="break-inside-avoid">
         مستند مشتريات وتوريد رسمي صادر عن نظام code systems ERP • تم ترحيل أثر المخزون وحساب المورد تلقائياً
       </div>
@@ -1554,6 +1554,306 @@ export function generateCutOrderHtml(order, settings = {}, paperSize = 'a4', pri
       <!-- Bottom System Stamp -->
       <div style="margin-top: 20px; padding-top: 8px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 10px; color: #94a3b8;" class="break-inside-avoid">
         أمر تشغيل وقص رسمي صادر عن نظام كود سيستمز المتكامل • تم توزيع التكاليف وحفظ البيانات آلياً
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Generates official Supplier Purchase Return voucher (إذن مرتجع بضاعة لمورد)
+ * 100% Arabic localization, formal company headers, items matrix, and signatures footer.
+ */
+export function generatePurchaseReturnHtml(doc, settings = {}, paperSize = 'a4') {
+  if (!doc) return '';
+  const isThermal = paperSize === '80mm';
+  const companyName = settings?.factory_name || 'نظام كود سيستمز لإدارة مصانع الملابس';
+  const hasValidLogo = Boolean(settings?.company_logo && typeof settings.company_logo === 'string' && settings.company_logo.trim() !== '' && settings.company_logo !== '/logo.png');
+  const companyLogo = hasValidLogo ? settings.company_logo : '';
+
+  const returnNumber = doc.return_number || doc.id || '';
+  const returnDate = doc.return_date || doc.created_at || '';
+  const supplierName = doc.supplier_name || doc.supplier?.name || 'مورد عام';
+  const supplierCode = doc.supplier_code || doc.supplier?.code || '-';
+  const supplierPhone = doc.supplier_phone || doc.supplier?.phone || '-';
+  const refundMethod = doc.refund_method === 'cash_refund' || doc.refund_status === 'cash_refund'
+    ? 'استرداد نقدي فوري بالخزينة'
+    : 'خصم من رصيد المورد';
+  const isCashRefund = doc.refund_method === 'cash_refund' || doc.refund_status === 'cash_refund';
+  const invoiceRef = doc.invoice_number || doc.invoice_id || 'مرتجع حر من رصيد المخزن';
+  const returnReason = doc.reason || 'بضاعة غير مطابقة للمواصفات';
+
+  const rawItems = Array.isArray(doc.items) && doc.items.length > 0
+    ? doc.items
+    : [{
+        item_name: doc.material_name || 'خامة / صنف مسترجع',
+        item_code: doc.material_code || '-',
+        color: doc.color || '-',
+        size: doc.size || '-',
+        unit: doc.unit || 'قطعة',
+        quantity: doc.quantity || 1,
+        unit_price: doc.unit_cost || doc.unit_price || 0,
+        total_price: doc.total_amount || 0,
+        reason: doc.reason || '-'
+      }];
+
+  const totalQty = rawItems.reduce((sum, it) => sum + (Number(it.quantity || it.quantity_returned) || 0), 0);
+  const totalAmount = Number(doc.total_amount ?? doc.refund_amount ?? rawItems.reduce((sum, it) => sum + Number(it.total_price || 0), 0));
+
+  // --- Thermal 80mm Layout ---
+  if (isThermal) {
+    const itemsRowsThermal = rawItems.map((it, idx) => {
+      const q = Number(it.quantity || it.quantity_returned || 1);
+      const p = Number(it.unit_price ?? it.unit_cost ?? 0);
+      const lineTot = Number(it.total_price ?? (q * p));
+      return `
+        <tr style="border-bottom: 1px dotted #94a3b8; font-size: 11px;">
+          <td style="padding: 4px 2px; font-weight: bold;">${escapeHtml(it.item_name || `بند ${idx + 1}`)}</td>
+          <td style="padding: 4px 2px; text-align: center;" class="font-mono">${q}</td>
+          <td style="padding: 4px 2px; text-align: left;" class="font-mono">${formatCurrency(p)}</td>
+          <td style="padding: 4px 2px; text-align: left; font-weight: bold;" class="font-mono">${formatCurrency(lineTot)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div style="padding: 4px; font-family: 'Cairo', Tahoma, sans-serif; font-size: 11px; color: #000;" dir="rtl">
+        <div style="text-align: center; border-bottom: 1px dashed #64748b; padding-bottom: 8px; margin-bottom: 8px;">
+          ${hasValidLogo ? `<img src="${companyLogo}" alt="" onerror="this.style.display='none';" style="height: 40px; max-width: 90px; object-fit: contain; margin: 0 auto 4px;" />` : ''}
+          <div style="font-weight: 800; font-size: 14px;">${escapeHtml(companyName)}</div>
+          <div style="font-size: 12px; font-weight: bold; color: #b91c1c;">إذن مرتجع بضاعة لمورد</div>
+          ${settings?.phone ? `<div style="font-size: 10px; color: #475569;">هاتف: <span class="font-mono">${escapeHtml(settings.phone)}</span></div>` : ''}
+          
+          <div style="margin-top: 6px; border-top: 1px dotted #cbd5e1; padding-top: 4px; text-align: right; font-size: 10px; line-height: 1.5;">
+            <div><strong>رقم الإذن:</strong> <span class="font-mono font-bold">${escapeHtml(returnNumber)}</span></div>
+            <div><strong>التاريخ:</strong> <span class="font-mono">${formatDate(returnDate)}</span></div>
+            <div><strong>المورد:</strong> ${escapeHtml(supplierName)}</div>
+            <div><strong>طريقة الرد:</strong> ${escapeHtml(refundMethod)}</div>
+            <div><strong>الفاتورة الأصلية:</strong> ${escapeHtml(invoiceRef)}</div>
+            <div><strong>سبب الإرجاع:</strong> ${escapeHtml(returnReason)}</div>
+          </div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+          <thead>
+            <tr style="border-bottom: 1px solid #475569; font-size: 10px; font-weight: bold;">
+              <th style="text-align: right; padding: 3px 2px;">الصنف</th>
+              <th style="text-align: center; padding: 3px 2px;">الكمية</th>
+              <th style="text-align: left; padding: 3px 2px;">السعر</th>
+              <th style="text-align: left; padding: 3px 2px;">الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsRowsThermal}
+          </tbody>
+        </table>
+
+        <div style="border-top: 1px dashed #64748b; padding-top: 6px; font-size: 11px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+            <span>إجمالي الكميات:</span>
+            <span class="font-mono font-bold">${totalQty}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 13px; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; color: #b91c1c;">
+            <span>إجمالي قيمة المرتجع:</span>
+            <span class="font-mono">${formatCurrency(totalAmount)}</span>
+          </div>
+        </div>
+
+        ${doc.notes ? `
+          <div style="margin-top: 8px; border-top: 1px dotted #94a3b8; padding-top: 4px; font-size: 10px;">
+            <strong>ملاحظات:</strong> ${escapeHtml(doc.notes)}
+          </div>
+        ` : ''}
+
+        <div style="margin-top: 14px; border-top: 1px solid #cbd5e1; padding-top: 8px; display: flex; justify-content: space-between; font-size: 9px; font-weight: bold; text-align: center;">
+          <div style="width: 48%;">
+            <div>أمين المخزن (المسلم)</div>
+            <div style="border-bottom: 1px dotted #94a3b8; height: 18px;"></div>
+          </div>
+          <div style="width: 48%;">
+            <div>المحاسب المسؤول</div>
+            <div style="border-bottom: 1px dotted #94a3b8; height: 18px;"></div>
+          </div>
+        </div>
+
+        <div style="text-align: center; font-size: 9px; color: #64748b; margin-top: 10px;">
+          نظام كود سيستمز المتكامل • إذن رد بضاعة رسمي
+        </div>
+      </div>
+    `;
+  }
+
+  // --- Official A4 Layout for Supplier Purchase Return ---
+  const itemsRowsA4 = rawItems.map((it, idx) => {
+    const q = Number(it.quantity || it.quantity_returned || 1);
+    const p = Number(it.unit_price ?? it.unit_cost ?? 0);
+    const lineTot = Number(it.total_price ?? (q * p));
+    const isEven = idx % 2 === 1;
+    return `
+      <tr style="background: ${isEven ? '#f8fafc' : '#ffffff'}; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 7px 6px; text-align: center; color: #64748b; font-weight: bold;" class="font-mono">${idx + 1}</td>
+        <td style="padding: 7px 6px; text-align: center; color: #475569;" class="font-mono">${escapeHtml(it.item_code || '-')}</td>
+        <td style="padding: 7px 8px; font-weight: bold; color: #0f172a;">
+          <span style="${getAutoFitInlineStyle(it.item_name || '', 28, 11)}">${escapeHtml(it.item_name || 'صنف مسترجع')}</span>
+        </td>
+        <td style="padding: 7px 6px; text-align: center; color: #334155;">${escapeHtml(it.color || '-')}</td>
+        <td style="padding: 7px 6px; text-align: center; color: #334155;">${escapeHtml(it.size || '-')}</td>
+        <td style="padding: 7px 6px; text-align: center; color: #64748b;">${escapeHtml(it.unit || 'قطعة')}</td>
+        <td style="padding: 7px 6px; text-align: center; font-weight: bold; color: #0f172a;" class="font-mono">${q}</td>
+        <td style="padding: 7px 8px; text-align: left; color: #334155;" class="font-mono">${formatCurrency(p)}</td>
+        <td style="padding: 7px 8px; text-align: left; font-weight: bold; color: #b91c1c;" class="font-mono">${formatCurrency(lineTot)}</td>
+        <td style="padding: 7px 6px; text-align: right; color: #64748b; font-size: 10px;">${escapeHtml(it.reason || doc.reason || '-')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div style="font-family: 'Cairo', Tahoma, sans-serif; color: #0f172a; line-height: 1.4; padding: 24px; max-width: 820px; margin: 0 auto; background: #fff;" dir="rtl">
+      <!-- ترويسة المنشأة الرسمية -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1F3A5F; padding-bottom: 14px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          ${hasValidLogo ? `<img src="${companyLogo}" alt="" onerror="this.style.display='none';" style="height: 60px; max-width: 140px; object-fit: contain;" />` : ''}
+          <div>
+            <div style="font-size: 20px; font-weight: 800; color: #1F3A5F; letter-spacing: -0.5px;">${escapeHtml(companyName)}</div>
+            <div style="font-size: 11px; color: #64748b; font-weight: 600; margin-top: 2px;">نظام كود سيستمز لإدارة مصانع الملابس الجاهزة</div>
+            <div style="font-size: 11px; color: #475569; margin-top: 2px;">
+              ${settings?.address ? `<span>العنوان: ${escapeHtml(settings.address)}</span>` : ''}
+              ${settings?.address && settings?.phone ? '<span style="margin: 0 6px;">•</span>' : ''}
+              ${settings?.phone ? `<span>هاتف: <span class="font-mono">${escapeHtml(settings.phone)}</span></span>` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: left; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 16px; min-width: 220px;">
+          <div style="font-size: 13px; font-weight: bold; color: #b91c1c; margin-bottom: 4px; text-align: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px;">
+            إذن مرتجع بضاعة لمورد
+          </div>
+          <div style="font-size: 11px; color: #334155; display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px;">
+            <span style="font-weight: bold;">رقم الإذن:</span>
+            <span class="font-mono font-bold" style="color: #1F3A5F;">${escapeHtml(returnNumber)}</span>
+          </div>
+          <div style="font-size: 11px; color: #334155; display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px;">
+            <span style="font-weight: bold;">تاريخ الإرجاع:</span>
+            <span class="font-mono">${formatDate(returnDate)}</span>
+          </div>
+          <div style="font-size: 11px; color: #334155; display: flex; justify-content: space-between; gap: 8px;">
+            <span style="font-weight: bold;">طريقة التسوية:</span>
+            <span style="font-weight: bold; color: ${isCashRefund ? '#047857' : '#1F3A5F'};">${escapeHtml(refundMethod)}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- بيانات المورد والمرجعية -->
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; font-size: 11px;">
+        <div style="line-height: 1.8;">
+          <div><strong style="color: #64748b;">اسم المورد / الجهة:</strong> <span style="font-weight: 800; color: #0f172a; font-size: 12px;">${escapeHtml(supplierName)}</span></div>
+          <div><strong style="color: #64748b;">كود المورد:</strong> <span class="font-mono" style="color: #334155;">${escapeHtml(supplierCode)}</span></div>
+          <div><strong style="color: #64748b;">رقم الهاتف:</strong> <span class="font-mono" style="color: #334155;">${escapeHtml(supplierPhone)}</span></div>
+        </div>
+        <div style="line-height: 1.8; border-right: 1px solid #e2e8f0; padding-right: 16px;">
+          <div><strong style="color: #64748b;">الفاتورة الأصلية:</strong> <span class="font-mono font-bold" style="color: #1F3A5F;">${escapeHtml(invoiceRef)}</span></div>
+          <div><strong style="color: #64748b;">سبب الإرجاع:</strong> <span style="font-weight: bold; color: #b91c1c;">${escapeHtml(returnReason)}</span></div>
+          <div><strong style="color: #64748b;">المستودع / المخزن:</strong> <span style="color: #334155;">المخزن الرئيسي (LOC-01)</span></div>
+        </div>
+      </div>
+
+      <!-- جدول الأصناف المرتجعة -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+        <thead>
+          <tr style="background: #1F3A5F; color: #ffffff; font-weight: bold;">
+            <th style="padding: 8px 6px; text-align: center; width: 4%;">م</th>
+            <th style="padding: 8px 6px; text-align: center; width: 10%;">كود الصنف</th>
+            <th style="padding: 8px 8px; text-align: right; width: 26%;">بيان الصنف / الخامة المرتجعة</th>
+            <th style="padding: 8px 6px; text-align: center; width: 9%;">اللون</th>
+            <th style="padding: 8px 6px; text-align: center; width: 8%;">المقاس</th>
+            <th style="padding: 8px 6px; text-align: center; width: 7%;">الوحدة</th>
+            <th style="padding: 8px 6px; text-align: center; width: 9%;">الكمية</th>
+            <th style="padding: 8px 8px; text-align: left; width: 11%;">سعر الوحدة</th>
+            <th style="padding: 8px 8px; text-align: left; width: 12%;">الإجمالي</th>
+            <th style="padding: 8px 6px; text-align: right; width: 14%;">ملاحظات</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsRowsA4}
+        </tbody>
+        <tfoot>
+          <tr style="background: #f1f5f9; font-weight: bold; border-top: 2px solid #cbd5e1;">
+            <td colspan="6" style="padding: 8px 10px; text-align: right; color: #334155;">إجمالي البنود والكميات المرتجعة:</td>
+            <td style="padding: 8px 6px; text-align: center; font-size: 12px; color: #0f172a;" class="font-mono">${totalQty}</td>
+            <td style="padding: 8px 8px; text-align: left; color: #64748b;">الصافي:</td>
+            <td style="padding: 8px 8px; text-align: left; font-size: 12px; color: #b91c1c;" class="font-mono">${formatCurrency(totalAmount)}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <!-- ملخص الإجماليات والملاحظات -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 20px;" class="break-inside-avoid">
+        <div style="flex: 1; font-size: 11px;">
+          ${doc.notes ? `
+            <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; background: #fafafa;">
+              <strong style="color: #334155;">ملاحظات إذن المرتجع:</strong>
+              <p style="margin: 4px 0 0; color: #475569;">${escapeHtml(doc.notes)}</p>
+            </div>
+          ` : `
+            <div style="border: 1px dashed #cbd5e1; border-radius: 6px; padding: 10px; background: #f8fafc; color: #64748b; font-size: 10px;">
+              تم فحص البضاعة وتأكيد خروجها من المستودع وخصم الكميات من الرصيد الفعلي المخزني وترحيل الأثر المحاسبي لحساب المورد تلقائياً.
+            </div>
+          `}
+        </div>
+
+        <div style="width: 290px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; font-size: 11px;">
+          <div style="display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #e2e8f0; color: #475569;">
+            <span>عدد البنود المرتجعة:</span>
+            <span class="font-mono font-bold">${rawItems.length}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #e2e8f0; color: #475569;">
+            <span>إجمالي قطع / أمتار الرد:</span>
+            <span class="font-mono font-bold">${totalQty}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #e2e8f0; color: #475569;">
+            <span>المعالجة المالية:</span>
+            <span style="font-weight: bold; color: #1F3A5F;">${escapeHtml(refundMethod)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: #b91c1c; color: #ffffff; font-weight: bold; font-size: 13px;">
+            <span>إجمالي قيمة المرتجع:</span>
+            <span class="font-mono">${formatCurrency(totalAmount)}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- تواقيع الاعتماد الرسمية -->
+      <div style="margin-top: 32px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; text-align: center; font-size: 11px; font-weight: bold; color: #334155;" class="break-inside-avoid">
+        <div>
+          <div>أمين المخزن (المسلم)</div>
+          <div style="border-bottom: 1px solid #94a3b8; width: 85%; margin: 26px auto 0;"></div>
+        </div>
+        <div>
+          <div>المحاسب المسؤول</div>
+          <div style="border-bottom: 1px solid #94a3b8; width: 85%; margin: 26px auto 0;"></div>
+        </div>
+        <div>
+          <div>المدير المالي</div>
+          <div style="border-bottom: 1px solid #94a3b8; width: 85%; margin: 26px auto 0;"></div>
+        </div>
+        <div>
+          <div>اعتماد الإدارة</div>
+          <div style="border-bottom: 1px solid #94a3b8; width: 85%; margin: 26px auto 0;"></div>
+        </div>
+      </div>
+
+      <!-- توقيع مندوب المورد -->
+      <div style="margin-top: 20px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; background: #fdfdfd;" class="break-inside-avoid">
+        <span style="font-weight: bold; color: #1F3A5F;">استلام مندوب المورد / توقيع المستلم:</span>
+        <div style="display: flex; gap: 24px; color: #64748b;">
+          <span>الاسم: .......................................</span>
+          <span>الرقم القومي: .......................................</span>
+          <span>التوقيع: .......................................</span>
+        </div>
+      </div>
+
+      <!-- Bottom System Stamp -->
+      <div style="margin-top: 20px; padding-top: 8px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 10px; color: #94a3b8;" class="break-inside-avoid">
+        مستند رسمي صادر عن نظام كود سيستمز المتكامل • تم ترحيل أثر المخزون وحساب المورد تلقائياً
       </div>
     </div>
   `;

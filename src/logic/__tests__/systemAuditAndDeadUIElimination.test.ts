@@ -5,7 +5,7 @@ import path from 'path';
 describe('End-to-End System Audit & Dead UI Elimination Suite', () => {
   const rootDir = path.resolve(__dirname, '../../..');
 
-  it('Verifies that all 17 active FormPage components have handleFormKeyDown and navigationGuard', () => {
+  it('Verifies that all active FormPage components (including PurchaseReturnFormPage) have handleFormKeyDown and navigationGuard', () => {
     const modulesDir = path.join(rootDir, 'src', 'modules');
     const formFiles: string[] = [];
 
@@ -22,7 +22,7 @@ describe('End-to-End System Audit & Dead UI Elimination Suite', () => {
     }
 
     findFormPages(modulesDir);
-    expect(formFiles.length).toBe(17);
+    expect(formFiles.length).toBe(18);
 
     for (const f of formFiles) {
       const content = fs.readFileSync(f, 'utf8');

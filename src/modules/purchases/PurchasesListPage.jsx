@@ -14,7 +14,8 @@ import {
   FileText,
   Trash2,
   Printer,
-  Edit
+  Edit,
+  RotateCcw
 } from 'lucide-react';
 import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
@@ -150,6 +151,15 @@ export default function PurchasesListPage({ onNotify, onNavigate }) {
           >
             <Download className="w-4 h-4 text-slate-500" />
             <span>تصدير إكسيل</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { window.location.hash = '#/returns/purchase-new'; }}
+            className="px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>مرتجع مشتريات</span>
           </button>
 
           <button

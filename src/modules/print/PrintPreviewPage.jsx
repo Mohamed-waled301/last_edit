@@ -23,7 +23,7 @@ import { api } from '../../services/api';
 import db from '../../data/db';
 import { salesRepo, suppliersRepo, partiesRepo, manufacturingRepo, itemsRepo, reportsRepo } from '../../data';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
-import { generatePurchaseInvoiceHtml, generateSalesInvoiceHtml, generateCutOrderHtml, DEFAULT_CUT_ORDER_PRINT_OPTIONS } from './invoicePrintTemplates';
+import { generatePurchaseInvoiceHtml, generatePurchaseReturnHtml, generateSalesInvoiceHtml, generateCutOrderHtml, DEFAULT_CUT_ORDER_PRINT_OPTIONS } from './invoicePrintTemplates';
 import { calculateStatementSummaryCards } from '../../logic/statementSummaryCards';
 import { computeCustomerReceivables, computeSupplierDebts } from '../../logic/dashboardMetrics';
 
@@ -333,6 +333,30 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
           if (!found) {
             setDocumentData(null);
             setLoadError(docId ? `لم يتم العثور على فاتورة المبيعات برقم / كود: ${docId}` : 'لم يتم تحديد رقم فاتورة المبيعات للطباعة.');
+          } else {
+            setDocumentData(found);
+          }
+        } else if (docType === 'purchase_return' || docType === 'supplier_return') {
+          let found = null;
+          if (docId) {
+            try {
+              found = await suppliersRepo.getSupplierReturnById(docId);
+            } catch {}
+            if (!found && db.supplier_returns) {
+              try {
+                found = (await db.supplier_returns.get(docId)) ||
+                        (await db.supplier_returns.where('return_number').equals(docId).first());
+                if (found && found.supplier_id) {
+                  const sup = (db.suppliers ? await db.suppliers.get(found.supplier_id) : null) ||
+                              (db.parties ? await db.parties.get(found.supplier_id) : null);
+                  if (sup) found.supplier = sup;
+                }
+              } catch {}
+            }
+          }
+          if (!found) {
+            setDocumentData(null);
+            setLoadError(docId ? `لم يتم العثور على إذن مرتجع المشتريات برقم: ${docId}` : 'لم يتم تحديد رقم إذن المرتجع للطباعة.');
           } else {
             setDocumentData(found);
           }
@@ -1071,7 +1095,7 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
 
     try {
       const html = getDocumentHtml();
-      const defaultFilename = `${docType}-${documentData?.invoice_number || documentData?.code || docId || 'document'}.pdf`;
+      const defaultFilename = `${docType}-${documentData?.return_number || documentData?.invoice_number || documentData?.code || docId || 'document'}.pdf`;
 
       if (typeof window !== 'undefined' && window.electronAPI?.savePdf) {
         const res = await window.electronAPI.savePdf({
@@ -1122,6 +1146,25 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     );
     const companyLogo = hasValidLogo ? settings.company_logo : '';
     const isThermal = paperSize === '80mm';
+
+    // 0.A) Supplier Purchase Return Voucher (A4 Official and 80mm Thermal)
+    if (docType === 'purchase_return' || docType === 'supplier_return') {
+      const retDoc = documentData;
+      if (!retDoc) {
+        return (
+          <div className="p-8 text-center text-slate-500 font-bold">
+            لم يتم العثور على إذن مرتجع المشتريات المطلوب.
+          </div>
+        );
+      }
+      return (
+        <div
+          dangerouslySetInnerHTML={{
+            __html: generatePurchaseReturnHtml(retDoc, settings, paperSize)
+          }}
+        />
+      );
+    }
 
     // 0. Purchase Invoice Rendering (Both 80mm Thermal and A4 Official)
     if (docType === 'purchase_invoice' || docType === 'purchase_order' || docType === 'purchase_invoice_thermal') {
