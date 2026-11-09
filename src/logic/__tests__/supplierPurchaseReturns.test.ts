@@ -399,4 +399,51 @@ describe('Supplier / Purchase Returns Module (مرتجعات المشتريات 
 
     expect(content).not.toMatch(/\bplaceholder\s*=/i);
   });
+
+  // -------------------------------------------------------------
+  // Test 8: Return Voucher Print Preview Back Navigation to Dashboard
+  // -------------------------------------------------------------
+  it('8. Verifies that issuing return receipt redirects to print preview with returnUrl=dashboard and back returns to dashboard', () => {
+    const formPath = path.resolve(__dirname, '../../modules/returns/PurchaseReturnFormPage.jsx');
+    const appPath = path.resolve(__dirname, '../../App.jsx');
+    const printPath = path.resolve(__dirname, '../../modules/print/PrintPreviewPage.jsx');
+
+    const formContent = fs.readFileSync(formPath, 'utf8');
+    const appContent = fs.readFileSync(appPath, 'utf8');
+    const printContent = fs.readFileSync(printPath, 'utf8');
+
+    // 1. Form routes to print preview with returnUrl=dashboard
+    expect(formContent).toContain('type=purchase_return');
+    expect(formContent).toContain('returnUrl=dashboard');
+
+    // 2. App.jsx routes returnUrl to dashboard or fallbacks to dashboard for purchase_return
+    expect(appContent).toContain("docType === 'purchase_return' || docType === 'supplier_return'");
+    expect(appContent).toContain("navigateTo('dashboard')");
+
+    // 3. PrintPreviewPage handleBack respects dashboard return
+    expect(printContent).toContain("docType === 'purchase_return' || docType === 'supplier_return'");
+    expect(printContent).toContain("window.location.hash = '#/dashboard'");
+  });
+
+  // -------------------------------------------------------------
+  // Test 9: Returns List Page Dual Interactive Selection Cards & Direct Buttons
+  // -------------------------------------------------------------
+  it('9. Verifies SalesReturnsListPage has dual interactive selection cards and direct action buttons for both types', () => {
+    const listPath = path.resolve(__dirname, '../../modules/returns/SalesReturnsListPage.jsx');
+    const content = fs.readFileSync(listPath, 'utf8');
+
+    // Both action buttons present side by side
+    expect(content).toContain('+ تسجيل مرتجع مشتريات (مورد)');
+    expect(content).toContain('+ تسجيل مرتجع مبيعات (عميل)');
+
+    // Interactive Selection Cards present
+    expect(content).toContain('سجل مرتجعات المشتريات (للموردين والورش)');
+    expect(content).toContain('سجل مرتجعات المبيعات (للعملاء)');
+    expect(content).toContain('القسم المعروض');
+    expect(content).toContain('totalSupplierAmount');
+    expect(content).toContain('totalSalesAmount');
+
+    // Print button includes returnUrl=returns
+    expect(content).toContain('returnUrl=returns');
+  });
 });

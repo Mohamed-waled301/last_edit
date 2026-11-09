@@ -430,9 +430,9 @@ export default function PurchaseReturnFormPage({ onBack, onNotify }) {
         onNotify(`تم إصدار إذن مرتجع المشتريات رقم ${res.returnNumber || res.returnId} وتحديث المخزون بنجاح`);
       }
 
-      // Navigate to print preview of the return voucher
+      // Navigate to print preview of the return voucher with explicit return to dashboard
       const returnDocId = res.returnId || res.returnNumber;
-      window.location.hash = `#/print-preview?type=purchase_return&id=${returnDocId}`;
+      window.location.hash = `#/print-preview?type=purchase_return&id=${returnDocId}&returnUrl=dashboard`;
     } catch (err) {
       alert(err.message || 'فشل في حفظ إذن المرتجع');
     } finally {

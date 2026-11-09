@@ -767,7 +767,9 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
     if (onBack) {
       onBack();
     } else if (returnUrl) {
-      window.location.hash = returnUrl;
+      window.location.hash = returnUrl.startsWith('#') ? returnUrl : `#/${returnUrl}`;
+    } else if (docType === 'purchase_return' || docType === 'supplier_return') {
+      window.location.hash = '#/dashboard';
     } else {
       window.history.back();
     }

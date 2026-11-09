@@ -543,8 +543,11 @@ export default function App() {
             searchParams={route.queryParams}
             onBack={() => {
               const returnUrl = route.queryParams.get('returnUrl');
+              const docType = route.queryParams.get('type');
               if (returnUrl) {
                 navigateTo(returnUrl.replace(/^#\/?/, ''));
+              } else if (docType === 'purchase_return' || docType === 'supplier_return') {
+                navigateTo('dashboard');
               } else {
                 window.history.back();
               }
