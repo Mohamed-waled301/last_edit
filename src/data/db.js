@@ -97,6 +97,9 @@ export class WorkshopDatabase extends Dexie {
     this.version(10).stores({
       supplier_activity_types: 'id, name, code, is_default, is_active, created_at',
     });
+    this.version(11).stores({
+      supplier_returns: 'id, return_number, supplier_id, invoice_id, po_id, return_date, created_at',
+    });
   }
 }
 

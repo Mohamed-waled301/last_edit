@@ -190,15 +190,29 @@ export const suppliersRepo = {
 
     for (const ret of returns) {
       if (ret.status !== 'cancelled') {
+        const isCashRefund = ret.refund_method === 'cash_refund' || ret.refund_status === 'cash_refund';
+        const returnAmt = Number(ret.refund_amount ?? ret.total_amount) || 0;
         transactions.push({
           date: ret.return_date,
-          type: 'مرتجع خامات',
+          type: ret.items && ret.items.length > 1 ? 'مرتجع مشتريات (متعدد البنود)' : (ret.type || 'مرتجع مشتريات'),
           reference: ret.return_number,
-          description: ret.reason || 'رد بضاعة للمورد',
-          debit: Number(ret.refund_amount ?? ret.total_amount) || 0,
+          description: ret.reason ? `مرتجع مشتريات: ${ret.reason}` : 'رد بضاعة للمورد',
+          debit: returnAmt,
           credit: 0,
           raw_date: ret.created_at || ret.return_date,
         });
+
+        if (isCashRefund) {
+          transactions.push({
+            date: ret.return_date,
+            type: 'استرداد نقدي فوري',
+            reference: `CASH-${ret.return_number}`,
+            description: `استرداد نقدي فوري بالخزينة لمرتجع ${ret.return_number}`,
+            debit: 0,
+            credit: returnAmt,
+            raw_date: ret.created_at || ret.return_date,
+          });
+        }
       }
     }
 
@@ -1877,16 +1891,150 @@ export const suppliersRepo = {
     return { success: true, paymentId, paymentNumber };
   },
 
+  async getNextSupplierReturnNumber(year = new Date().getFullYear()) {
+    const returns = db.supplier_returns ? await db.supplier_returns.toArray() : [];
+    const prefix = `RET-PUR-${year}-`;
+    const yearReturns = returns.filter(r => (r.return_number || '').startsWith(prefix) || (r.id || '').startsWith(prefix));
+    const nextSeq = yearReturns.length + 1;
+    return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+  },
+
+  async getSupplierReturns() {
+    if (!db.supplier_returns) return [];
+    const list = await db.supplier_returns.reverse().sortBy('created_at');
+    const sups = db.suppliers ? await db.suppliers.toArray() : [];
+    const supMap = new Map(sups.map(s => [s.id, s]));
+    const parties = db.parties ? await db.parties.toArray() : [];
+    const partyMap = new Map(parties.map(p => [p.id, p]));
+
+    return list.map(r => {
+      const sup = supMap.get(r.supplier_id) || partyMap.get(r.supplier_id) || {};
+      return {
+        ...r,
+        supplier_name: sup.name || r.supplier_id,
+        supplier_phone: sup.phone || '',
+        supplier_code: sup.code || '',
+      };
+    });
+  },
+
+  async getSupplierReturnById(id) {
+    if (!id || !db.supplier_returns) return null;
+    const ret = (await db.supplier_returns.get(id)) ||
+                (await db.supplier_returns.where('return_number').equals(id).first());
+    if (!ret) return null;
+
+    const sup = (db.suppliers ? await db.suppliers.get(ret.supplier_id) : null) ||
+                (db.parties ? await db.parties.get(ret.supplier_id) : null) || {};
+    let invoice = null;
+    if (ret.invoice_id) {
+      invoice = (db.supplier_invoices ? await db.supplier_invoices.get(ret.invoice_id) : null) ||
+                (db.purchase_orders ? await db.purchase_orders.get(ret.invoice_id) : null) ||
+                (db.supplier_invoices ? await db.supplier_invoices.where('invoice_number').equals(ret.invoice_id).first() : null) ||
+                (db.purchase_orders ? await db.purchase_orders.where('po_number').equals(ret.invoice_id).first() : null);
+    }
+
+    return {
+      ...ret,
+      supplier: sup,
+      supplier_name: sup.name || ret.supplier_id,
+      supplier_phone: sup.phone || '',
+      supplier_code: sup.code || '',
+      invoice: invoice || null,
+      invoice_number: invoice?.invoice_number || invoice?.po_number || ret.invoice_id || ''
+    };
+  },
+
   async createSupplierReturn(data, userId = 'usr-storekeeper') {
-    const { supplier_id, material_id, quantity, unit_cost, total_amount, refund_status, return_date, reason } = data;
+    const {
+      supplier_id,
+      supplierId,
+      material_id,
+      quantity,
+      unit_cost,
+      unit_price,
+      total_amount,
+      refund_amount,
+      refund_status,
+      refund_method,
+      account_id,
+      return_date,
+      reason,
+      notes,
+      invoice_id,
+      po_id,
+      items
+    } = data;
+
+    const targetSupplierId = supplier_id || supplierId;
+    if (!targetSupplierId) throw new Error('يرجى تحديد المورد');
     if (return_date) validateNotPastDate(return_date, 'تاريخ مرتجع المورد');
-    const returnQty = Math.max(0, Number(quantity) || 0);
-    const returnUnitCost = Math.max(0, Number(unit_cost) || 0);
-    const returnTotal = Number((returnQty * returnUnitCost).toFixed(2));
-    const returnId = `sret-${Date.now()}`;
-    const returnNumber = `RET-SUP-${Date.now().toString().slice(-4)}`;
+
     const now = new Date().toISOString();
     const returnDate = return_date || now.split('T')[0];
+    const actualRefundMethod = refund_method || refund_status || 'deduct_balance';
+    const returnNumber = data.return_number || (await this.getNextSupplierReturnNumber());
+    const returnId = data.id || `ret-pur-${Date.now()}`;
+
+    // Normalize items matrix
+    let itemsToProcess = [];
+    if (Array.isArray(items) && items.length > 0) {
+      itemsToProcess = items.map((it, idx) => {
+        const itmId = it.item_id || it.material_id || it.id;
+        const q = Math.max(0, Number(it.quantity || it.quantity_returned) || 0);
+        const p = Math.max(0, Number(it.unit_price ?? it.unit_cost) || 0);
+        return {
+          id: `line-${idx + 1}`,
+          item_id: itmId,
+          material_id: itmId,
+          item_name: it.item_name || it.name || '',
+          item_code: it.item_code || it.code || '',
+          color: it.color || '',
+          size: it.size || '',
+          unit: it.unit || 'قطعة',
+          quantity: q,
+          unit_price: p,
+          unit_cost: p,
+          total_price: Number((q * p).toFixed(2)),
+          reason: it.reason || reason || 'مرتجع مشتريات'
+        };
+      });
+    } else if (material_id) {
+      const q = Math.max(0, Number(quantity) || 0);
+      const p = Math.max(0, Number(unit_cost ?? unit_price) || 0);
+      itemsToProcess = [{
+        id: 'line-1',
+        item_id: material_id,
+        material_id: material_id,
+        item_name: '',
+        item_code: '',
+        color: '',
+        size: '',
+        unit: 'قطعة',
+        quantity: q,
+        unit_price: p,
+        unit_cost: p,
+        total_price: Number((q * p).toFixed(2)),
+        reason: reason || 'مرتجع مشتريات'
+      }];
+    }
+
+    if (itemsToProcess.length === 0) {
+      throw new Error('يرجى إضافة صنف واحد على الأقل في إذن المرتجع');
+    }
+
+    // Check quantities
+    for (const it of itemsToProcess) {
+      if (it.quantity <= 0) {
+        throw new Error(`الكمية المرتجعة للصنف "${it.item_name || it.item_id}" يجب أن تكون أكبر من صفر`);
+      }
+    }
+
+    const calculatedTotal = Number(itemsToProcess.reduce((sum, it) => sum + it.total_price, 0).toFixed(2));
+    const returnTotal = Number(total_amount ?? refund_amount ?? calculatedTotal);
+    const totalQty = Number(itemsToProcess.reduce((sum, it) => sum + it.quantity, 0).toFixed(3));
+
+    let returnDoc = null;
 
     await db.transaction('rw', [
       db.supplier_returns,
@@ -1896,70 +2044,95 @@ export const suppliersRepo = {
       db.treasury_accounts,
       db.cash_transactions
     ], async () => {
-      const itm = await db.items.get(material_id);
-      const mat = await db.materials.get(material_id);
+      // 1. Validate available stock and decrease inventory for each item
+      for (const it of itemsToProcess) {
+        const itm = await db.items.get(it.item_id);
+        const mat = await db.materials.get(it.item_id);
 
-      const oldStock = itm ? Number(itm.current_stock) || 0 : (mat ? Number(mat.current_stock) || 0 : 0);
-      if (oldStock < returnQty) {
-        throw new Error(`الرصيد المتاح بالمخزن (${oldStock}) أقل من الكمية المراد ردها للمورد (${returnQty})`);
+        const currentStock = itm ? Number(itm.current_stock) || 0 : (mat ? Number(mat.current_stock) || 0 : 0);
+        if (currentStock < it.quantity) {
+          const itmDisplayName = it.item_name || (itm?.name || mat?.name || it.item_id);
+          throw new Error(`الرصيد المتاح بالمخزن للصنف "${itmDisplayName}" (${currentStock}) أقل من الكمية المراد ردها للمورد (${it.quantity})`);
+        }
+
+        const newStock = Number((currentStock - it.quantity).toFixed(3));
+        if (itm) {
+          await db.items.update(it.item_id, { current_stock: newStock });
+        }
+        if (mat) {
+          await db.materials.update(it.item_id, { current_stock: newStock });
+        }
+
+        // Fill item names/codes if missing
+        if (!it.item_name) it.item_name = itm?.name || mat?.name || '';
+        if (!it.item_code) it.item_code = itm?.code || mat?.code || '';
+        if (!it.unit) it.unit = itm?.unit || mat?.unit || 'قطعة';
+
+        // 2. Record stock movement: direction 'out'
+        await db.stock_movements.add({
+          id: `sm-pret-${Date.now()}-${Math.floor(Math.random() * 899 + 100)}`,
+          item_id: it.item_id,
+          material_id: it.item_id,
+          location_id: 'loc-main',
+          movement_type: 'purchase_return',
+          direction: 'out',
+          quantity: it.quantity,
+          quantity_change: -it.quantity,
+          unit_cost: it.unit_price,
+          new_balance: newStock,
+          document_id: returnId,
+          reference_type: 'SUPPLIER_RETURN',
+          reference_id: returnId,
+          date: returnDate,
+          movement_date: returnDate,
+          notes: `مرتجع للمورد إذن ${returnNumber} - ${it.item_name || ''}`.trim(),
+          created_by: userId,
+          created_at: now,
+        });
       }
 
-      const newStock = Number((oldStock - returnQty).toFixed(3));
-      if (itm) {
-        await db.items.update(material_id, { current_stock: newStock });
-      }
-      if (mat) {
-        await db.materials.update(material_id, { current_stock: newStock });
-      }
-
-      await db.supplier_returns.add({
+      // 3. Save supplier return document
+      returnDoc = {
         id: returnId,
         return_number: returnNumber,
-        supplier_id,
-        material_id,
-        quantity: returnQty,
-        unit_cost: returnUnitCost,
+        supplier_id: targetSupplierId,
+        invoice_id: invoice_id || po_id || null,
+        po_id: po_id || invoice_id || null,
+        material_id: itemsToProcess[0]?.item_id,
+        quantity: totalQty,
+        unit_cost: itemsToProcess.length === 1 ? itemsToProcess[0].unit_price : 0,
         total_amount: returnTotal,
-        refund_status: refund_status || 'deduct_balance',
+        refund_amount: returnTotal,
+        refund_status: actualRefundMethod,
+        refund_method: actualRefundMethod,
+        account_id: account_id || null,
         return_date: returnDate,
-        reason: reason || 'مرتجع خامات للمورد',
+        reason: reason || 'مرتجع مشتريات للمورد',
+        notes: notes || '',
+        items: itemsToProcess,
+        status: 'completed',
         created_by: userId,
         created_at: now,
-      });
+      };
 
-      // Stock movement: direction 'out'
-      await db.stock_movements.add({
-        id: `sm-${Date.now()}`,
-        item_id: material_id,
-        material_id,
-        location_id: 'loc-main',
-        movement_type: 'purchase_return',
-        direction: 'out',
-        quantity: returnQty,
-        quantity_change: -returnQty,
-        unit_cost: returnUnitCost,
-        new_balance: newStock,
-        document_id: returnId,
-        reference_type: 'SUPPLIER_RETURN',
-        reference_id: returnId,
-        date: returnDate,
-        movement_date: returnDate,
-        notes: `مرتجع للمورد إذن ${returnNumber}`,
-        created_by: userId,
-        created_at: now,
-      });
+      await db.supplier_returns.add(returnDoc);
 
-      if (refund_status === 'cash_refund') {
-        const primaryAcc = (await db.treasury_accounts.where('account_type').equals('treasury').first()) || (await db.treasury_accounts.toCollection().first());
+      // 4. Handle immediate cash refund into treasury
+      if (actualRefundMethod === 'cash_refund' && returnTotal > 0) {
+        let primaryAcc = account_id ? await db.treasury_accounts.get(account_id) : null;
+        if (!primaryAcc) {
+          primaryAcc = (await db.treasury_accounts.where('account_type').equals('treasury').first()) ||
+                       (await db.treasury_accounts.toCollection().first());
+        }
         if (primaryAcc) {
           const newAccBal = Number(((Number(primaryAcc.current_balance) || 0) + returnTotal).toFixed(2));
           await db.treasury_accounts.update(primaryAcc.id, { current_balance: newAccBal });
           await db.cash_transactions.add({
-            id: `tx-${Date.now()}`,
+            id: `tx-${Date.now()}-${Math.floor(Math.random() * 899 + 100)}`,
             tx_number: `TXN-${Date.now().toString().slice(-4)}`,
             account_id: primaryAcc.id,
             tx_type: 'inflow',
-            category: 'other',
+            category: 'purchase_return',
             amount: returnTotal,
             balance_after: newAccBal,
             reference_type: 'supplier_returns',
@@ -1973,7 +2146,7 @@ export const suppliersRepo = {
     });
 
     await auditRepo.log(userId, 'CREATE_SUPPLIER_RETURN', 'supplier_returns', returnId, null, data);
-    return { success: true, returnId, returnNumber };
+    return { success: true, returnId, returnNumber, returnDoc, message: 'تم حفظ وإصدار إذن مرتجع المشتريات وخصم المخزون بنجاح' };
   }
 };
 

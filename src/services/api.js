@@ -587,8 +587,20 @@ export const api = {
   },
   createSupplierReturn: async (data) => {
     const res = await suppliersRepo.createSupplierReturn(data, currentUserId);
-    syncPush('supplier_returns', 'insert', res);
-    return { success: true, data: res, ...res, message: 'تم تسجيل مرتجع الخامات بنجاح' };
+    syncPush('supplier_returns', 'insert', res.returnDoc || res);
+    return { success: true, data: res, ...res, message: res.message || 'تم تسجيل مرتجع المشتريات بنجاح' };
+  },
+  getSupplierReturns: async () => {
+    const list = await suppliersRepo.getSupplierReturns();
+    return { success: true, data: list, returns: list };
+  },
+  getSupplierReturnById: async (id) => {
+    const ret = await suppliersRepo.getSupplierReturnById(id);
+    return { success: true, data: ret, return_document: ret };
+  },
+  getNextSupplierReturnNumber: async () => {
+    const num = await suppliersRepo.getNextSupplierReturnNumber();
+    return { success: true, return_number: num };
   },
 
   // Inventory & Raw Materials
