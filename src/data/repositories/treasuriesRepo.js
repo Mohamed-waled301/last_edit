@@ -80,10 +80,7 @@ export const treasuriesRepo = {
     if (fromAcc.id === mainAcc.id) throw new Error('لا يمكن التحويل من الخزينة الرئيسية إلى نفسها');
 
     const fromBal = Number(fromAcc.current_balance) || 0;
-    if (fromBal < numAmount) {
-      throw new Error(`الرصيد المتاح في (${fromAcc.name}) هو ${fromBal} ج.م ولا يكفي لتحويل ${numAmount} ج.م`);
-    }
-
+    // Outlet treasury balance is allowed to go negative on transfers to main (never blocked)
     const now = new Date().toISOString();
     const newFromBal = Number((fromBal - numAmount).toFixed(2));
     const newMainBal = Number(((Number(mainAcc.current_balance) || 0) + numAmount).toFixed(2));

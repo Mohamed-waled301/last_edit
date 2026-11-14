@@ -63,17 +63,15 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
   const selectedFromTreasury = outletTreasuries.find(t => String(t.id) === String(form.from_treasury_id));
   const availableBal = Number(selectedFromTreasury?.current_balance) || 0;
   const numAmount = Number(form.amount) || 0;
-  const isBalanceInsufficient = numAmount > availableBal;
+  const projectedFromBal = Number((availableBal - numAmount).toFixed(2));
 
   const validate = () => {
     const errs = {};
     if (!form.from_treasury_id) errs.from_treasury_id = 'يرجى اختيار خزينة المنفذ المصدر';
     const amtErr = Validators.positiveNumber(form.amount, 'مبلغ التوريد');
     if (amtErr) errs.amount = amtErr;
-    if (isBalanceInsufficient) {
-      errs.amount = `مبلغ التحويل (${numAmount} ج.م) أكبر من الرصيد المتاح بالخزينة (${availableBal} ج.م)`;
-    }
 
+    // Zero and negative balances are unconditionally allowed
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -109,7 +107,7 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
     }
   };
 
-  const isFormValid = Boolean(form.from_treasury_id && numAmount > 0 && !isBalanceInsufficient);
+  const isFormValid = Boolean(form.from_treasury_id && numAmount > 0);
 
   return (
     <PageContainer
@@ -125,6 +123,21 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
       isSaving={saving}
       saveDisabled={!isFormValid || saving}
       saveText="تنفيذ التوريد النقدي"
+      extraBottomContent={
+        <div className="flex items-center gap-4 text-xs font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200">
+          <span>الخزينة المصدر: <span className="font-bold text-[#1F3A5F]">{selectedFromTreasury?.name || '-'}</span></span>
+          <span className="text-gray-300">|</span>
+          <span>رصيدها الحالي: <span className={`font-mono ${availableBal < 0 ? 'text-red-600 font-bold' : 'text-green-700'}`}>{formatCurrency(availableBal)}</span></span>
+          <span className="text-gray-300">|</span>
+          <span>المبلغ المحول: <span className="font-mono text-base font-bold text-blue-700">{formatCurrency(numAmount)}</span></span>
+          {form.from_treasury_id && numAmount > 0 && (
+            <>
+              <span className="text-gray-300">|</span>
+              <span>الرصيد بعد التوريد: <span className={`font-mono font-bold ${projectedFromBal < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{formatCurrency(projectedFromBal)}</span></span>
+            </>
+          )}
+        </div>
+      }
     >
       <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} onKeyDown={handleFormKeyDown} className="space-y-6">
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-xs space-y-4">
@@ -155,7 +168,8 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
               <FieldError error={errors.from_treasury_id} />
               {selectedFromTreasury && (
                 <span className="text-xs text-gray-500 mt-1 block font-semibold">
-                  الرصيد المتاح للتحويل: <strong className="text-green-700 font-mono">{formatCurrency(availableBal)}</strong>
+                  الرصيد الحالي: <strong className={`font-mono ${availableBal < 0 ? 'text-red-600' : 'text-green-700'}`}>{formatCurrency(availableBal)}</strong>
+                  <span className="text-gray-400 font-normal mr-1">(متاح التوريد حتى مع رصيد صفر أو بالسالب)</span>
                 </span>
               )}
             </div>
@@ -180,9 +194,7 @@ export default function OutletTransferFormPage({ onSaved, onNotify }) {
                 value={form.amount}
                 onChange={(val) => setForm(prev => ({ ...prev, amount: val }))}
                 aria-label="مبلغ التوريد"
-                className={`w-full px-3 py-2 border rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 ${
-                  isBalanceInsufficient ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-300 focus:ring-[#1F3A5F]'
-                }`}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
               <FieldError error={errors.amount} />

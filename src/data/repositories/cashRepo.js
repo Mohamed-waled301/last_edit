@@ -113,10 +113,7 @@ export const cashRepo = {
       if (!fromAcc || !toAcc) throw new Error('أحد الحسابات المحددة غير موجود');
 
       const fromBal = Number(fromAcc.current_balance) || 0;
-      if (fromBal < numAmount) {
-        throw new Error(`الرصيد المتاح في (${fromAcc.name}) هو ${fromBal} ج.م ولا يكفي لتحويل ${numAmount} ج.م`);
-      }
-
+      // Treasury balance is allowed to go negative/overdraft on transfers (never blocked)
       const newFromBal = Number((fromBal - numAmount).toFixed(2));
       const newToBal = Number(((Number(toAcc.current_balance) || 0) + numAmount).toFixed(2));
 

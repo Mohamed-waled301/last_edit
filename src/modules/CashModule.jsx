@@ -20,6 +20,7 @@ import { api } from '../services/api';
 import { formatCurrency, formatNumber, formatDate, getTodayDateString } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
 import { FieldError, validators } from '../utils/validation';
+import { MoneyInput } from '../components/MoneyInput';
 
 export default function CashModule({ onBack, onNotify }) {
   const [activeTab, setActiveTab] = useState('disbursements'); // 'disbursements' | 'treasuries' | 'transfer' | 'closing' | 'transactions'
@@ -625,14 +626,11 @@ export default function CashModule({ onBack, onNotify }) {
 
               <div>
                 <label className="block font-bold text-gray-700 mb-1">المبلغ المراد صرفه (جنيه) *</label>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="any"
-                  required
+                <MoneyInput
                   value={disburseForm.amount}
-                  onChange={e => setDisburseForm({ ...disburseForm, amount: e.target.value })}
+                  onChange={val => setDisburseForm({ ...disburseForm, amount: val })}
                   className="w-full h-10 rounded border border-gray-300 px-3 font-bold text-red-600 text-sm focus:border-[#1F3A5F] focus:outline-none"
+                  required
                 />
                 {!validators.positiveNumber(disburseForm.amount) && <FieldError error="أدخل مبلغاً أكبر من الصفر" />}
               </div>
@@ -735,14 +733,11 @@ export default function CashModule({ onBack, onNotify }) {
 
               <div>
                 <label className="block font-bold text-gray-700 mb-1">المبلغ المحول (جنيه) *</label>
-                <input
-                  type="number"
-                  min="1"
-                  step="any"
-                  required
+                <MoneyInput
                   value={outletTransferForm.amount}
-                  onChange={e => setOutletTransferForm({ ...outletTransferForm, amount: e.target.value })}
+                  onChange={val => setOutletTransferForm({ ...outletTransferForm, amount: val })}
                   className="w-full h-10 rounded border border-gray-300 px-3 font-bold text-green-700 text-sm"
+                  required
                 />
               </div>
 

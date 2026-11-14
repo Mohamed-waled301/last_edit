@@ -4,6 +4,7 @@ import PageContainer from '../../components/PageContainer';
 import { api } from '../../services/api';
 import { formatCurrency, getTodayDateString } from '../../utils/formatters';
 import { Validators, FieldError } from '../../utils/validation';
+import { MoneyInput } from '../../components/MoneyInput';
 import { handleFormKeyDown } from '../../utils/formNavigation';
 import { navigationGuard } from '../../utils/navigationGuard';
 
@@ -246,12 +247,10 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 مبلغ المصروف (ج.م) <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
+              <MoneyInput
                 value={form.amount}
-                onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))}
+                onChange={(val) => setForm(prev => ({ ...prev, amount: val }))}
+                aria-label="مبلغ المصروف"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />

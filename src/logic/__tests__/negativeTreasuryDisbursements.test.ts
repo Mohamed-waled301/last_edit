@@ -162,4 +162,60 @@ describe('Allow Cash and Expense Disbursements on Zero or Negative Treasury Bala
     expect(disburseLog).toBeDefined();
     expect(disburseLog.user_id).toBe('usr-manager');
   });
+
+  it('6. Successfully allows cash transfer between accounts when from_account balance is zero or negative', async () => {
+    await db.treasury_accounts.put({
+      id: 'acc-sub',
+      name: 'خزينة فرعية',
+      account_type: 'treasury',
+      outlet_id: null,
+      is_main: 0,
+      current_balance: 100,
+      bank_account_number: '',
+      bank_name: '',
+      is_active: 1,
+      created_at: new Date().toISOString(),
+    });
+
+    // acc-main is at 0; transfer 250 to acc-sub
+    const res = await cashRepo.transfer({
+      from_account_id: 'acc-main',
+      to_account_id: 'acc-sub',
+      amount: 250,
+      notes: 'تحويل سيولة داخلية',
+    });
+
+    expect(res.success).toBe(true);
+    const mainAfter = await db.treasury_accounts.get('acc-main');
+    const subAfter = await db.treasury_accounts.get('acc-sub');
+    expect(mainAfter.current_balance).toBe(-250);
+    expect(subAfter.current_balance).toBe(350);
+  });
+
+  it('7. Successfully allows outlet transfer to main treasury via treasuriesRepo when outlet balance is zero or negative', async () => {
+    const { treasuriesRepo } = await import('../../data/repositories/treasuriesRepo');
+    await db.treasury_accounts.put({
+      id: 'acc-outlet-1',
+      name: 'خزينة معرض فرع 1',
+      account_type: 'treasury',
+      outlet_id: 'outlet-1',
+      is_main: 0,
+      current_balance: 0,
+      bank_account_number: '',
+      bank_name: '',
+      is_active: 1,
+      created_at: new Date().toISOString(),
+    });
+
+    const res = await treasuriesRepo.transferOutletToMain({
+      from_treasury_id: 'acc-outlet-1',
+      amount: 500,
+      transfer_date: getTodayDateString(),
+      notes: 'توريد إيراد المعرض حتى مع رصيد صفري',
+    });
+
+    expect(res.success).toBe(true);
+    const outletAcc = await db.treasury_accounts.get('acc-outlet-1');
+    expect(outletAcc.current_balance).toBe(-500);
+  });
 });
