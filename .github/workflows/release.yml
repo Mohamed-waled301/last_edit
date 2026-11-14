@@ -227,11 +227,15 @@ jobs:
 
       # Publish to Public Releases Repo via GitHub CLI if configured
       - name: Publish Release to Public Repository
-        if: ${{ github.event.inputs.dry_run != 'true' && inputs.dry_run != true && secrets.RELEASES_REPO_TOKEN != '' }}
+        if: ${{ github.event.inputs.dry_run != 'true' && inputs.dry_run != true }}
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
         shell: bash
         run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "RELEASES_REPO_TOKEN not configured; skipping public repo publish"
+            exit 0
+          fi
           TARGET_REPO="Mohamed-waled301/code-systems-releases"
           TAG="${{ steps.target.outputs.tag_name }}"
           EDITION="${{ steps.target.outputs.selected_edition }}"
