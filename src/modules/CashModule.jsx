@@ -648,7 +648,7 @@ export default function CashModule({ onBack, onNotify }) {
                   >
                     {allTreasuriesList.map(t => (
                       <option key={t.id} value={t.id}>
-                        {t.name} (المتاح: {formatCurrency(t.current_balance || 0)})
+                        {t.name} [الرصيد: {formatCurrency(t.current_balance || 0)}]
                       </option>
                     ))}
                   </select>

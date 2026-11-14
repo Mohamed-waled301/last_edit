@@ -90,7 +90,7 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
   const selectedTreasury = treasuries.find(t => String(t.id) === String(form.account_id));
   const availableBal = Number(selectedTreasury?.current_balance) || 0;
   const numAmount = Number(form.amount) || 0;
-  const isBalanceInsufficient = numAmount > availableBal;
+  const projectedTreasuryBal = Number((availableBal - numAmount).toFixed(2));
 
   const validate = () => {
     const errs = {};
@@ -98,10 +98,8 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
     if (!form.account_id) errs.account_id = 'يرجى اختيار الخزينة المنصرف منها';
     const amtErr = Validators.positiveNumber(form.amount, 'مبلغ الصرف');
     if (amtErr) errs.amount = amtErr;
-    if (isBalanceInsufficient) {
-      errs.amount = `الرصيد المتاح في (${selectedTreasury?.name || 'الخزينة'}) هو ${formatCurrency(availableBal)} ولا يكفي لصرف ${formatCurrency(numAmount)}`;
-    }
 
+    // Zero and negative treasury balances are explicitly allowed without blocking
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -138,7 +136,7 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
     }
   };
 
-  const isFormValid = Boolean(form.expense_code_id && form.account_id && numAmount > 0 && !isBalanceInsufficient);
+  const isFormValid = Boolean(form.expense_code_id && form.account_id && numAmount > 0);
 
   return (
     <PageContainer
@@ -158,9 +156,15 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
         <div className="flex items-center gap-4 text-xs font-bold text-gray-700 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200">
           <span>الخزينة: <span className="font-bold text-[#1F3A5F]">{selectedTreasury?.name || '-'}</span></span>
           <span className="text-gray-300">|</span>
-          <span>الرصيد المتاح: <span className="font-mono text-green-700">{formatCurrency(availableBal)}</span></span>
+          <span>رصيد الخزينة: <span className={`font-mono ${availableBal < 0 ? 'text-red-600 font-bold' : 'text-green-700'}`}>{formatCurrency(availableBal)}</span></span>
           <span className="text-gray-300">|</span>
           <span>المبلغ المطلوب: <span className="font-mono text-base font-bold text-rose-700">{formatCurrency(numAmount)}</span></span>
+          {form.account_id && numAmount > 0 && (
+            <>
+              <span className="text-gray-300">|</span>
+              <span>الرصيد بعد الصرف: <span className={`font-mono font-bold ${projectedTreasuryBal < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{formatCurrency(projectedTreasuryBal)}</span></span>
+            </>
+          )}
         </div>
       }
     >
@@ -208,9 +212,16 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
 
             {/* Source Treasury Selector (Requirement G) */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                الخزينة المنصرف منها <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-gray-700">
+                  الخزينة المنصرف منها <span className="text-red-500">*</span>
+                </label>
+                {selectedTreasury && (
+                  <span className={`text-[11px] font-bold font-mono ${availableBal < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                    رصيد الخزينة: {formatCurrency(availableBal)}
+                  </span>
+                )}
+              </div>
               <select
                 value={form.account_id}
                 onChange={(e) => setForm(prev => ({ ...prev, account_id: e.target.value }))}
@@ -224,6 +235,9 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
                   </option>
                 ))}
               </select>
+              <span className="text-[11px] text-gray-500 mt-1 block">
+                متاح الصرف وسندات الصرف حتى لو كان رصيد الخزينة صفراً أو بالسالب دون أي حظر.
+              </span>
               <FieldError error={errors.account_id} />
             </div>
 
@@ -238,9 +252,7 @@ export default function CashDisbursementFormPage({ onSaved, onNotify }) {
                 step="0.01"
                 value={form.amount}
                 onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))}
-                className={`w-full px-3 py-2 border rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 ${
-                  isBalanceInsufficient ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-300 focus:ring-[#1F3A5F]'
-                }`}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
                 required
               />
               <FieldError error={errors.amount} />

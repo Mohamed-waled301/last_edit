@@ -70,10 +70,8 @@ export const cashRepo = {
       let currentBal = Number(account.current_balance) || 0;
       let newBal = currentBal;
 
+      // Treasury balance is allowed to go negative/overdraft on outflows unconditionally (never blocked)
       if (tx_type === 'outflow') {
-        if (currentBal < numAmount) {
-          throw new Error(`الرصيد المتاح (${currentBal} ج.م) لا يكفي لإتمام عملية الصرف (${numAmount} ج.م)`);
-        }
         newBal = Number((currentBal - numAmount).toFixed(2));
       } else {
         newBal = Number((currentBal + numAmount).toFixed(2));
@@ -180,10 +178,7 @@ export const cashRepo = {
       if (!account) throw new Error('الخزينة المحددة غير موجودة');
 
       const currentBal = Number(account.current_balance) || 0;
-      if (currentBal < numAmount) {
-        throw new Error(`الرصيد المتاح في الخزينة (${currentBal} ج.م) لا يكفي لصرف مبلغ (${numAmount} ج.م)`);
-      }
-
+      // Treasury balance is allowed to go negative/overdraft unconditionally (never blocked)
       const newBal = Number((currentBal - numAmount).toFixed(2));
       await db.treasury_accounts.update(account_id, { current_balance: newBal });
 
