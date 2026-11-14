@@ -9,7 +9,7 @@ describe('Print Preview 100% Arabic Headers, Zero Side-Scroll, and Zero Text Ove
 
   it('verifies package.json version is bumped to 1.2.2 or higher', () => {
     const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    expect(['1.2.2', '1.2.3', '1.2.4']).toContain(pkg.version);
+    expect(['1.2.2', '1.2.3', '1.2.4', '1.2.5']).toContain(pkg.version);
   });
 
   describe('Bug 1: 100% Arabic Localization of Print/PDF Table Headers (ZERO English)', () => {

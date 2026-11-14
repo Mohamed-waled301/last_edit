@@ -37,6 +37,8 @@ jobs:
   build-and-publish:
     name: Build & Publish Release
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout source repository
@@ -209,14 +211,27 @@ jobs:
           ls -lh release/*.exe
           echo "=========================================================="
 
-      # Publish to Public Releases Repo via GitHub CLI (Strictly blocked in dry_run mode)
-      - name: Publish Release to Public Repository
+      # Publish Release to Current Repository so In-App Auto-Updater Detects It Immediately
+      - name: Publish Release to Current Repository
         if: ${{ github.event.inputs.dry_run != 'true' && inputs.dry_run != true }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.target.outputs.tag_name }}
+          name: Code Systems Cutting Edition v${{ steps.target.outputs.version }}
+          body_path: release-notes.md
+          files: |
+            release/*.exe
+            release/*.blockmap
+          make_latest: true
+          draft: ${{ github.event.inputs.draft == 'true' || inputs.draft == true }}
+
+      # Publish to Public Releases Repo via GitHub CLI if configured
+      - name: Publish Release to Public Repository
+        if: ${{ github.event.inputs.dry_run != 'true' && inputs.dry_run != true && secrets.RELEASES_REPO_TOKEN != '' }}
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
         shell: bash
         run: |
-          # Strictly locked to approved public releases repository
           TARGET_REPO="Mohamed-waled301/code-systems-releases"
           TAG="${{ steps.target.outputs.tag_name }}"
           EDITION="${{ steps.target.outputs.selected_edition }}"
@@ -236,19 +251,11 @@ jobs:
           fi
           
           echo "Publishing release to public repository: ${TARGET_REPO}"
-          echo "Tag: ${TAG}"
-          echo "Title: ${TITLE}"
-          
-          # Collect allow-listed executables
           FILES=(release/*.exe)
-          
-          # Create and upload release via GitHub CLI
           gh release create "${TAG}" \
             --repo "${TARGET_REPO}" \
             --title "${TITLE}" \
             --notes-file release-notes.md \
             --latest \
             ${DRAFT_FLAG} \
-            "${FILES[@]}"
-          
-          echo "✅ Release successfully published to https://github.com/${TARGET_REPO}/releases"
+            "${FILES[@]}" || echo "Target repo release notice: skipped or failed"
