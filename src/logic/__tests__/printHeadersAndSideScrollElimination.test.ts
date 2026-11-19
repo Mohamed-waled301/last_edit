@@ -9,7 +9,7 @@ describe('Print Preview 100% Arabic Headers, Zero Side-Scroll, and Zero Text Ove
 
   it('verifies package.json version is bumped to 1.2.2 or higher', () => {
     const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    expect(['1.2.2', '1.2.3', '1.2.4', '1.2.5']).toContain(pkg.version);
+    expect(['1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.2.6']).toContain(pkg.version);
   });
 
   describe('Bug 1: 100% Arabic Localization of Print/PDF Table Headers (ZERO English)', () => {
@@ -66,9 +66,9 @@ describe('Print Preview 100% Arabic Headers, Zero Side-Scroll, and Zero Text Ove
 
   describe('Bug 2: Elimination of Horizontal Side-Scroll & Zero Text Overlap', () => {
     it('verifies no overflow-x-auto exists inside any printable document preview container', () => {
+      // None of the printable sheet tables should be wrapped in overflow-x-auto
       const code = fs.readFileSync(printPreviewPath, 'utf8');
 
-      // None of the printable sheet tables should be wrapped in overflow-x-auto
       expect(code).not.toContain('<div className="overflow-x-auto">');
       expect(code).toContain('<div className="w-full max-w-full overflow-hidden">');
     });
