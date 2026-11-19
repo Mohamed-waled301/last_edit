@@ -55,9 +55,10 @@ describe('Cutting Edition Auto-Updater Suite', () => {
       expect(isNewerVersion('1.2.0', '1.2.0')).toBe(false);
       expect(isNewerVersion('v1.2.0', '1.2.0')).toBe(false);
 
-      // Older version -> false
+      // Older version -> false (PREVENTS DOWNGRADE)
       expect(isNewerVersion('1.1.9', '1.2.0')).toBe(false);
       expect(isNewerVersion('1.0.5', '1.2.0')).toBe(false);
+      expect(isNewerVersion('1.2.5', '1.2.6')).toBe(false);
     });
   });
 
@@ -73,6 +74,18 @@ describe('Cutting Edition Auto-Updater Suite', () => {
       expect(match).not.toBeNull();
       expect(match?.name).toBe('code-systems-cutting-Setup-1.2.1.exe');
       expect(match?.browser_download_url).toBe('https://example.com/cutting.exe');
+    });
+
+    it('prioritizes versioned Setup installer when targetVersion is given', () => {
+      const assets = [
+        { name: 'code-systems-cutting-Setup.exe', browser_download_url: 'https://example.com/generic.exe' },
+        { name: 'code-systems-cutting-Setup-1.2.6.exe', browser_download_url: 'https://example.com/versioned-1.2.6.exe' },
+      ];
+
+      const match = findCuttingAsset(assets, 'v1.2.6');
+      expect(match).not.toBeNull();
+      expect(match?.name).toBe('code-systems-cutting-Setup-1.2.6.exe');
+      expect(match?.browser_download_url).toBe('https://example.com/versioned-1.2.6.exe');
     });
 
     it('prioritizes Setup installer over Portable executable when both exist', () => {
@@ -131,6 +144,87 @@ describe('Cutting Edition Auto-Updater Suite', () => {
       expect(state.status).toBe('idle');
       expect(state.edition).toBe('cutting');
       expect(state.currentVersion).toBe('1.2.0');
+    });
+
+    it('always selects the highest semver release and ignores drafts or older entries', async () => {
+      const updater = new CuttingAutoUpdater({
+        activeEdition: 'cutting',
+        currentVersion: '1.2.0',
+      });
+
+      // Mock GitHub returning multiple releases in non-chronological order with drafts and prereleases
+      vi.spyOn(updater, 'fetchReleasesFromGithub').mockResolvedValue([
+        {
+          tag_name: 'v1.2.3',
+          draft: false,
+          prerelease: false,
+          assets: [{ name: 'code-systems-cutting-Setup-1.2.3.exe', browser_download_url: 'https://ex.com/123.exe' }],
+        },
+        {
+          tag_name: 'v1.9.9-beta',
+          draft: false,
+          prerelease: true, // Should be ignored because it is prerelease
+          assets: [{ name: 'code-systems-cutting-Setup-1.9.9.exe', browser_download_url: 'https://ex.com/beta.exe' }],
+        },
+        {
+          tag_name: 'v2.0.0',
+          draft: true, // Should be ignored because it is draft
+          assets: [{ name: 'code-systems-cutting-Setup-2.0.0.exe', browser_download_url: 'https://ex.com/draft.exe' }],
+        },
+        {
+          tag_name: 'v1.2.6',
+          name: 'Code Systems v1.2.6',
+          draft: false,
+          prerelease: false,
+          assets: [
+            { name: 'code-systems-cutting-Portable-1.2.6.exe', browser_download_url: 'https://ex.com/p126.exe' },
+            { name: 'code-systems-cutting-Setup-1.2.6.exe', browser_download_url: 'https://ex.com/setup126.exe' },
+          ],
+        },
+        {
+          tag_name: 'v1.2.5',
+          draft: false,
+          prerelease: false,
+          assets: [{ name: 'code-systems-cutting-Setup-1.2.5.exe', browser_download_url: 'https://ex.com/125.exe' }],
+        },
+      ]);
+
+      vi.spyOn(updater, 'startDownload').mockResolvedValue({ status: 'downloaded' });
+
+      const checkResult = await updater.checkForUpdates(true);
+      expect(checkResult.success).toBe(true);
+      expect(checkResult.updateAvailable).toBe(true);
+      // Confirms it picked v1.2.6 as the highest semver release
+      expect(checkResult.updateInfo?.version).toBe('1.2.6');
+      expect(checkResult.updateInfo?.assetName).toBe('code-systems-cutting-Setup-1.2.6.exe');
+      expect(checkResult.updateInfo?.downloadUrl).toBe('https://ex.com/setup126.exe');
+    });
+
+    it('reports up-to-date and never triggers downgrade when installed version is equal or newer', async () => {
+      const updater = new CuttingAutoUpdater({
+        activeEdition: 'cutting',
+        currentVersion: '1.2.6',
+      });
+
+      vi.spyOn(updater, 'fetchReleasesFromGithub').mockResolvedValue([
+        {
+          tag_name: 'v1.2.5',
+          draft: false,
+          prerelease: false,
+          assets: [{ name: 'code-systems-cutting-Setup-1.2.5.exe', browser_download_url: 'https://ex.com/125.exe' }],
+        },
+        {
+          tag_name: 'v1.2.6',
+          draft: false,
+          prerelease: false,
+          assets: [{ name: 'code-systems-cutting-Setup-1.2.6.exe', browser_download_url: 'https://ex.com/126.exe' }],
+        },
+      ]);
+
+      const checkResult = await updater.checkForUpdates(true);
+      expect(checkResult.success).toBe(true);
+      expect(checkResult.updateAvailable).toBe(false);
+      expect(updater.getStatus().status).toBe('up-to-date');
     });
 
     it('sends IPC status broadcasts to mainWindow webContents', () => {

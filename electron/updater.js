@@ -52,25 +52,37 @@ function isNewerVersion(remoteVerStr, localVerStr) {
 
 /**
  * Find cutting edition installer asset from GitHub release assets list.
+ * Prioritizes versioned cutting setup exe over generic or portable.
  */
-function findCuttingAsset(assets = []) {
+function findCuttingAsset(assets = [], targetVersion = '') {
   if (!Array.isArray(assets) || assets.length === 0) return null;
 
-  // 1. Prioritize cutting setup exe over portable
+  const cleanVer = targetVersion ? targetVersion.replace(/^v/i, '').trim() : '';
+
+  // 1. Prioritize versioned cutting setup exe (e.g. code-systems-cutting-Setup-1.2.6.exe)
+  if (cleanVer) {
+    const versionedSetup = assets.find((a) => {
+      const name = (a.name || '').toLowerCase();
+      return name.includes('cutting') && name.includes('setup') && name.includes(cleanVer.toLowerCase()) && name.endsWith('.exe');
+    });
+    if (versionedSetup) return versionedSetup;
+  }
+
+  // 2. Prioritize any cutting setup exe over portable
   const cuttingSetup = assets.find((a) => {
     const name = (a.name || '').toLowerCase();
     return name.includes('cutting') && name.includes('setup') && name.endsWith('.exe');
   });
   if (cuttingSetup) return cuttingSetup;
 
-  // 2. Explicit cutting exe asset (e.g. code-systems-cutting-Portable-1.2.0.exe)
+  // 3. Explicit cutting exe asset (e.g. code-systems-cutting-Portable-1.2.6.exe)
   const cuttingExe = assets.find((a) => {
     const name = (a.name || '').toLowerCase();
     return name.includes('cutting') && name.endsWith('.exe');
   });
   if (cuttingExe) return cuttingExe;
 
-  // 3. Generic setup exe asset if only one exe exists
+  // 4. Generic setup exe asset if only one exe exists
   const anyExe = assets.filter((a) => (a.name || '').toLowerCase().endsWith('.exe'));
   if (anyExe.length === 1) return anyExe[0];
 
@@ -183,14 +195,27 @@ class CuttingAutoUpdater {
         return { success: true, updateAvailable: false };
       }
 
-      // Find latest non-draft release
-      const latestRelease = releases.find((r) => !r.draft);
-      if (!latestRelease) {
+      // Find highest semver non-draft, non-prerelease release
+      let highestRelease = null;
+      for (const rel of releases) {
+        if (!rel || rel.draft || rel.prerelease) continue;
+        const tag = rel.tag_name || rel.name || '';
+        if (!highestRelease) {
+          highestRelease = rel;
+        } else {
+          const currentBestTag = highestRelease.tag_name || highestRelease.name || '';
+          if (isNewerVersion(tag, currentBestTag)) {
+            highestRelease = rel;
+          }
+        }
+      }
+
+      if (!highestRelease) {
         this.sendStatus({ status: 'up-to-date', error: null });
         return { success: true, updateAvailable: false };
       }
 
-      const remoteTag = latestRelease.tag_name || latestRelease.name || '';
+      const remoteTag = highestRelease.tag_name || highestRelease.name || '';
       const updateAvailable = isNewerVersion(remoteTag, this.currentVersion);
 
       if (!updateAvailable) {
@@ -198,17 +223,17 @@ class CuttingAutoUpdater {
         return { success: true, updateAvailable: false };
       }
 
-      const cuttingAsset = findCuttingAsset(latestRelease.assets);
+      const cuttingAsset = findCuttingAsset(highestRelease.assets, remoteTag);
       if (!cuttingAsset) {
-        console.warn('[CuttingAutoUpdater] Release has no cutting asset:', latestRelease.name);
+        console.warn('[CuttingAutoUpdater] Release has no cutting asset:', highestRelease.name);
         this.sendStatus({ status: 'up-to-date', error: null });
         return { success: true, updateAvailable: false };
       }
 
       const updateInfo = {
         version: remoteTag.replace(/^v/i, ''),
-        releaseName: latestRelease.name || remoteTag,
-        releaseNotes: latestRelease.body || '',
+        releaseName: highestRelease.name || remoteTag,
+        releaseNotes: highestRelease.body || '',
         assetName: cuttingAsset.name,
         size: cuttingAsset.size || 0,
         downloadUrl: cuttingAsset.browser_download_url,
