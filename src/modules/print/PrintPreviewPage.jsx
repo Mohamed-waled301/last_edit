@@ -2952,9 +2952,9 @@ export default function PrintPreviewPage({ searchParams = {}, onBack }) {
                 onChange={(e) => setPaperSize(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:border-blue-500 cursor-pointer"
               >
-                <option value="A4">ورق قياسي كامل (210 × 297 مم)</option>
-                <option value="A5">نصف صفحة قياسي (148 × 210 مم)</option>
-                <option value="80mm">إيصال طباعة حرارية (80 مم)</option>
+                <option value="A4">A4</option>
+                <option value="A5">A5</option>
+                <option value="80mm">إيصال حراري</option>
               </select>
             </div>
 

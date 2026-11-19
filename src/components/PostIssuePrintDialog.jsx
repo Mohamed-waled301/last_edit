@@ -249,7 +249,7 @@ export default function PostIssuePrintDialog({
                     onChange={() => handlePaperSizeChange('a4')}
                     className="w-4 h-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
-                  <span className="text-xs">ورق كامل A4</span>
+                  <span className="text-xs">A4</span>
                 </div>
                 <FileText className="w-4 h-4 text-slate-400" />
               </label>
@@ -270,7 +270,7 @@ export default function PostIssuePrintDialog({
                     onChange={() => handlePaperSizeChange('80mm')}
                     className="w-4 h-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
-                  <span className="text-xs">حراري 80 مم</span>
+                  <span className="text-xs">إيصال حراري</span>
                 </div>
                 <Printer className="w-4 h-4 text-slate-400" />
               </label>

@@ -294,11 +294,16 @@ export default function SalesModule({ onBack, onNotify }) {
     }
 
     try {
+      const qty = parseFloat(returnForm.quantity) || 1;
+      const uPrice = parseFloat(returnForm.unit_price) || 0;
+      const totalAmt = Number((qty * uPrice).toFixed(2));
       const payload = {
         ...returnForm,
-        quantity: parseFloat(returnForm.quantity),
-        unit_price: parseFloat(returnForm.unit_price) || 0,
-        refund_amount: (parseFloat(returnForm.quantity) || 1) * (parseFloat(returnForm.unit_price) || 0)
+        quantity: qty,
+        unit_price: uPrice,
+        unit_refund_amount: uPrice,
+        total_amount: totalAmt,
+        refund_amount: totalAmt
       };
       const res = await api.createCustomerReturn(payload);
       onNotify(res.message || 'تم تسجيل المرتجع واستعادة الرصيد للمخزن بنجاح');
@@ -1253,7 +1258,7 @@ export default function SalesModule({ onBack, onNotify }) {
                     onClick={() => setPrintLayout('a4')}
                     className={`px-3 py-1 rounded cursor-pointer ${printLayout === 'a4' ? 'bg-[#1F3A5F] text-white' : 'text-gray-700'}`}
                   >
-                    نموذج ورقي كامل
+                    A4
                   </button>
                   <button
                     onClick={() => setPrintLayout('thermal')}

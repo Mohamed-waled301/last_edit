@@ -83,7 +83,7 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
                 printMode === 'a4' ? 'bg-white text-[#1F3A5F] shadow-xs' : 'text-gray-600'
               }`}
             >
-              فاتورة رسمية قياس كامل
+              A4
             </button>
             <button
               onClick={() => setPrintMode('thermal')}
@@ -91,7 +91,7 @@ export default function SalesInvoicePrintPage({ invoiceId = null }) {
                 printMode === 'thermal' ? 'bg-white text-[#1F3A5F] shadow-xs' : 'text-gray-600'
               }`}
             >
-              إيصال طباعة حرارية
+              إيصال حراري
             </button>
           </div>
 
