@@ -254,6 +254,31 @@ app.on('second-instance', () => {
 // Register IPC handlers
 ipcMain.handle('app:version', () => app.getVersion());
 
+// Automatic App Relaunch & Restart Handlers
+ipcMain.handle('app:relaunch', () => {
+  console.log('[Electron] Immediate relaunch requested');
+  if (localDatabaseManager) {
+    try { localDatabaseManager.close(); } catch {}
+  }
+  if (typeof app.releaseSingleInstanceLock === 'function') {
+    try { app.releaseSingleInstanceLock(); } catch {}
+  }
+  app.relaunch({ args: process.argv.slice(1) });
+  app.exit(0);
+});
+
+ipcMain.handle('app:restart', () => {
+  console.log('[Electron] Immediate restart requested');
+  if (localDatabaseManager) {
+    try { localDatabaseManager.close(); } catch {}
+  }
+  if (typeof app.releaseSingleInstanceLock === 'function') {
+    try { app.releaseSingleInstanceLock(); } catch {}
+  }
+  app.relaunch({ args: process.argv.slice(1) });
+  app.exit(0);
+});
+
 // Cutting Edition Auto-Updater IPC Handlers
 ipcMain.handle('updater:check', async (_event, manual = false) => {
   if (!cuttingAutoUpdater) return { success: false, reason: 'Updater is available only for cutting edition' };
@@ -267,6 +292,9 @@ ipcMain.handle('updater:download', async () => {
 
 ipcMain.handle('updater:quit-and-install', () => {
   if (!cuttingAutoUpdater) return { success: false, reason: 'Updater is available only for cutting edition' };
+  if (localDatabaseManager) {
+    try { localDatabaseManager.close(); } catch {}
+  }
   return cuttingAutoUpdater.quitAndInstall();
 });
 

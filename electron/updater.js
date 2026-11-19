@@ -461,11 +461,26 @@ class CuttingAutoUpdater {
       });
       child.unref();
 
-      // Ensure proper exit
+      // Ensure proper exit and automatic relaunch without single-instance lock blocking
       setTimeout(() => {
-        if (this.app && typeof this.app.quit === 'function') {
-          this.app.isQuitting = true;
-          this.app.quit();
+        if (this.app) {
+          if (typeof this.app.releaseSingleInstanceLock === 'function') {
+            try { this.app.releaseSingleInstanceLock(); } catch {}
+          }
+          if (typeof this.app.relaunch === 'function') {
+            try {
+              this.app.relaunch({ args: (process.argv ? process.argv.slice(1) : []).concat(['--updated']) });
+            } catch {}
+          }
+          if (typeof this.app.exit === 'function') {
+            this.app.exit(0);
+            return;
+          }
+          if (typeof this.app.quit === 'function') {
+            this.app.isQuitting = true;
+            this.app.quit();
+            return;
+          }
         }
         process.exit(0);
       }, 500);

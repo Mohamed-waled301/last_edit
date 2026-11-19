@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getEdition: () => activeEdition,
   platform: process.platform,
   getVersion: () => ipcRenderer.invoke('app:version'),
+  relaunch: () => ipcRenderer.invoke('app:relaunch'),
+  restart: () => ipcRenderer.invoke('app:restart'),
   saveAutoBackup: (data) => ipcRenderer.invoke('backup:save-auto', data),
   notifyAutoBackupCompleted: () => ipcRenderer.send('backup:auto-completed'),
   onTriggerAutoBackup: (callback) => {
