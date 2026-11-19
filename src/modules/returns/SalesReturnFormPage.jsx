@@ -24,6 +24,7 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
     customer_id: '',
     product_id: '',
     quantity: '1',
+    unit_refund_amount: '',
     refund_amount: '',
     refund_method: 'deduct_balance', // 'deduct_balance' | 'cash_refund'
     reason: '',
@@ -73,13 +74,18 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
     setInvoiceItems(items);
 
     const firstItem = items.length > 0 ? items[0] : null;
+    const unitPrice = firstItem ? Number(firstItem.unit_selling_price || 0) : 0;
+    const q = Number(form.quantity) || 1;
+    const total = Number((unitPrice * q).toFixed(2));
+
     setForm(prev => ({
       ...prev,
       invoice_id: invId,
       customer_id: inv ? inv.customer_id : prev.customer_id,
       product_id: firstItem ? (firstItem.product_id || firstItem.id) : prev.product_id,
       refund_method: inv && inv.payment_terms === 'cash' ? 'cash_refund' : 'deduct_balance',
-      refund_amount: firstItem ? String(firstItem.unit_selling_price || 0) : ''
+      unit_refund_amount: unitPrice > 0 ? String(unitPrice) : '',
+      refund_amount: total > 0 ? String(total) : ''
     }));
   };
 
@@ -87,21 +93,45 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
     const itm = invoiceItems.find(i => String(i.product_id) === String(prodId) || String(i.id) === String(prodId));
     const price = itm ? Number(itm.unit_selling_price) || 0 : 0;
     const q = Number(form.quantity) || 1;
+    const total = Number((price * q).toFixed(2));
     setForm(prev => ({
       ...prev,
       product_id: prodId,
-      refund_amount: String((price * q).toFixed(2))
+      unit_refund_amount: price > 0 ? String(price) : prev.unit_refund_amount,
+      refund_amount: total > 0 ? String(total) : prev.refund_amount
     }));
   };
 
   const handleQtyChange = (qtyVal) => {
     const q = Number(qtyVal) || 0;
-    const itm = invoiceItems.find(i => String(i.product_id) === String(form.product_id) || String(i.id) === String(form.product_id));
-    const unitPrice = itm ? (Number(itm.unit_selling_price) || 0) : (Number(form.refund_amount) / (Number(form.quantity) || 1));
+    const unitPrice = Number(form.unit_refund_amount) || 0;
+    const total = Number((unitPrice * q).toFixed(2));
     setForm(prev => ({
       ...prev,
       quantity: qtyVal,
-      refund_amount: unitPrice > 0 ? String((unitPrice * q).toFixed(2)) : prev.refund_amount
+      refund_amount: total > 0 ? String(total) : prev.refund_amount
+    }));
+  };
+
+  const handleUnitPriceChange = (val) => {
+    const unitPrice = Number(val) || 0;
+    const q = Number(form.quantity) || 0;
+    const total = Number((unitPrice * q).toFixed(2));
+    setForm(prev => ({
+      ...prev,
+      unit_refund_amount: val,
+      refund_amount: total > 0 ? String(total) : ''
+    }));
+  };
+
+  const handleTotalChange = (val) => {
+    const total = Number(val) || 0;
+    const q = Number(form.quantity) || 1;
+    const unitPrice = q > 0 ? Number((total / q).toFixed(2)) : 0;
+    setForm(prev => ({
+      ...prev,
+      refund_amount: val,
+      unit_refund_amount: unitPrice > 0 ? String(unitPrice) : prev.unit_refund_amount
     }));
   };
 
@@ -134,13 +164,20 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
 
     try {
       setSaving(true);
+      const qty = Number(form.quantity) || 1;
+      const unitPrice = Number(form.unit_refund_amount) || (Number(form.refund_amount) / qty) || 0;
+      const totalAmount = Number(form.refund_amount) || Number((qty * unitPrice).toFixed(2));
+
       await api.createCustomerReturn({
         return_mode: returnMode,
         invoice_id: returnMode === 'against_invoice' ? form.invoice_id : null,
         customer_id: form.customer_id,
         product_id: form.product_id,
-        quantity: Number(form.quantity) || 1,
-        refund_amount: Number(form.refund_amount) || 0,
+        quantity: qty,
+        unit_price: unitPrice,
+        unit_refund_amount: unitPrice,
+        total_amount: totalAmount,
+        refund_amount: totalAmount,
         refund_method: form.refund_method,
         reason: form.reason || (returnMode === 'against_invoice' ? 'مرتجع مرتبط بالفاتورة' : 'مرتجع حر'),
         return_date: form.return_date
@@ -191,7 +228,9 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
           <span className="text-gray-300">|</span>
           <span>طريقة الرد: <span className="font-bold text-indigo-700">{form.refund_method === 'cash_refund' ? 'صرف نقدي من الخزينة' : 'خصم من رصيد العميل'}</span></span>
           <span className="text-gray-300">|</span>
-          <span className="text-emerald-700">قيمة المرتجع: <span className="font-mono text-base font-bold">{formatCurrency(form.refund_amount || 0)}</span></span>
+          <span>سعر الوحدة: <span className="font-mono font-bold text-slate-800">{formatCurrency(form.unit_refund_amount || 0)}</span></span>
+          <span className="text-gray-300">|</span>
+          <span className="text-emerald-700">إجمالي المرتجع: <span className="font-mono text-base font-bold">{formatCurrency(form.refund_amount || 0)}</span></span>
         </div>
       }
     >
@@ -317,12 +356,12 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
             {/* Returned Quantity with Validation */}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
-                الكمية المرتجعة <span className="text-red-500">*</span>
+                الكمية المرتجعة (بالقطعة) <span className="text-red-500">*</span>
               </label>
               <NumberInput
                 value={form.quantity}
                 onChange={(val) => handleQtyChange(val)}
-                aria-label="الكمية المرتجعة"
+                aria-label="الكمية المرتجعة بالقطعة"
                 className={`w-full px-3 py-2 border rounded-md text-sm font-mono font-bold focus:outline-none focus:ring-1 ${
                   isQtyExcess ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-300 focus:ring-[#1F3A5F]'
                 }`}
@@ -336,16 +375,29 @@ export default function SalesReturnFormPage({ onSaved, onNotify }) {
               <FieldError error={errors.quantity} />
             </div>
 
-            {/* Refund Amount */}
+            {/* Unit Refund Amount */}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
-                قيمة المرتجع المستحقة (ج.م)
+                مبلغ الرد للوحدة / سعر البيع (ج.م) <span className="text-red-500">*</span>
+              </label>
+              <MoneyInput
+                value={form.unit_refund_amount}
+                onChange={(val) => handleUnitPriceChange(val)}
+                aria-label="مبلغ الرد للوحدة أو سعر البيع"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+              />
+            </div>
+
+            {/* Total Return Amount (Calculated: Quantity * Unit Price) */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                إجمالي قيمة المرتجع المستحقة (ج.م)
               </label>
               <MoneyInput
                 value={form.refund_amount}
-                onChange={(val) => setForm(prev => ({ ...prev, refund_amount: val }))}
-                aria-label="قيمة المرتجع المستحقة"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono font-bold text-emerald-700 focus:outline-none focus:ring-1 focus:ring-[#1F3A5F]"
+                onChange={(val) => handleTotalChange(val)}
+                aria-label="إجمالي قيمة المرتجع المستحقة"
+                className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50/30 rounded-md text-sm font-mono font-bold text-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-600"
               />
             </div>
 

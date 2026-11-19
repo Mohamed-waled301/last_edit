@@ -13,8 +13,26 @@ export interface InvoiceRecord {
 export interface ReturnRecord {
   total_amount?: number;
   refund_amount?: number;
+  unit_price?: number;
+  unit_refund_amount?: number;
+  quantity?: number;
   refund_status?: string;
   refund_method?: string;
+}
+
+/**
+ * Calculates total return amount safely:
+ * Returns explicit total_amount if present (> 0),
+ * otherwise calculates quantity * unitRefundAmount.
+ */
+export function computeReturnTotal(ret?: ReturnRecord | null): number {
+  if (!ret) return 0;
+  if (ret.total_amount != null && Number(ret.total_amount) > 0) {
+    return Number(ret.total_amount);
+  }
+  const unitPrice = Number(ret.unit_price ?? ret.unit_refund_amount ?? ret.refund_amount) || 0;
+  const qty = Number(ret.quantity) || 1;
+  return Number((qty * unitPrice).toFixed(2));
 }
 
 export interface BalanceSummary {
@@ -128,8 +146,8 @@ export class BalanceCalculator {
 
     let totalReturnsPiasters = 0;
     for (const ret of returns) {
-      if (ret.refund_status === 'deduct_balance') {
-        totalReturnsPiasters += toPiasters(ret.total_amount);
+      if (ret.refund_status === 'deduct_balance' || ret.refund_method === 'deduct_balance') {
+        totalReturnsPiasters += toPiasters(computeReturnTotal(ret));
       }
     }
 
@@ -179,7 +197,7 @@ export class BalanceCalculator {
     let totalReturnsPiasters = 0;
     for (const ret of returns) {
       if (ret.refund_method === 'deduct_balance' || ret.refund_status === 'deduct_balance') {
-        totalReturnsPiasters += toPiasters(ret.refund_amount ?? ret.total_amount);
+        totalReturnsPiasters += toPiasters(computeReturnTotal(ret));
       }
     }
 

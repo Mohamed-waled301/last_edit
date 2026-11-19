@@ -60,6 +60,43 @@ export const salesRepo = {
     return customer;
   },
 
+  async normalizeHistoricalReturns() {
+    if (!db.customer_returns) return;
+    try {
+      const list = await db.customer_returns.toArray();
+      for (const r of list) {
+        const qty = Number(r.quantity) || 1;
+        let needsUpdate = false;
+        let unitPrice = Number(r.unit_price ?? r.unit_refund_amount);
+        let totalAmount = Number(r.total_amount);
+
+        if (!totalAmount || isNaN(totalAmount)) {
+          unitPrice = Number(r.unit_price ?? r.unit_refund_amount ?? r.refund_amount) || 0;
+          totalAmount = Number((qty * unitPrice).toFixed(2));
+          needsUpdate = true;
+        }
+        if (r.refund_amount !== totalAmount) {
+          needsUpdate = true;
+        }
+        if (r.unit_price == null || isNaN(Number(r.unit_price))) {
+          unitPrice = Number(r.unit_price ?? r.unit_refund_amount ?? (totalAmount / qty).toFixed(2)) || 0;
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          await db.customer_returns.update(r.id, {
+            unit_price: unitPrice || 0,
+            unit_refund_amount: unitPrice || 0,
+            total_amount: totalAmount,
+            refund_amount: totalAmount,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[salesRepo] normalizeHistoricalReturns warning:', err);
+    }
+  },
+
   async getCustomerStatement(id) {
     let customer = await db.customers.get(id);
     if (!customer && db.parties) {
@@ -67,10 +104,19 @@ export const salesRepo = {
     }
     if (!customer) throw new Error('العميل غير موجود');
 
+    // Safely heal any legacy customer returns before computing statement ledger
+    await this.normalizeHistoricalReturns();
+
     const invoices = await db.sales_invoices.where('customer_id').equals(id).toArray();
     const payments = await db.customer_payments.where('customer_id').equals(id).toArray();
     const returns = await db.customer_returns.where('customer_id').equals(id).toArray();
     const bal = await getEntityCurrentBalance(id);
+
+    const allProds = db.products ? await db.products.toArray().catch(() => []) : [];
+    const allItms = db.items ? await db.items.toArray().catch(() => []) : [];
+    const itemMap = new Map();
+    for (const p of allProds) itemMap.set(p.id, p.name);
+    for (const it of allItms) itemMap.set(it.id, it.name);
 
     const opening = bal.customerOpening;
     const openingType = bal.customerOpeningType;
@@ -134,14 +180,39 @@ export const salesRepo = {
 
     for (const ret of returns) {
       if (ret.status !== 'cancelled') {
+        const qty = Number(ret.quantity) || 1;
+        let lineTotal = 0;
+        let unitPrice = 0;
+        if (ret.total_amount != null && Number(ret.total_amount) > 0) {
+          lineTotal = Number(ret.total_amount);
+          unitPrice = Number(ret.unit_price ?? ret.unit_refund_amount ?? (lineTotal / qty).toFixed(2));
+        } else {
+          unitPrice = Number(ret.unit_price ?? ret.unit_refund_amount ?? ret.refund_amount) || 0;
+          lineTotal = Number((qty * unitPrice).toFixed(2));
+        }
+
+        const prodName = itemMap.get(ret.product_id) || ret.product_name || ret.item_name || '';
+        const detailsParts = [];
+        if (ret.return_number) detailsParts.push(`إذن ${ret.return_number}`);
+        if (prodName) detailsParts.push(prodName);
+        detailsParts.push(`${qty} قطعة × ${unitPrice.toFixed(2)} ج.م = ${lineTotal.toFixed(2)} ج.م`);
+        if (ret.reason && ret.reason !== 'مرتجع مبيعات' && ret.reason !== 'رد بضاعة من العميل') {
+          detailsParts.push(`سبب: ${ret.reason}`);
+        }
+        const fullDesc = `مرتجع مبيعات: ${detailsParts.join(' - ')}`;
+
         transactions.push({
           date: ret.return_date,
           type: 'مرتجع مبيعات',
           reference: ret.return_number,
-          description: ret.reason || 'رد بضاعة من العميل',
+          description: fullDesc,
           debit: 0,
-          credit: Number(ret.refund_amount ?? ret.total_amount) || 0,
+          credit: lineTotal,
           raw_date: ret.created_at || ret.return_date,
+          quantity: qty,
+          unit_price: unitPrice,
+          total_amount: lineTotal,
+          product_name: prodName,
         });
       }
     }
@@ -1035,10 +1106,27 @@ export const salesRepo = {
   },
 
   async createCustomerReturn(data, userId = 'usr-accountant') {
-    const { customer_id, invoice_id, product_id, quantity, refund_amount, refund_method, return_date, reason, return_mode } = data;
+    const { customer_id, invoice_id, product_id, quantity, refund_amount, unit_price, unit_refund_amount, total_amount, refund_method, return_date, reason, return_mode } = data;
     if (return_date) validateNotPastDate(return_date, 'تاريخ مرتجع المبيعات');
     const returnQty = Math.max(1, Number(quantity) || 1);
-    const returnAmount = Math.max(0, Number(refund_amount) || 0);
+
+    // Determine unit refund amount and total return amount accurately: total = quantity * unitRefund
+    let unitRefund = 0;
+    let returnTotal = 0;
+
+    if (total_amount != null && Number(total_amount) > 0) {
+      returnTotal = Number(total_amount);
+      unitRefund = Number(unit_price ?? unit_refund_amount ?? (returnTotal / returnQty).toFixed(2));
+    } else if (unit_price != null || unit_refund_amount != null) {
+      unitRefund = Number(unit_price ?? unit_refund_amount) || 0;
+      returnTotal = Number((returnQty * unitRefund).toFixed(2));
+    } else {
+      // Direct refund_amount provided (treated as unit refund amount multiplied by quantity)
+      const rawRefund = Number(refund_amount) || 0;
+      unitRefund = rawRefund;
+      returnTotal = Number((returnQty * unitRefund).toFixed(2));
+    }
+
     const returnId = `cret-${Date.now()}`;
     const returnNumber = `RET-SLS-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();
@@ -1111,7 +1199,10 @@ export const salesRepo = {
         invoice_id: invoice_id || null,
         product_id,
         quantity: returnQty,
-        refund_amount: returnAmount,
+        unit_price: unitRefund,
+        unit_refund_amount: unitRefund,
+        total_amount: returnTotal,
+        refund_amount: returnTotal,
         refund_method: actualRefundMethod,
         return_date: return_date || now.split('T')[0],
         reason: reason || 'مرتجع مبيعات',
@@ -1129,7 +1220,7 @@ export const salesRepo = {
         direction: 'in',
         quantity: returnQty,
         quantity_change: returnQty,
-        unit_cost: returnAmount > 0 ? Number((returnAmount / returnQty).toFixed(2)) : 0,
+        unit_cost: unitRefund,
         document_id: returnId,
         reference_type: 'SALES_RETURN',
         reference_id: returnId,
@@ -1141,7 +1232,7 @@ export const salesRepo = {
       });
 
       // If cash refund, deduct from outlet treasury
-      if (actualRefundMethod === 'cash_refund' && returnAmount > 0) {
+      if (actualRefundMethod === 'cash_refund' && returnTotal > 0) {
         let treasury = null;
         if (targetOutletId) {
           treasury = await db.treasury_accounts.where('outlet_id').equals(targetOutletId).first();
@@ -1153,7 +1244,7 @@ export const salesRepo = {
 
         if (treasury) {
           const currentBal = Number(treasury.current_balance) || 0;
-          const newBal = Number((currentBal - returnAmount).toFixed(2));
+          const newBal = Number((currentBal - returnTotal).toFixed(2));
           await db.treasury_accounts.update(treasury.id, { current_balance: newBal });
 
           await db.cash_transactions.add({
@@ -1162,11 +1253,11 @@ export const salesRepo = {
             account_id: treasury.id,
             tx_type: 'outflow',
             category: 'sales_return',
-            amount: returnAmount,
+            amount: returnTotal,
             balance_after: newBal,
             reference_type: 'customer_returns',
             reference_id: returnId,
-            description: `رد نقدية لمرتجع عميل ${returnNumber} من خزينة المنفذ`,
+            description: `رد نقدية لمرتجع عميل ${returnNumber} (${returnTotal} ج.م) من خزينة المنفذ`,
             created_by: userId,
             created_at: now,
           });

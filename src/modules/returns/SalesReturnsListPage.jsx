@@ -24,11 +24,27 @@ export default function SalesReturnsListPage({ onNotify, defaultTab = 'purchases
       const prods = db.items ? await db.items.toArray() : [];
       const prodMap = new Map(prods.map(p => [p.id, p.name]));
 
-      const formattedSales = (Array.isArray(customerReturnsList) ? customerReturnsList : []).map(r => ({
-        ...r,
-        customer_name: custMap.get(r.customer_id) || r.customer_id,
-        product_name: prodMap.get(r.product_id) || r.product_id
-      }));
+      const formattedSales = (Array.isArray(customerReturnsList) ? customerReturnsList : []).map(r => {
+        const qty = Number(r.quantity) || 1;
+        let unitPrice = 0;
+        let totalAmt = 0;
+        if (r.total_amount != null && Number(r.total_amount) > 0) {
+          totalAmt = Number(r.total_amount);
+          unitPrice = Number(r.unit_price ?? r.unit_refund_amount ?? (totalAmt / qty).toFixed(2));
+        } else {
+          unitPrice = Number(r.unit_price ?? r.unit_refund_amount ?? r.refund_amount) || 0;
+          totalAmt = Number((qty * unitPrice).toFixed(2));
+        }
+        return {
+          ...r,
+          customer_name: custMap.get(r.customer_id) || r.customer_id,
+          product_name: prodMap.get(r.product_id) || r.product_id,
+          quantity: qty,
+          unit_price: unitPrice,
+          total_amount: totalAmt,
+          refund_amount: totalAmt,
+        };
+      });
       setSalesReturns(formattedSales);
 
       // 2. Load Supplier Returns
@@ -101,7 +117,8 @@ export default function SalesReturnsListPage({ onNotify, defaultTab = 'purchases
         'العميل': r.customer_name,
         'الصنف': r.product_name,
         'الكمية': r.quantity,
-        'مبلغ الرد': r.refund_amount || 0,
+        'سعر الوحدة (مبلغ الرد)': r.unit_price || 0,
+        'الإجمالي': r.total_amount || 0,
         'طريقة الرد': r.refund_method === 'cash_refund' ? 'صرف نقدي' : 'خصم من الرصيد',
         'التاريخ': formatDate(r.return_date),
         'السبب': r.reason || '-'
@@ -116,7 +133,7 @@ export default function SalesReturnsListPage({ onNotify, defaultTab = 'purchases
   );
 
   const totalSalesAmount = (Array.isArray(salesReturns) ? salesReturns : []).reduce(
-    (sum, r) => sum + (Number(r.refund_amount) || 0),
+    (sum, r) => sum + (Number(r.total_amount) || 0),
     0
   );
 
@@ -373,7 +390,8 @@ export default function SalesReturnsListPage({ onNotify, defaultTab = 'purchases
                   <th className="p-3">العميل</th>
                   <th className="p-3">الصنف المسترجع</th>
                   <th className="p-3 text-center font-mono">الكمية</th>
-                  <th className="p-3 text-left font-mono">مبلغ الرد</th>
+                  <th className="p-3 text-left font-mono">مبلغ الرد (الوحدة)</th>
+                  <th className="p-3 text-left font-mono">الإجمالي</th>
                   <th className="p-3">طريقة الرد</th>
                   <th className="p-3">التاريخ</th>
                   <th className="p-3">السبب</th>
@@ -382,13 +400,13 @@ export default function SalesReturnsListPage({ onNotify, defaultTab = 'purchases
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan="9" className="p-10 text-center text-gray-500 font-bold">
+                    <td colSpan="10" className="p-10 text-center text-gray-500 font-bold">
                       جاري تحميل مرتجعات المبيعات...
                     </td>
                   </tr>
                 ) : filteredSales.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="p-10 text-center text-gray-400">
+                    <td colSpan="10" className="p-10 text-center text-gray-400">
                       لا توجد مرتجعات مبيعات مسجلة
                     </td>
                   </tr>
@@ -408,7 +426,8 @@ export default function SalesReturnsListPage({ onNotify, defaultTab = 'purchases
                       <td className="p-3 font-bold text-gray-900">{r.customer_name}</td>
                       <td className="p-3 text-gray-800 font-semibold">{r.product_name}</td>
                       <td className="p-3 text-center font-mono font-bold text-gray-900">{r.quantity} قطعة</td>
-                      <td className="p-3 text-left font-mono font-bold text-emerald-700">{formatCurrency(r.refund_amount || 0)}</td>
+                      <td className="p-3 text-left font-mono font-bold text-slate-700">{formatCurrency(r.unit_price || 0)}</td>
+                      <td className="p-3 text-left font-mono font-bold text-emerald-700">{formatCurrency(r.total_amount || 0)}</td>
                       <td className="p-3 text-gray-600">
                         {r.refund_method === 'cash_refund' ? 'صرف نقدي من الخزينة' : 'خصم من رصيد العميل'}
                       </td>

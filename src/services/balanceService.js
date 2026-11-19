@@ -246,7 +246,15 @@ export async function getEntityCurrentBalance(entityId) {
     let supReturnsPiasters = 0;
     for (const ret of safeSupReturns) {
       if (ret.status !== 'cancelled') {
-        supReturnsPiasters += toPiasters(ret.refund_amount ?? ret.total_amount ?? 0);
+        const qty = Number(ret.quantity) || 1;
+        let lineTotal = 0;
+        if (ret.total_amount != null && Number(ret.total_amount) > 0) {
+          lineTotal = Number(ret.total_amount);
+        } else {
+          const uPrice = Number(ret.unit_price ?? ret.unit_refund_amount ?? ret.refund_amount) || 0;
+          lineTotal = Number((qty * uPrice).toFixed(2));
+        }
+        supReturnsPiasters += toPiasters(lineTotal);
       }
     }
 
@@ -304,7 +312,15 @@ export async function getEntityCurrentBalance(entityId) {
     let custReturnsPiasters = 0;
     for (const ret of safeCustReturns) {
       if (ret.status !== 'cancelled') {
-        custReturnsPiasters += toPiasters(ret.refund_amount ?? ret.total_amount ?? 0);
+        const qty = Number(ret.quantity) || 1;
+        let lineTotal = 0;
+        if (ret.total_amount != null && Number(ret.total_amount) > 0) {
+          lineTotal = Number(ret.total_amount);
+        } else {
+          const uPrice = Number(ret.unit_price ?? ret.unit_refund_amount ?? ret.refund_amount) || 0;
+          lineTotal = Number((qty * uPrice).toFixed(2));
+        }
+        custReturnsPiasters += toPiasters(lineTotal);
       }
     }
 
